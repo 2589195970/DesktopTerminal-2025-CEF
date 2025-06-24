@@ -1,0 +1,530 @@
+#include "cef_manager.h"
+#include "application.h"
+#include "../logging/logger.h"
+#include "../config/config_manager.h"
+#include "../cef/cef_app.h"
+
+#include <QDir>
+#include <QStandardPaths>
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QMessageBox>
+
+#include "include/cef_browser.h"
+#include "include/cef_command_line.h"
+#include "include/wrapper/cef_helpers.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+CEFManager::CEFManager(Application* app, QObject* parent)
+    : QObject(parent)
+    , m_application(app)
+    , m_logger(&Logger::instance())
+    , m_configManager(&ConfigManager::instance())
+    , m_initialized(false)
+    , m_shutdownRequested(false)
+    , m_processMode(ProcessMode::SingleProcess)
+    , m_memoryProfile(MemoryProfile::Minimal)
+    , m_cefApp(nullptr)
+    , m_maxRenderProcessCount(1)
+    , m_cacheSizeMB(64)
+    , m_hardwareAccelerationEnabled(false)
+    , m_webSecurityEnabled(true)
+{
+    // 选择最优配置
+    m_processMode = selectOptimalProcessMode();
+    m_memoryProfile = selectOptimalMemoryProfile();
+
+    // 设置路径
+    m_cefPath = QCoreApplication::applicationDirPath();
+    m_cachePath = getCEFCachePath();
+    m_logPath = getCEFLogPath();
+
+    // 应用配置参数
+    switch (m_memoryProfile) {
+        case MemoryProfile::Minimal:
+            m_maxRenderProcessCount = 1;
+            m_cacheSizeMB = 32;
+            m_hardwareAccelerationEnabled = false;
+            break;
+        case MemoryProfile::Balanced:
+            m_maxRenderProcessCount = 2;
+            m_cacheSizeMB = 128;
+            m_hardwareAccelerationEnabled = !Application::isWindows7SP1();
+            break;
+        case MemoryProfile::Performance:
+            m_maxRenderProcessCount = 4;
+            m_cacheSizeMB = 256;
+            m_hardwareAccelerationEnabled = true;
+            break;
+    }
+
+    // 构建用户代理字符串
+    m_userAgent = QString("DesktopTerminal-CEF/%1 (%2)")
+        .arg(QCoreApplication::applicationVersion())
+        .arg(Application::getSystemDescription());
+
+    m_logger->appEvent("CEFManager创建完成");
+}
+
+CEFManager::~CEFManager()
+{
+    shutdown();
+}
+
+bool CEFManager::initialize()
+{
+    if (m_initialized) {
+        return true;
+    }
+
+    m_logger->appEvent("开始初始化CEF...");
+
+    // 验证CEF安装
+    if (!verifyCEFInstallation()) {
+        m_logger->errorEvent("CEF安装验证失败");
+        handleInitializationError("CEF安装不完整或损坏");
+        return false;
+    }
+
+    // 检查依赖
+    if (!checkCEFDependencies()) {
+        m_logger->errorEvent("CEF依赖检查失败");
+        handleInitializationError("CEF依赖库缺失");
+        return false;
+    }
+
+    // 初始化CEF设置
+    if (!initializeCEFSettings()) {
+        m_logger->errorEvent("CEF设置初始化失败");
+        return false;
+    }
+
+    // 初始化CEF应用
+    if (!initializeCEFApp()) {
+        m_logger->errorEvent("CEF应用初始化失败");
+        return false;
+    }
+
+    // 初始化CEF上下文
+    if (!initializeCEFContext()) {
+        m_logger->errorEvent("CEF上下文初始化失败");
+        return false;
+    }
+
+    m_initialized = true;
+    m_logger->appEvent("CEF初始化成功");
+    m_logger->appEvent(QString("进程模式: %1").arg(
+        m_processMode == ProcessMode::SingleProcess ? "单进程" : "多进程"));
+    m_logger->appEvent(QString("内存配置: %1").arg(
+        m_memoryProfile == MemoryProfile::Minimal ? "最小" : 
+        m_memoryProfile == MemoryProfile::Balanced ? "平衡" : "性能"));
+
+    return true;
+}
+
+void CEFManager::shutdown()
+{
+    if (m_shutdownRequested) {
+        return;
+    }
+
+    m_shutdownRequested = true;
+    m_logger->appEvent("开始关闭CEF...");
+
+    if (m_initialized) {
+        // 关闭CEF
+        CefShutdown();
+        m_initialized = false;
+        m_logger->appEvent("CEF关闭完成");
+    }
+
+    m_cefApp = nullptr;
+}
+
+int CEFManager::createBrowser(void* parentWidget, const QString& url)
+{
+    if (!m_initialized) {
+        m_logger->errorEvent("CEF未初始化，无法创建浏览器");
+        return 0;
+    }
+
+    try {
+        CefWindowInfo windowInfo;
+        CefBrowserSettings browserSettings;
+
+        // 配置窗口信息
+#ifdef Q_OS_WIN
+        HWND hwnd = static_cast<HWND>(parentWidget);
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        windowInfo.SetAsChild(hwnd, rect);
+#elif defined(Q_OS_MAC)
+        // macOS实现
+        windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
+#else
+        // Linux实现
+        windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), 0, 0, 800, 600);
+#endif
+
+        // 配置浏览器设置
+        browserSettings.web_security = m_webSecurityEnabled ? STATE_ENABLED : STATE_DISABLED;
+        browserSettings.javascript = STATE_ENABLED;
+        browserSettings.javascript_close_windows = STATE_DISABLED;
+        browserSettings.javascript_access_clipboard = STATE_DISABLED;
+        browserSettings.plugins = STATE_DISABLED;
+
+        // 创建CEF客户端
+        CefRefPtr<CefClient> client = new CEFClient();
+
+        // 创建浏览器
+        bool result = CefBrowserHost::CreateBrowser(
+            windowInfo,
+            client,
+            url.toStdString(),
+            browserSettings,
+            nullptr,
+            nullptr
+        );
+
+        if (result) {
+            m_logger->appEvent(QString("浏览器创建成功，URL: %1").arg(url));
+            return 1; // 返回简单的成功标识
+        } else {
+            m_logger->errorEvent("浏览器创建失败");
+            return 0;
+        }
+
+    } catch (const std::exception& e) {
+        m_logger->errorEvent(QString("创建浏览器异常: %1").arg(e.what()));
+        return 0;
+    } catch (...) {
+        m_logger->errorEvent("创建浏览器发生未知异常");
+        return 0;
+    }
+}
+
+void CEFManager::doMessageLoopWork()
+{
+    if (m_initialized && m_processMode == ProcessMode::SingleProcess) {
+        CefDoMessageLoopWork();
+    }
+}
+
+CEFManager::ProcessMode CEFManager::selectOptimalProcessMode()
+{
+    // 32位系统强制使用单进程模式以节省内存
+    if (Application::is32BitSystem()) {
+        return ProcessMode::SingleProcess;
+    }
+
+    // Windows 7系统优先使用单进程模式以提高兼容性
+    if (Application::isWindows7SP1()) {
+        return ProcessMode::SingleProcess;
+    }
+
+    // 其他情况使用多进程模式
+    return ProcessMode::MultiProcess;
+}
+
+CEFManager::MemoryProfile CEFManager::selectOptimalMemoryProfile()
+{
+    // 32位系统强制使用最小内存配置
+    if (Application::is32BitSystem()) {
+        return MemoryProfile::Minimal;
+    }
+
+    // 传统系统使用平衡配置
+    if (Application::getCompatibilityLevel() == Application::CompatibilityLevel::LegacySystem) {
+        return MemoryProfile::Balanced;
+    }
+
+    // 现代系统使用平衡配置，最优系统使用性能配置
+    if (Application::getCompatibilityLevel() == Application::CompatibilityLevel::OptimalSystem) {
+        return MemoryProfile::Performance;
+    }
+
+    return MemoryProfile::Balanced;
+}
+
+QStringList CEFManager::buildCEFCommandLine()
+{
+    QStringList args;
+
+    // 基础参数
+    args << "--no-sandbox";
+    args << "--disable-web-security";
+    args << "--disable-features=VizDisplayCompositor";
+    args << "--disable-background-timer-throttling";
+    args << "--disable-renderer-backgrounding";
+    args << "--disable-backgrounding-occluded-windows";
+
+    // 32位系统特殊参数
+    if (Application::is32BitSystem()) {
+        args << "--single-process";
+        args << "--disable-gpu";
+        args << "--disable-gpu-compositing";
+        args << "--disable-gpu-rasterization";
+        args << "--disable-software-rasterizer";
+        args << "--disable-extensions";
+        args << "--disable-plugins";
+        args << "--max-old-space-size=256";
+    }
+
+    // Windows 7特殊参数
+    if (Application::isWindows7SP1()) {
+        args << "--disable-d3d11";
+        args << "--disable-gpu-sandbox";
+        args << "--disable-features=AudioServiceOutOfProcess";
+        args << "--disable-dev-shm-usage";
+        args << "--no-zygote";
+    }
+
+    // 安全参数
+    args << "--disable-default-apps";
+    args << "--disable-sync";
+    args << "--disable-translate";
+    args << "--disable-spell-checking";
+
+    return args;
+}
+
+QString CEFManager::getCEFCachePath()
+{
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir cacheDir(appDataPath);
+    
+    if (!cacheDir.exists()) {
+        cacheDir.mkpath(".");
+    }
+
+    return cacheDir.filePath("CEFCache");
+}
+
+QString CEFManager::getCEFLogPath()
+{
+    QString logDir = QCoreApplication::applicationDirPath() + "/log";
+    QDir dir(logDir);
+    
+    if (!dir.exists()) {
+        dir.mkpath(".");
+    }
+
+    return dir.filePath("cef_debug.log");
+}
+
+bool CEFManager::initializeCEFSettings()
+{
+    try {
+        CefSettings settings;
+        buildCEFSettings(settings);
+
+        // 设置主要路径
+        CefString(&settings.cache_path) = m_cachePath.toStdString();
+        CefString(&settings.log_file) = m_logPath.toStdString();
+        CefString(&settings.user_agent) = m_userAgent.toStdString();
+
+        // 应用内存优化
+        applyMemoryOptimizations(settings);
+
+        // 应用平台特定设置
+#ifdef Q_OS_WIN
+        applyWindowsSettings(settings);
+        if (Application::isWindows7SP1()) {
+            applyWindows7Optimizations(settings);
+        }
+#elif defined(Q_OS_MAC)
+        applyMacOSSettings(settings);
+#elif defined(Q_OS_LINUX)
+        applyLinuxSettings(settings);
+#endif
+
+        // 初始化CEF
+        CefMainArgs mainArgs;
+#ifdef Q_OS_WIN
+        mainArgs = CefMainArgs(GetModuleHandle(nullptr));
+#else
+        mainArgs = CefMainArgs(0, nullptr);
+#endif
+
+        m_cefApp = new CEFApp();
+
+        bool result = CefInitialize(mainArgs, settings, m_cefApp.get(), nullptr);
+        
+        if (!result) {
+            m_logger->errorEvent("CefInitialize调用失败");
+            return false;
+        }
+
+        return true;
+
+    } catch (const std::exception& e) {
+        m_logger->errorEvent(QString("CEF设置初始化异常: %1").arg(e.what()));
+        return false;
+    } catch (...) {
+        m_logger->errorEvent("CEF设置初始化发生未知异常");
+        return false;
+    }
+}
+
+bool CEFManager::initializeCEFApp()
+{
+    // CEF应用在initializeCEFSettings中创建
+    return m_cefApp != nullptr;
+}
+
+bool CEFManager::initializeCEFContext()
+{
+    // CEF上下文在CefInitialize中初始化
+    return true;
+}
+
+void CEFManager::buildCEFSettings(CefSettings& settings)
+{
+    // 基础设置
+    settings.single_process = (m_processMode == ProcessMode::SingleProcess);
+    settings.no_sandbox = true;
+    settings.multi_threaded_message_loop = false;
+    settings.log_severity = LOGSEVERITY_WARNING;
+    settings.windowless_rendering_enabled = false;
+
+    // 进程限制
+    if (m_processMode == ProcessMode::MultiProcess) {
+        settings.browser_subprocess_path = CefString();
+    }
+}
+
+void CEFManager::applyMemoryOptimizations(CefSettings& settings)
+{
+    // 应用内存配置
+    switch (m_memoryProfile) {
+        case MemoryProfile::Minimal:
+            apply32BitOptimizations(settings);
+            break;
+        case MemoryProfile::Balanced:
+            // 默认设置已经是平衡的
+            break;
+        case MemoryProfile::Performance:
+            // 性能模式的额外设置可以在这里添加
+            break;
+    }
+}
+
+void CEFManager::apply32BitOptimizations(CefSettings& settings)
+{
+    // 强制单进程模式
+    settings.single_process = true;
+    
+    // 禁用多线程
+    settings.multi_threaded_message_loop = false;
+    
+    // 减少日志输出
+    settings.log_severity = LOGSEVERITY_ERROR;
+}
+
+#ifdef Q_OS_WIN
+void CEFManager::applyWindowsSettings(CefSettings& settings)
+{
+    // Windows特定设置
+    settings.auto_detect_proxy_settings_enabled = true;
+}
+
+void CEFManager::applyWindows7Optimizations(CefSettings& settings)
+{
+    // Windows 7特殊优化
+    settings.single_process = true;
+    settings.log_severity = LOGSEVERITY_ERROR;
+    
+    m_logger->appEvent("应用Windows 7 CEF优化设置");
+}
+#endif
+
+#ifdef Q_OS_MAC
+void CEFManager::applyMacOSSettings(CefSettings& settings)
+{
+    // macOS特定设置
+}
+#endif
+
+#ifdef Q_OS_LINUX
+void CEFManager::applyLinuxSettings(CefSettings& settings)
+{
+    // Linux特定设置
+}
+#endif
+
+void CEFManager::handleInitializationError(const QString& error)
+{
+    QString fullError = QString("CEF初始化失败: %1\n\n").arg(error);
+    
+    if (Application::is32BitSystem()) {
+        fullError += "32位系统故障排除:\n";
+        fullError += "- 确保有足够的可用内存 (至少1GB)\n";
+        fullError += "- 检查CEF 75版本是否正确安装\n";
+        fullError += "- 尝试关闭其他应用程序释放内存\n";
+    }
+
+    if (Application::isWindows7SP1()) {
+        fullError += "\nWindows 7 SP1故障排除:\n";
+        fullError += "- 确保安装了所有Windows更新\n";
+        fullError += "- 安装Visual C++ 2019-2022运行时\n";
+        fullError += "- 检查用户权限和防火墙设置\n";
+    }
+
+    m_logger->errorEvent(fullError);
+    QMessageBox::critical(nullptr, "CEF初始化失败", fullError);
+}
+
+bool CEFManager::verifyCEFInstallation()
+{
+    // 检查CEF库文件
+    QStringList requiredFiles;
+
+#ifdef Q_OS_WIN
+    requiredFiles << "libcef.dll" << "cef_sandbox.lib";
+    
+    if (Application::is32BitSystem()) {
+        // 32位特定文件
+        requiredFiles << "d3dcompiler_47.dll";
+    }
+#elif defined(Q_OS_MAC)
+    requiredFiles << "Chromium Embedded Framework.framework";
+#else
+    requiredFiles << "libcef.so";
+#endif
+
+    QString cefDir = QCoreApplication::applicationDirPath();
+    
+    for (const QString& file : requiredFiles) {
+        QString filePath = QDir(cefDir).filePath(file);
+        if (!QFileInfo::exists(filePath)) {
+            m_logger->errorEvent(QString("缺少CEF文件: %1").arg(filePath));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CEFManager::checkCEFDependencies()
+{
+    // 检查系统依赖
+#ifdef Q_OS_WIN
+    // 检查Visual C++运行时
+    HMODULE vcruntime = LoadLibraryA("vcruntime140.dll");
+    if (!vcruntime) {
+        m_logger->errorEvent("缺少Visual C++运行时库");
+        return false;
+    }
+    FreeLibrary(vcruntime);
+#endif
+
+    return true;
+}
+
+void CEFManager::onApplicationShutdown()
+{
+    shutdown();
+}
