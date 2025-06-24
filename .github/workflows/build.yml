@@ -16,7 +16,7 @@ env:
 jobs:
   # Windows构建（支持32位和64位）
   build-windows:
-    runs-on: windows-2019
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
@@ -84,12 +84,27 @@ jobs:
         
         mkdir build
         cd build
-        cmake .. ^
-          -A ${{ matrix.platform }} ^
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
-          -DCEF_VERSION="${{ matrix.cef_version }}" ^
-          -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
-          -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5"
+        
+        REM Configure for Windows 7 SP1 compatibility
+        if "${{ matrix.arch }}"=="x86" (
+          echo "Configuring for Windows 7 SP1 32-bit compatibility..."
+          cmake .. ^
+            -A ${{ matrix.platform }} ^
+            -T v141_xp ^
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
+            -DCEF_VERSION="${{ matrix.cef_version }}" ^
+            -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
+            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5" ^
+            -DCMAKE_SYSTEM_VERSION=7.1
+        ) else (
+          echo "Configuring for Windows 10+ 64-bit..."
+          cmake .. ^
+            -A ${{ matrix.platform }} ^
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
+            -DCEF_VERSION="${{ matrix.cef_version }}" ^
+            -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
+            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5"
+        )
 
     - name: Build Project
       shell: cmd
@@ -210,7 +225,7 @@ jobs:
 
   # Linux构建
   build-linux:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Linux 64-bit
     
     steps:
