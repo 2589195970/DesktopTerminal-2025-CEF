@@ -24,7 +24,7 @@ jobs:
           - arch: x86
             platform: Win32
             cef_version: "75.1.16+g16a67c4+chromium-75.0.3770.100"
-            qt_arch: win32_msvc2019
+            qt_arch: win32_msvc2015
             name: "Windows 32-bit (Win7 SP1 Compatible)"
           - arch: x64
             platform: x64
@@ -78,13 +78,18 @@ jobs:
     - name: Configure CMake
       shell: cmd
       run: |
+        echo "Qt5_Dir environment: %Qt5_Dir%"
+        echo "Checking Qt5 installation..."
+        if exist "%Qt5_Dir%" (echo "Qt5 directory found") else (echo "Qt5 directory not found")
+        
         mkdir build
         cd build
         cmake .. ^
           -A ${{ matrix.platform }} ^
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
           -DCEF_VERSION="${{ matrix.cef_version }}" ^
-          -DQt5_DIR="%Qt5_Dir%"
+          -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
+          -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5"
 
     - name: Build Project
       shell: cmd
@@ -126,17 +131,17 @@ jobs:
         }
         
         # Create version info
-        @"
-DesktopTerminal-CEF Build Information
-====================================
-Architecture: ${{ matrix.arch }}
-Platform: ${{ matrix.name }}
-CEF Version: ${{ matrix.cef_version }}
-Qt Version: ${{ env.QT_VERSION }}
-Build Type: ${{ env.BUILD_TYPE }}
-Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
-Commit: ${{ github.sha }}
-"@ | Out-File "$artifactPath\BUILD_INFO.txt" -Encoding UTF8
+        Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value @"
+        DesktopTerminal-CEF Build Information
+        ====================================
+        Architecture: ${{ matrix.arch }}
+        Platform: ${{ matrix.name }}
+        CEF Version: ${{ matrix.cef_version }}
+        Qt Version: ${{ env.QT_VERSION }}
+        Build Type: ${{ env.BUILD_TYPE }}
+        Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+        Commit: ${{ github.sha }}
+        "@
 
     - name: Create Windows Installer
       shell: cmd
@@ -290,17 +295,17 @@ Commit: ${{ github.sha }}
         cp README.md todo.md artifacts/linux-x64/
         
         # Create build info
-        cat > artifacts/linux-x64/BUILD_INFO.txt << EOF
-DesktopTerminal-CEF Build Information
-====================================
-Architecture: x64
-Platform: Linux 64-bit
-CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
-Qt Version: ${{ env.QT_VERSION }}
-Build Type: ${{ env.BUILD_TYPE }}
-Build Date: $(date -u)
-Commit: ${{ github.sha }}
-EOF
+        cat > artifacts/linux-x64/BUILD_INFO.txt << 'EOF'
+        DesktopTerminal-CEF Build Information
+        ====================================
+        Architecture: x64
+        Platform: Linux 64-bit
+        CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
+        Qt Version: ${{ env.QT_VERSION }}
+        Build Type: ${{ env.BUILD_TYPE }}
+        Build Date: $(date -u)
+        Commit: ${{ github.sha }}
+        EOF
 
     - name: Upload Linux Artifacts
       uses: actions/upload-artifact@v3
@@ -371,17 +376,17 @@ EOF
         cp README.md todo.md artifacts/macos-x64/
         
         # Create build info
-        cat > artifacts/macos-x64/BUILD_INFO.txt << EOF
-DesktopTerminal-CEF Build Information
-====================================
-Architecture: x64
-Platform: macOS 64-bit
-CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
-Qt Version: ${{ env.QT_VERSION }}
-Build Type: ${{ env.BUILD_TYPE }}
-Build Date: $(date -u)
-Commit: ${{ github.sha }}
-EOF
+        cat > artifacts/macos-x64/BUILD_INFO.txt << 'EOF'
+        DesktopTerminal-CEF Build Information
+        ====================================
+        Architecture: x64
+        Platform: macOS 64-bit
+        CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
+        Qt Version: ${{ env.QT_VERSION }}
+        Build Type: ${{ env.BUILD_TYPE }}
+        Build Date: $(date -u)
+        Commit: ${{ github.sha }}
+        EOF
 
     - name: Upload macOS Artifacts
       uses: actions/upload-artifact@v3
