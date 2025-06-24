@@ -465,6 +465,12 @@ jobs:
           chmod +x scripts/download-cef.sh
         fi
 
+    - name: Install Qt for CMake test
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.2'
+        cache: true
+
     - name: Validate CMake Configuration
       run: |
         echo "🔍 Checking CMake configuration..."
