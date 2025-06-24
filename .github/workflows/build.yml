@@ -119,6 +119,12 @@ jobs:
         Copy-Item "README.md" "$artifactPath\"
         Copy-Item "todo.md" "$artifactPath\"
         
+        # Copy resources for installer
+        if (Test-Path "resources") {
+          New-Item -ItemType Directory -Force -Path "$artifactPath\resources"
+          Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
+        }
+        
         # Create version info
         @"
 DesktopTerminal-CEF Build Information
@@ -132,12 +138,70 @@ Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
 Commit: ${{ github.sha }}
 "@ | Out-File "$artifactPath\BUILD_INFO.txt" -Encoding UTF8
 
+    - name: Create Windows Installer
+      shell: cmd
+      run: |
+        echo "=== 安装NSIS ==="
+        choco install nsis -y
+        
+        echo "=== 生成${{ matrix.arch }}位CEF安装包 ==="
+        mkdir Output 2>nul
+        
+        echo "检查NSIS脚本..."
+        if not exist installer.nsi (
+          echo ERROR: installer.nsi文件不存在
+          exit /b 1
+        )
+        
+        echo "检查构建产物..."
+        if exist "build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
+          echo "✓ 找到主程序文件"
+          dir "build\bin\${{ env.BUILD_TYPE }}"
+        ) else (
+          echo "✗ 未找到主程序文件"
+          echo "构建目录内容："
+          dir build /s
+          exit /b 1
+        )
+        
+        REM 提取CEF主版本号
+        set "cef_version_full=${{ matrix.cef_version }}"
+        for /f "tokens=1 delims=." %%a in ("!cef_version_full!") do set "cef_major=%%a"
+        
+        echo "生成CEF ${{ matrix.arch }}位安装包 (CEF !cef_major!)..."
+        makensis -DARCH=${{ matrix.arch }} -DCEF_VERSION=!cef_major! installer.nsi
+        if %errorlevel% neq 0 (
+          echo 生成${{ matrix.arch }}位安装包失败
+          exit /b 1
+        )
+        
+        echo "生成的安装包："
+        dir Output\*.exe
+        
+        REM 重命名安装包包含完整版本信息
+        for %%f in (Output\*.exe) do (
+          if "${{ matrix.arch }}"=="x86" (
+            set "new_name=DesktopTerminal-CEF-v1.0.0-${{ matrix.arch }}-cef!cef_major!-win7-setup.exe"
+          ) else (
+            set "new_name=DesktopTerminal-CEF-v1.0.0-${{ matrix.arch }}-cef!cef_major!-setup.exe"
+          )
+          ren "%%f" "!new_name!"
+          echo 重命名: %%f -^> !new_name!
+        )
+
     - name: Upload Windows ${{ matrix.arch }} Artifacts
       uses: actions/upload-artifact@v3
       with:
         name: DesktopTerminal-CEF-windows-${{ matrix.arch }}
         path: artifacts/windows-${{ matrix.arch }}/
         retention-days: 30
+
+    - name: Upload Windows Installer
+      uses: actions/upload-artifact@v3
+      with:
+        name: DesktopTerminal-CEF-installer-${{ matrix.arch }}
+        path: Output/*.exe
+        retention-days: 90
 
   # Linux构建
   build-linux:
