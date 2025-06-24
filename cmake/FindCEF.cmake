@@ -18,11 +18,11 @@ if(APPLE)
     set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
 endif()
 
-# Linux平台检测
-if(UNIX AND NOT APPLE)
-    set(CEF_PLATFORM_SUFFIX "linux64")
-    set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
-endif()
+# Linux平台检测 - 暂时注释掉（按用户要求）
+# if(UNIX AND NOT APPLE)
+#     set(CEF_PLATFORM_SUFFIX "linux64")
+#     set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
+# endif()
 
 # 使用传入的版本或默认版本
 if(NOT CEF_VERSION)
@@ -60,8 +60,7 @@ if(NOT CEF_ROOT_DIR)
 endif()
 
 if(NOT CEF_ROOT_DIR)
-    message(STATUS "CEF未找到，将在构建时自动下载")
-    set(CEF_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/${CEF_BINARY_NAME}")
+    message(FATAL_ERROR "CEF未找到，请确保CEF文件已正确解压到 third_party/cef/ 目录中")
 endif()
 
 # 设置CEF路径
@@ -138,6 +137,9 @@ endif()
 
 # 检查是否找到了必要的组件
 include(FindPackageHandleStandardArgs)
+
+# CI环境mock配置已移除 - 现在使用真实的本地CEF文件
+
 find_package_handle_standard_args(CEF
     REQUIRED_VARS CEF_INCLUDE_PATH CEF_LIBRARIES CEF_BINARY_DIR CEF_RESOURCE_DIR
     VERSION_VAR CEF_VERSION
