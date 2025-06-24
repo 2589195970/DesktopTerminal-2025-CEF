@@ -24,7 +24,7 @@ jobs:
           - arch: x86
             platform: Win32
             cef_version: "75.1.16+g16a67c4+chromium-75.0.3770.100"
-            qt_arch: win32_msvc2015
+            qt_arch: win32_msvc2019
             name: "Windows 32-bit (Win7 SP1 Compatible)"
           - arch: x64
             platform: x64
@@ -40,6 +40,13 @@ jobs:
 
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v1.3
+
+    - name: Check Available Qt Architectures
+      shell: cmd
+      run: |
+        echo "检查Qt ${{ env.QT_VERSION }}可用架构..."
+        python -m pip install aqtinstall==3.1.*
+        python -m aqt list-qt windows desktop --arch ${{ env.QT_VERSION }} || echo "架构检查失败，继续尝试安装"
 
     - name: Install Qt ${{ env.QT_VERSION }}
       uses: jurplel/install-qt-action@v3
@@ -90,7 +97,7 @@ jobs:
           echo "Configuring for Windows 7 SP1 32-bit compatibility..."
           cmake .. ^
             -A ${{ matrix.platform }} ^
-            -T v141_xp ^
+            -T v142 ^
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
             -DCEF_VERSION="${{ matrix.cef_version }}" ^
             -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
