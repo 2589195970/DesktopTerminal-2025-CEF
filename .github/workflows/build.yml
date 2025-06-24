@@ -50,11 +50,12 @@ jobs:
 
     - name: Install Qt ${{ env.QT_VERSION }}
       uses: jurplel/install-qt-action@v3
+      timeout-minutes: 15
       with:
         version: ${{ env.QT_VERSION }}
         arch: ${{ matrix.qt_arch }}
         cache: true
-        modules: 'qtwebengine'
+        cache-key-prefix: qt-${{ matrix.qt_arch }}
 
     - name: Cache CEF ${{ matrix.arch }}
       id: cache-cef
