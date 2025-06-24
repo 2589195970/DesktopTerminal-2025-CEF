@@ -1,0 +1,487 @@
+name: Build DesktopTerminal-CEF
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main ]
+  release:
+    types: [published]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  BUILD_TYPE: Release
+  QT_VERSION: '5.15.2'
+
+jobs:
+  # Windows构建（支持32位和64位）
+  build-windows:
+    runs-on: windows-2019
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            platform: Win32
+            cef_version: "75.1.16+g16a67c4+chromium-75.0.3770.100"
+            qt_arch: win32_msvc2019
+            name: "Windows 32-bit (Win7 SP1 Compatible)"
+          - arch: x64
+            platform: x64
+            cef_version: "118.6.8+g1e19f4c+chromium-118.0.5993.119"
+            qt_arch: win64_msvc2019_64
+            name: "Windows 64-bit"
+
+    name: ${{ matrix.name }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.3
+
+    - name: Install Qt ${{ env.QT_VERSION }}
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        arch: ${{ matrix.qt_arch }}
+        cache: true
+        modules: 'qtwebengine'
+
+    - name: Cache CEF ${{ matrix.arch }}
+      id: cache-cef
+      uses: actions/cache@v3
+      with:
+        path: third_party/cef
+        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}
+        restore-keys: |
+          cef-windows-${{ matrix.arch }}-
+
+    - name: Download CEF
+      if: steps.cache-cef.outputs.cache-hit != 'true'
+      shell: cmd
+      run: |
+        echo "Downloading CEF for ${{ matrix.arch }}..."
+        scripts\download-cef.bat ${{ matrix.arch }} "${{ matrix.cef_version }}"
+
+    - name: Verify CEF Download
+      shell: cmd
+      run: |
+        if exist "third_party\cef" (
+          echo "CEF directory found"
+          dir third_party\cef
+        ) else (
+          echo "CEF directory not found - build may fail"
+        )
+
+    - name: Configure CMake
+      shell: cmd
+      run: |
+        mkdir build
+        cd build
+        cmake .. ^
+          -A ${{ matrix.platform }} ^
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
+          -DCEF_VERSION="${{ matrix.cef_version }}" ^
+          -DQt5_DIR="%Qt5_Dir%"
+
+    - name: Build Project
+      shell: cmd
+      run: |
+        cd build
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS%
+
+    - name: Verify Build
+      shell: cmd
+      run: |
+        echo "Checking build artifacts..."
+        if exist "build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
+          echo "✓ Main executable found"
+          dir "build\bin\${{ env.BUILD_TYPE }}"
+        ) else (
+          echo "✗ Main executable not found"
+          echo "Build directory contents:"
+          dir build /s
+          exit 1
+        )
+
+    - name: Package Windows Build
+      shell: powershell
+      run: |
+        $artifactPath = "artifacts\windows-${{ matrix.arch }}"
+        New-Item -ItemType Directory -Force -Path $artifactPath
+        
+        # Copy main executable and dependencies
+        Copy-Item "build\bin\${{ env.BUILD_TYPE }}\*" "$artifactPath\" -Recurse -Force
+        
+        # Copy documentation
+        Copy-Item "README.md" "$artifactPath\"
+        Copy-Item "todo.md" "$artifactPath\"
+        
+        # Create version info
+        @"
+DesktopTerminal-CEF Build Information
+====================================
+Architecture: ${{ matrix.arch }}
+Platform: ${{ matrix.name }}
+CEF Version: ${{ matrix.cef_version }}
+Qt Version: ${{ env.QT_VERSION }}
+Build Type: ${{ env.BUILD_TYPE }}
+Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+Commit: ${{ github.sha }}
+"@ | Out-File "$artifactPath\BUILD_INFO.txt" -Encoding UTF8
+
+    - name: Upload Windows ${{ matrix.arch }} Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: DesktopTerminal-CEF-windows-${{ matrix.arch }}
+        path: artifacts/windows-${{ matrix.arch }}/
+        retention-days: 30
+
+  # Linux构建
+  build-linux:
+    runs-on: ubuntu-20.04
+    name: Linux 64-bit
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          pkg-config \
+          libx11-dev \
+          libxss1 \
+          libnss3-dev \
+          libatk-bridge2.0-dev \
+          libdrm2 \
+          libxcomposite-dev \
+          libxdamage1 \
+          libxrandr2 \
+          libgbm1 \
+          libxkbcommon-dev \
+          libasound2-dev \
+          libxtst6 \
+          libxcomposite1 \
+          libxcursor1 \
+          libxi6
+
+    - name: Install Qt ${{ env.QT_VERSION }}
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        cache: true
+
+    - name: Cache CEF Linux
+      id: cache-cef-linux
+      uses: actions/cache@v3
+      with:
+        path: third_party/cef
+        key: cef-linux-x64-118
+        restore-keys: |
+          cef-linux-x64-
+
+    - name: Download CEF
+      if: steps.cache-cef-linux.outputs.cache-hit != 'true'
+      run: |
+        chmod +x scripts/download-cef.sh
+        scripts/download-cef.sh x64 "118.6.8+g1e19f4c+chromium-118.0.5993.119"
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -G Ninja \
+          -DCMAKE_INSTALL_PREFIX=/usr/local
+
+    - name: Build Project
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Verify Build
+      run: |
+        if [ -f "build/bin/DesktopTerminal-CEF" ]; then
+          echo "✓ Main executable found"
+          ls -la build/bin/
+          file build/bin/DesktopTerminal-CEF
+        else
+          echo "✗ Main executable not found"
+          find build -name "*DesktopTerminal*" -type f
+          exit 1
+        fi
+
+    - name: Package Linux Build
+      run: |
+        mkdir -p artifacts/linux-x64
+        cp -r build/bin/* artifacts/linux-x64/
+        cp README.md todo.md artifacts/linux-x64/
+        
+        # Create build info
+        cat > artifacts/linux-x64/BUILD_INFO.txt << EOF
+DesktopTerminal-CEF Build Information
+====================================
+Architecture: x64
+Platform: Linux 64-bit
+CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
+Qt Version: ${{ env.QT_VERSION }}
+Build Type: ${{ env.BUILD_TYPE }}
+Build Date: $(date -u)
+Commit: ${{ github.sha }}
+EOF
+
+    - name: Upload Linux Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: DesktopTerminal-CEF-linux-x64
+        path: artifacts/linux-x64/
+        retention-days: 30
+
+  # macOS构建
+  build-macos:
+    runs-on: macos-12
+    name: macOS 64-bit
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt ${{ env.QT_VERSION }}
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        cache: true
+
+    - name: Cache CEF macOS
+      id: cache-cef-macos
+      uses: actions/cache@v3
+      with:
+        path: third_party/cef
+        key: cef-macos-x64-118
+        restore-keys: |
+          cef-macos-x64-
+
+    - name: Download CEF
+      if: steps.cache-cef-macos.outputs.cache-hit != 'true'
+      run: |
+        chmod +x scripts/download-cef.sh
+        scripts/download-cef.sh x64 "118.6.8+g1e19f4c+chromium-118.0.5993.119"
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.12
+
+    - name: Build Project
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Verify Build
+      run: |
+        if [ -f "build/bin/DesktopTerminal-CEF" ]; then
+          echo "✓ Main executable found"
+          ls -la build/bin/
+          file build/bin/DesktopTerminal-CEF
+        else
+          echo "✗ Main executable not found"
+          find build -name "*DesktopTerminal*" -type f
+          exit 1
+        fi
+
+    - name: Package macOS Build
+      run: |
+        mkdir -p artifacts/macos-x64
+        cp -r build/bin/* artifacts/macos-x64/
+        cp README.md todo.md artifacts/macos-x64/
+        
+        # Create build info
+        cat > artifacts/macos-x64/BUILD_INFO.txt << EOF
+DesktopTerminal-CEF Build Information
+====================================
+Architecture: x64
+Platform: macOS 64-bit
+CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
+Qt Version: ${{ env.QT_VERSION }}
+Build Type: ${{ env.BUILD_TYPE }}
+Build Date: $(date -u)
+Commit: ${{ github.sha }}
+EOF
+
+    - name: Upload macOS Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: DesktopTerminal-CEF-macos-x64
+        path: artifacts/macos-x64/
+        retention-days: 30
+
+  # 代码质量和安全检查
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality & Security
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Verify Project Structure
+      run: |
+        echo "🔍 Checking project structure..."
+        
+        required_files=(
+          "CMakeLists.txt"
+          "README.md"
+          "src/main.cpp"
+          "scripts/build.sh"
+          "scripts/build.bat"
+          "scripts/download-cef.sh"
+          "scripts/download-cef.bat"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✓ $file found"
+          else
+            echo "✗ $file missing"
+            exit 1
+          fi
+        done
+        
+        required_dirs=(
+          "src/core"
+          "src/cef"
+          "src/config"
+          "src/logging"
+          "src/security"
+          "cmake"
+          "third_party/QHotkey"
+        )
+        
+        for dir in "${required_dirs[@]}"; do
+          if [ -d "$dir" ]; then
+            echo "✓ $dir/ found"
+          else
+            echo "✗ $dir/ missing"
+            exit 1
+          fi
+        done
+
+    - name: Check Build Scripts
+      run: |
+        echo "🔍 Verifying build scripts..."
+        
+        # Check if scripts are executable
+        if [ -x "scripts/build.sh" ]; then
+          echo "✓ build.sh is executable"
+        else
+          echo "✗ build.sh is not executable"
+          chmod +x scripts/build.sh
+        fi
+        
+        if [ -x "scripts/download-cef.sh" ]; then
+          echo "✓ download-cef.sh is executable"
+        else
+          echo "✗ download-cef.sh is not executable"  
+          chmod +x scripts/download-cef.sh
+        fi
+
+    - name: Validate CMake Configuration
+      run: |
+        echo "🔍 Checking CMake configuration..."
+        cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug || {
+          echo "❌ CMake configuration failed"
+          exit 1
+        }
+        echo "✓ CMake configuration successful"
+
+    - name: Security Scan with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        severity: 'HIGH,CRITICAL'
+
+  # 创建发布包（仅在发布时触发）
+  create-release:
+    needs: [build-windows, build-linux, build-macos, code-quality]
+    runs-on: ubuntu-latest
+    name: Create Release Packages
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create release packages
+      run: |
+        echo "📦 Creating release packages..."
+        
+        # Windows 32-bit package
+        cd DesktopTerminal-CEF-windows-x86
+        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip .
+        cd ..
+        
+        # Windows 64-bit package  
+        cd DesktopTerminal-CEF-windows-x64
+        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip .
+        cd ..
+        
+        # macOS package
+        cd DesktopTerminal-CEF-macos-x64
+        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz .
+        cd ..
+        
+        # Linux package
+        cd DesktopTerminal-CEF-linux-x64
+        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz .
+        cd ..
+        
+        # Show created packages
+        ls -la *.zip *.tar.gz
+
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip
+          DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip
+          DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz
+          DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz
+        body: |
+          ## DesktopTerminal-CEF Release ${{ github.ref_name }}
+          
+          ### 📦 包含的平台
+          - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75)
+          - **Windows 64-bit**: 支持Windows 10及以上系统 (CEF 118)  
+          - **macOS 64-bit**: 支持macOS 10.12及以上系统
+          - **Linux 64-bit**: 支持Ubuntu 18.04及以上系统
+          
+          ### 🔧 主要特性
+          - Qt5 + CEF集成的安全桌面终端
+          - 完整的安全控制功能（键盘拦截、URL过滤、全屏锁定）
+          - 跨平台兼容性
+          - 针对Windows 7 SP1 32位系统的特别优化
+          
+          ### 📋 系统要求
+          - **Windows**: Windows 7 SP1 或更高版本
+          - **macOS**: macOS 10.12 或更高版本  
+          - **Linux**: Ubuntu 18.04 或等效发行版
+          
+          ### 🚀 快速开始
+          1. 下载对应平台的包
+          2. 解压到目标目录
+          3. 运行主程序即可开始使用
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
