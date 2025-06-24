@@ -183,8 +183,24 @@ rmdir /s /q "%TEMP_DIR%"
 call :log_success "CEF解压完成: %CEF_DIR%\%CEF_BINARY_NAME%"
 
 REM 验证解压结果
-if not exist "%CEF_DIR%\%CEF_BINARY_NAME%\include\cef_version.h" (
-    call :log_error "CEF解压后文件不完整"
+call :log_info "验证CEF解压结果..."
+set "CEF_INCLUDE_CHECK1=%CEF_DIR%\%CEF_BINARY_NAME%\include\cef_version.h"
+set "CEF_INCLUDE_CHECK2=%CEF_DIR%\include\cef_version.h"
+set "CEF_INCLUDE_CHECK3=%CEF_DIR%\%CEF_BINARY_NAME%\cef_version.h"
+
+if exist "!CEF_INCLUDE_CHECK1!" (
+    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK1!"
+) else if exist "!CEF_INCLUDE_CHECK2!" (
+    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK2!"
+) else if exist "!CEF_INCLUDE_CHECK3!" (
+    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK3!"
+) else (
+    call :log_error "CEF解压后未找到cef_version.h文件"
+    call :log_info "检查解压目录结构:"
+    if exist "%CEF_DIR%" (
+        dir "%CEF_DIR%" /s | findstr /i "cef_version.h" || call :log_warning "未找到cef_version.h文件"
+        dir "%CEF_DIR%" /s | findstr /i "include" || call :log_warning "未找到include目录"
+    )
     exit /b 1
 )
 

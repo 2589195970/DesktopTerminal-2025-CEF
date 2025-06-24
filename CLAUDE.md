@@ -802,7 +802,7 @@ Application outputs current working directory and attempts multiple config paths
 
 | 平台 | CEF版本 | 下载URL | 文件大小 | 用途 |
 |------|---------|---------|----------|------|
-| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | Win7 SP1兼容 |
+| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | Win7 SP1兼容 (Standard Distribution) |
 | Windows 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_windows64.tar.bz2` | 275MB | 现代系统 |
 | Linux 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_linux64.tar.bz2` | 659MB | Linux构建 |
 | macOS 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_macosx64.tar.bz2` | 229MB | macOS构建 |
