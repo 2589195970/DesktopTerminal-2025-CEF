@@ -139,7 +139,12 @@ build_download_url() {
 check_existing_cef() {
     CEF_INSTALL_DIR="$CEF_DIR/$CEF_BINARY_NAME"
     
-    if [[ -d "$CEF_INSTALL_DIR" ]] && [[ -f "$CEF_INSTALL_DIR/include/cef_version.h" ]]; then
+    # 检查多种可能的目录结构
+    local CEF_INCLUDE_CHECK1="$CEF_INSTALL_DIR/include/cef_version.h"
+    local CEF_INCLUDE_CHECK2="$CEF_DIR/include/cef_version.h"
+    local CEF_INCLUDE_CHECK3="$CEF_INSTALL_DIR/cef_version.h"
+    
+    if [[ -d "$CEF_INSTALL_DIR" ]] && ([[ -f "$CEF_INCLUDE_CHECK1" ]] || [[ -f "$CEF_INCLUDE_CHECK2" ]] || [[ -f "$CEF_INCLUDE_CHECK3" ]]); then
         log_success "CEF已存在: $CEF_INSTALL_DIR"
         log_info "如需重新下载，请删除该目录后重新运行脚本"
         return 0
@@ -202,9 +207,23 @@ download_cef() {
     
     log_success "CEF解压完成: $CEF_DIR/$CEF_BINARY_NAME"
     
-    # 验证解压结果
-    if [[ ! -f "$CEF_DIR/$CEF_BINARY_NAME/include/cef_version.h" ]]; then
-        log_error "CEF解压后文件不完整"
+    # 验证解压结果 - 支持多种目录结构
+    log_info "验证CEF解压结果..."
+    local CEF_INCLUDE_CHECK1="$CEF_DIR/$CEF_BINARY_NAME/include/cef_version.h"
+    local CEF_INCLUDE_CHECK2="$CEF_DIR/include/cef_version.h"
+    local CEF_INCLUDE_CHECK3="$CEF_DIR/$CEF_BINARY_NAME/cef_version.h"
+    
+    if [[ -f "$CEF_INCLUDE_CHECK1" ]]; then
+        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK1"
+    elif [[ -f "$CEF_INCLUDE_CHECK2" ]]; then
+        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK2"
+    elif [[ -f "$CEF_INCLUDE_CHECK3" ]]; then
+        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK3"
+    else
+        log_error "CEF解压后未找到cef_version.h文件"
+        log_info "检查解压目录结构:"
+        find "$CEF_DIR" -name "cef_version.h" -type f 2>/dev/null || log_warning "未找到cef_version.h文件"
+        find "$CEF_DIR" -name "include" -type d 2>/dev/null || log_warning "未找到include目录"
         return 1
     fi
     

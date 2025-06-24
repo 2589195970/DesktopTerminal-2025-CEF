@@ -41,12 +41,23 @@ set(CEF_ROOT_PATHS
     "$ENV{CEF_ROOT}"
 )
 
-# 查找CEF根目录
+# 查找CEF根目录 - 支持多种目录结构
 find_path(CEF_ROOT_DIR
-    NAMES include/cef_version.h
+    NAMES include/cef_version.h cef_version.h
     PATHS ${CEF_ROOT_PATHS}
     NO_DEFAULT_PATH
 )
+
+# 如果找不到，尝试在CEF二进制目录中查找
+if(NOT CEF_ROOT_DIR)
+    find_path(CEF_ROOT_DIR
+        NAMES include/cef_version.h
+        PATHS 
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/${CEF_BINARY_NAME}"
+            "${CMAKE_CURRENT_BINARY_DIR}/third_party/cef/${CEF_BINARY_NAME}"
+        NO_DEFAULT_PATH
+    )
+endif()
 
 if(NOT CEF_ROOT_DIR)
     message(STATUS "CEF未找到，将在构建时自动下载")

@@ -853,8 +853,11 @@ Application outputs current working directory and attempts multiple config paths
 
 #### 问题2: CMake找不到CEF
 **症状**: `Could NOT find CEF (missing: CEF_LIBRARIES)`
-**原因**: FindCEF.cmake中版本号与实际不符
-**解决**: 检查并同步所有配置文件中的版本号
+**原因**: FindCEF.cmake中版本号与实际不符，或验证路径不匹配实际目录结构
+**解决**: 
+1. 检查并同步所有配置文件中的版本号
+2. 确保FindCEF.cmake支持多种CEF目录结构
+3. 验证CEF解压后的实际目录结构
 
 #### 问题3: Qt安装超时
 **症状**: `The operation was canceled`
@@ -867,6 +870,14 @@ Application outputs current working directory and attempts multiple config paths
 - 使用 `actions/upload-artifact@v4`
 - 使用 `win32_msvc2019` 架构
 - 移除 `modules: 'qtwebengine'`
+
+#### 问题5: CEF解压后文件验证失败
+**症状**: `CEF解压后文件不完整` 或 `CEF解压后未找到cef_version.h文件`
+**原因**: 硬编码的验证路径不匹配CEF实际的目录结构
+**解决**: 
+1. 使用多路径验证逻辑支持不同的CEF目录结构
+2. 添加详细的目录结构检查和错误诊断
+3. 确保所有下载脚本(Windows/Linux/macOS)使用一致的验证逻辑
 
 ### URL编码规则
 CEF下载需要URL编码特殊字符：
