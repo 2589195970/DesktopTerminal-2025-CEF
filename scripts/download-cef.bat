@@ -73,17 +73,8 @@ goto :eof
 
 REM 构建下载URL
 :build_download_url
-REM 根据版本构建不同的URL
-echo !CEF_VERSION! | findstr "^75\." >nul
-if !errorlevel! equ 0 (
-    REM CEF 75版本使用旧的URL格式
-    set "DOWNLOAD_URL=https://cef-builds.spotifycdn.com/!CEF_ARCHIVE_NAME!"
-) else (
-    REM 较新版本使用GitHub releases
-    for /f "tokens=1 delims=." %%a in ("!CEF_VERSION!") do set "CEF_MAJOR_VERSION=%%a"
-    set "DOWNLOAD_URL=https://github.com/chromiumembedded/cef/releases/download/v!CEF_MAJOR_VERSION!.0.0/!CEF_ARCHIVE_NAME!"
-)
-
+REM 所有CEF版本统一使用Spotify CDN下载
+set "DOWNLOAD_URL=https://cef-builds.spotifycdn.com/!CEF_ARCHIVE_NAME!"
 call :log_info "下载URL: !DOWNLOAD_URL!"
 goto :eof
 
@@ -113,11 +104,24 @@ call :log_info "下载 %CEF_ARCHIVE_NAME%..."
 REM 检查是否有PowerShell
 powershell -Command "exit" >nul 2>&1
 if !errorlevel! equ 0 (
-    REM 使用PowerShell下载
-    call :log_info "使用PowerShell下载..."
-    powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UserAgent 'Mozilla/5.0' }"
-    if !errorlevel! neq 0 (
-        call :log_error "PowerShell下载失败"
+    REM 使用PowerShell下载，带重试机制
+    call :log_info "使用PowerShell下载，最多重试3次..."
+    set "DOWNLOAD_SUCCESS=false"
+    for /l %%i in (1,1,3) do (
+        if "!DOWNLOAD_SUCCESS!"=="false" (
+            call :log_info "尝试下载 (%%i/3)..."
+            powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UserAgent 'Mozilla/5.0' -TimeoutSec 300 -UseBasicParsing; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 } }"
+            if !errorlevel! equ 0 (
+                set "DOWNLOAD_SUCCESS=true"
+                call :log_success "下载成功！"
+            ) else (
+                call :log_warning "下载失败，等待5秒后重试..."
+                ping -n 6 127.0.0.1 >nul
+            )
+        )
+    )
+    if "!DOWNLOAD_SUCCESS!"=="false" (
+        call :log_error "PowerShell下载失败，已重试3次"
         rmdir /s /q "%TEMP_DIR%"
         exit /b 1
     )
@@ -126,8 +130,6 @@ if !errorlevel! equ 0 (
     rmdir /s /q "%TEMP_DIR%"
     exit /b 1
 )
-
-call :log_success "下载完成"
 
 REM 验证下载的文件
 if not exist "%TEMP_DIR%\%CEF_ARCHIVE_NAME%" (
