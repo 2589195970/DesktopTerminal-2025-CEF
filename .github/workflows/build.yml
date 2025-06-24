@@ -71,9 +71,9 @@ jobs:
       run: |
         echo "Downloading CEF for ${{ matrix.arch }}..."
         if "${{ matrix.arch }}"=="x86" (
-          scripts\download-cef.bat /platform=windows32
+          scripts\download-cef.bat "/platform=windows32"
         ) else (
-          scripts\download-cef.bat /platform=windows64
+          scripts\download-cef.bat "/platform=windows64"
         )
 
     - name: Verify CEF Download
