@@ -793,3 +793,93 @@ Required config fields: `url`, `exitPassword`, `appName`
 
 ### Debugging
 Application outputs current working directory and attempts multiple config paths with detailed logging to help with deployment issues.
+
+## ⚠️ 关键配置信息 - CEF版本管理
+
+### 已验证可用的CEF版本 (HTTP 200)
+
+**重要：以下版本号已通过URL验证，禁止随意修改！**
+
+| 平台 | CEF版本 | 下载URL | 文件大小 | 用途 |
+|------|---------|---------|----------|------|
+| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | Win7 SP1兼容 |
+| Windows 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_windows64.tar.bz2` | 275MB | 现代系统 |
+| Linux 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_linux64.tar.bz2` | 659MB | Linux构建 |
+| macOS 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_macosx64.tar.bz2` | 229MB | macOS构建 |
+
+### 配置文件一致性检查清单
+
+**修改CEF版本时，必须同步更新以下所有文件：**
+
+1. **`.github/workflows/build.yml`** - GitHub Actions构建配置
+   ```yaml
+   cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"  # 32位
+   cef_version: "118.7.1+g99817d2+chromium-118.0.5993.119" # 64位
+   ```
+
+2. **`scripts/download-cef.bat`** - Windows下载脚本
+   ```batch
+   set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"  # windows32
+   set "CEF_VERSION=118.7.1+g99817d2+chromium-118.0.5993.119" # windows64
+   ```
+
+3. **`scripts/download-cef.sh`** - Linux/macOS下载脚本
+   ```bash
+   CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"  # windows32
+   CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119" # 其他平台
+   ```
+
+4. **`CMakeLists.txt`** - 主CMake配置
+   ```cmake
+   set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")  # 32位
+   set(CEF_VERSION "118.7.1+g99817d2+chromium-118.0.5993.119") # 其他
+   ```
+
+5. **`cmake/FindCEF.cmake`** - ⚠️ 关键模块 - 覆盖主配置
+   ```cmake
+   set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")  # windows32
+   set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119") # 其他平台
+   ```
+
+### 常见CEF构建问题解决方案
+
+#### 问题1: CEF下载404错误
+**症状**: `The remote server returned an error: (404) Not Found`
+**原因**: CEF版本号错误或URL编码问题
+**解决**: 
+1. 使用上述已验证版本号
+2. 确保URL编码：`+` → `%2B`
+3. 验证URL: `curl -I "https://cef-builds.spotifycdn.com/cef_binary_[VERSION].tar.bz2"`
+
+#### 问题2: CMake找不到CEF
+**症状**: `Could NOT find CEF (missing: CEF_LIBRARIES)`
+**原因**: FindCEF.cmake中版本号与实际不符
+**解决**: 检查并同步所有配置文件中的版本号
+
+#### 问题3: Qt安装超时
+**症状**: `The operation was canceled`
+**原因**: qtwebengine模块下载过大
+**解决**: 移除qtwebengine模块依赖（项目使用CEF替代）
+
+#### 问题4: GitHub Actions构建失败
+**症状**: artifact actions或Qt架构错误
+**解决**: 
+- 使用 `actions/upload-artifact@v4`
+- 使用 `win32_msvc2019` 架构
+- 移除 `modules: 'qtwebengine'`
+
+### URL编码规则
+CEF下载需要URL编码特殊字符：
+- `+` → `%2B`
+- 示例: `75.1.14+gc81164e` → `75.1.14%2Bgc81164e`
+
+### 版本验证命令
+```bash
+# 验证Windows 32位
+curl -I "https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2"
+
+# 验证Windows 64位  
+curl -I "https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_windows64.tar.bz2"
+
+# 预期结果: HTTP/2 200
+```
