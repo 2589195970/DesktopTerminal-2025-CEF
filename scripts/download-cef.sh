@@ -80,28 +80,28 @@ detect_platform() {
 select_cef_version() {
     case $PLATFORM in
         "windows32")
-            # Windows 32位使用CEF 75 - 最后支持Windows 7 SP1的版本
-            CEF_VERSION="75.1.16+g16a67c4+chromium-75.0.3770.100"
+            # Windows 32位使用CEF 75.1.14 - 确认可用的Windows 7 SP1支持版本
+            CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
             CEF_PLATFORM="windows32"
-            log_info "选择CEF 75版本 - 支持Windows 7 SP1 32位"
+            log_info "选择CEF 75.1.14版本 - 支持Windows 7 SP1 32位"
             ;;
         "windows64")
             # Windows 64位使用较新版本
-            CEF_VERSION="118.6.8+g1e19f4c+chromium-118.0.5993.119"
+            CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119"
             CEF_PLATFORM="windows64"
-            log_info "选择CEF 118版本 - Windows 64位"
+            log_info "选择CEF 118.7.1版本 - Windows 64位"
             ;;
         "macosx64")
             # macOS使用最新版本
-            CEF_VERSION="118.6.8+g1e19f4c+chromium-118.0.5993.119"
+            CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119"
             CEF_PLATFORM="macosx64"
-            log_info "选择CEF 118版本 - macOS 64位"
+            log_info "选择CEF 118.7.1版本 - macOS 64位"
             ;;
         "linux64")
             # Linux使用最新版本
-            CEF_VERSION="118.6.8+g1e19f4c+chromium-118.0.5993.119"
+            CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119"
             CEF_PLATFORM="linux64"
-            log_info "选择CEF 118版本 - Linux 64位"
+            log_info "选择CEF 118.7.1版本 - Linux 64位"
             ;;
         *)
             log_error "不支持的平台: $PLATFORM"

@@ -22,13 +22,13 @@ endif()
 
 # 根据架构选择CEF版本
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
-    # Windows 32位使用CEF 75（支持Windows 7 SP1）
-    set(CEF_VERSION "75.1.16+g16a67c4+chromium-75.0.3770.100")
-    message(STATUS "使用CEF 75版本 - Windows 7 SP1 32位兼容")
+    # Windows 32位使用CEF 75.1.14（确认可用的Windows 7 SP1支持版本）
+    set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
+    message(STATUS "使用CEF 75.1.14版本 - Windows 7 SP1 32位兼容")
 else()
     # 其他平台使用较新版本
-    set(CEF_VERSION "118.6.8+g1e19f4c+chromium-118.0.5993.119")
-    message(STATUS "使用CEF 118版本")
+    set(CEF_VERSION "118.7.1+g99817d2+chromium-118.0.5993.119")
+    message(STATUS "使用CEF 118.7.1版本")
 endif()
 
 # Windows平台特殊设置
