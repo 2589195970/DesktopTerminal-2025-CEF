@@ -23,12 +23,12 @@ jobs:
         include:
           - arch: x86
             platform: Win32
-            cef_version: "75.1.16+g16a67c4+chromium-75.0.3770.100"
+            cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
             qt_arch: win32_msvc2019
             name: "Windows 32-bit (Win7 SP1 Compatible)"
           - arch: x64
             platform: x64
-            cef_version: "118.6.8+g1e19f4c+chromium-118.0.5993.119"
+            cef_version: "118.7.1+g99817d2+chromium-118.0.5993.119"
             qt_arch: win64_msvc2019_64
             name: "Windows 64-bit"
 

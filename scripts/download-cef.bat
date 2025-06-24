@@ -56,15 +56,15 @@ goto :eof
 REM 根据平台选择CEF版本
 :select_cef_version
 if "%PLATFORM%"=="windows32" (
-    REM Windows 32位使用CEF 75 - 最后支持Windows 7 SP1的版本
-    set "CEF_VERSION=75.1.16+g16a67c4+chromium-75.0.3770.100"
+    REM Windows 32位使用CEF 75.1.14 - 确认可用的Windows 7 SP1支持版本
+    set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"
     set "CEF_PLATFORM=windows32"
-    call :log_info "选择CEF 75版本 - 支持Windows 7 SP1 32位"
+    call :log_info "选择CEF 75.1.14版本 - 支持Windows 7 SP1 32位"
 ) else (
     REM Windows 64位使用较新版本
-    set "CEF_VERSION=118.6.8+g1e19f4c+chromium-118.0.5993.119"
+    set "CEF_VERSION=118.7.1+g99817d2+chromium-118.0.5993.119"
     set "CEF_PLATFORM=windows64"
-    call :log_info "选择CEF 118版本 - Windows 64位"
+    call :log_info "选择CEF 118.7.1版本 - Windows 64位"
 )
 
 set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
@@ -73,8 +73,11 @@ goto :eof
 
 REM 构建下载URL
 :build_download_url
-REM 所有CEF版本统一使用Spotify CDN下载
-set "DOWNLOAD_URL=https://cef-builds.spotifycdn.com/!CEF_ARCHIVE_NAME!"
+REM 所有CEF版本统一使用Spotify CDN下载，需要URL编码特殊字符
+set "CEF_ARCHIVE_NAME_ENCODED=!CEF_ARCHIVE_NAME!"
+REM 将+号替换为%2B进行URL编码
+set "CEF_ARCHIVE_NAME_ENCODED=!CEF_ARCHIVE_NAME_ENCODED:+=%%2B!"
+set "DOWNLOAD_URL=https://cef-builds.spotifycdn.com/!CEF_ARCHIVE_NAME_ENCODED!"
 call :log_info "下载URL: !DOWNLOAD_URL!"
 goto :eof
 
