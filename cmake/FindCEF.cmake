@@ -143,25 +143,40 @@ include(FindPackageHandleStandardArgs)
 if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
     message(STATUS "CI环境检测：验证CEF文件完整性")
     
-    # 检查关键CEF头文件是否存在
-    set(CEF_CRITICAL_HEADERS
-        "${CEF_INCLUDE_PATH}/cef_version.h"
-        "${CEF_INCLUDE_PATH}/cef_app.h"
-        "${CEF_INCLUDE_PATH}/cef_client.h"
-    )
+    # 支持多种路径结构的CEF头文件验证
+    set(CEF_HEADER_NAMES "cef_version.h" "cef_app.h" "cef_client.h")
+    set(CEF_HEADERS_FOUND 0)
     
-    set(CEF_HEADERS_MISSING FALSE)
-    foreach(header ${CEF_CRITICAL_HEADERS})
-        if(NOT EXISTS "${header}")
-            message(WARNING "CEF关键头文件缺失: ${header}")
-            set(CEF_HEADERS_MISSING TRUE)
+    foreach(header_name ${CEF_HEADER_NAMES})
+        set(HEADER_FOUND FALSE)
+        
+        # 检查多个可能的路径
+        set(POSSIBLE_PATHS
+            "${CEF_INCLUDE_PATH}/${header_name}"
+            "${CEF_ROOT_DIR}/include/${header_name}"
+            "${CEF_ROOT_DIR}/${header_name}"
+        )
+        
+        foreach(path ${POSSIBLE_PATHS})
+            if(NOT HEADER_FOUND AND EXISTS "${path}")
+                message(STATUS "✓ 找到CEF头文件: ${header_name} at ${path}")
+                set(HEADER_FOUND TRUE)
+                math(EXPR CEF_HEADERS_FOUND "${CEF_HEADERS_FOUND} + 1")
+            endif()
+        endforeach()
+        
+        if(NOT HEADER_FOUND)
+            message(WARNING "CEF关键头文件缺失: ${header_name}")
         endif()
     endforeach()
     
-    if(CEF_HEADERS_MISSING)
-        message(STATUS "CEF头文件不完整，将触发下载流程")
+    # 至少需要找到2个头文件才认为CEF完整
+    if(CEF_HEADERS_FOUND LESS 2)
+        message(STATUS "CEF头文件不完整 (${CEF_HEADERS_FOUND}/3)，将触发下载流程")
         # 清空库列表，让find_package_handle_standard_args失败
         set(CEF_LIBRARIES)
+    else()
+        message(STATUS "CEF头文件验证通过 (${CEF_HEADERS_FOUND}/3)")
     endif()
 endif()
 

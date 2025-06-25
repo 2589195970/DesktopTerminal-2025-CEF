@@ -62,9 +62,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-v2
+        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v3
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-
+          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-
 
     - name: Verify CEF Cache Integrity
       id: verify-cef-cache
@@ -85,16 +85,30 @@ jobs:
         
         REM 构建预期的CEF目录名
         set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
-        set "CEF_HEADER_PATH=third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h"
         
-        echo "检查CEF头文件: !CEF_HEADER_PATH!"
+        REM 支持多种可能的CEF目录结构
+        set "CEF_CHECK[1]=third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h"
+        set "CEF_CHECK[2]=third_party\cef\include\cef_version.h"
+        set "CEF_CHECK[3]=third_party\cef\!CEF_BINARY_NAME!\cef_version.h"
         
-        if exist "!CEF_HEADER_PATH!" (
-          echo "✓ CEF头文件验证成功"
-          set "CEF_VALID=true"
-        ) else (
-          echo "✗ CEF头文件不存在，需要重新下载"
+        echo "检查CEF头文件的多个可能路径..."
+        
+        REM 遍历所有可能的路径
+        for /l %%i in (1,1,3) do (
+          if "!CEF_VALID!"=="false" (
+            echo "检查路径 %%i: !CEF_CHECK[%%i]!"
+            if exist "!CEF_CHECK[%%i]!" (
+              echo "✓ CEF头文件验证成功: !CEF_CHECK[%%i]!"
+              set "CEF_VALID=true"
+            )
+          )
+        )
+        
+        if "!CEF_VALID!"=="false" (
+          echo "✗ CEF头文件在所有预期路径中都不存在，需要重新下载"
           if exist "third_party\cef" (
+            echo "显示当前CEF目录结构用于诊断:"
+            dir "third_party\cef" /s /b | findstr /i "cef_version.h" || echo "未找到任何cef_version.h文件"
             echo "删除不完整的CEF缓存..."
             rmdir /s /q "third_party\cef"
           )
@@ -131,28 +145,75 @@ jobs:
         
         set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
         
-        REM 检查关键CEF文件
-        set "REQUIRED_FILES=include\cef_version.h include\cef_app.h include\cef_client.h Release\libcef.lib"
+        REM 支持多种CEF目录结构的验证
+        echo "检查CEF目录结构的多种可能性..."
         
-        for %%f in (!REQUIRED_FILES!) do (
-          set "FILE_PATH=third_party\cef\!CEF_BINARY_NAME!\%%f"
-          if exist "!FILE_PATH!" (
-            echo "✓ 找到: %%f"
-          ) else (
-            echo "✗ 缺失: %%f"
+        REM 检查关键CEF头文件
+        set "HEADER_FILES=cef_version.h cef_app.h cef_client.h"
+        set "HEADERS_FOUND=0"
+        
+        for %%h in (!HEADER_FILES!) do (
+          set "HEADER_FOUND=false"
+          
+          REM 多路径检查头文件
+          set "HEADER_PATHS[1]=third_party\cef\!CEF_BINARY_NAME!\include\%%h"
+          set "HEADER_PATHS[2]=third_party\cef\include\%%h"
+          set "HEADER_PATHS[3]=third_party\cef\!CEF_BINARY_NAME!\%%h"
+          
+          for /l %%i in (1,1,3) do (
+            if "!HEADER_FOUND!"=="false" (
+              if exist "!HEADER_PATHS[%%i]!" (
+                echo "✓ 找到头文件: %%h at !HEADER_PATHS[%%i]!"
+                set "HEADER_FOUND=true"
+                set /a HEADERS_FOUND+=1
+              )
+            )
+          )
+          
+          if "!HEADER_FOUND!"=="false" (
+            echo "✗ 缺失头文件: %%h"
             set "VERIFICATION_FAILED=true"
           )
         )
         
+        REM 检查CEF库文件（更灵活的路径）
+        set "LIB_FOUND=false"
+        set "LIB_PATHS[1]=third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib"
+        set "LIB_PATHS[2]=third_party\cef\Release\libcef.lib"
+        set "LIB_PATHS[3]=third_party\cef\!CEF_BINARY_NAME!\lib\libcef.lib"
+        
+        for /l %%i in (1,1,3) do (
+          if "!LIB_FOUND!"=="false" (
+            if exist "!LIB_PATHS[%%i]!" (
+              echo "✓ 找到CEF库文件: !LIB_PATHS[%%i]!"
+              set "LIB_FOUND=true"
+            )
+          )
+        )
+        
+        if "!LIB_FOUND!"=="false" (
+          echo "✗ 缺失CEF库文件(libcef.lib)"
+          set "VERIFICATION_FAILED=true"
+        )
+        
+        REM 最终验证结果
         if "!VERIFICATION_FAILED!"=="true" (
-          echo "❌ CEF验证失败 - 关键文件缺失"
-          echo "CEF目录结构:"
+          echo "❌ CEF验证失败 - 部分关键文件缺失"
+          echo "找到的头文件数量: !HEADERS_FOUND!/3"
+          echo "CEF目录结构（用于诊断）:"
           if exist "third_party\cef" (
-            dir "third_party\cef" /s /b | findstr /i "\.h$ \.lib$ \.dll$"
+            echo "--- CEF头文件 ---"
+            dir "third_party\cef" /s /b | findstr /i "\.h$" | findstr /i "cef" | head -10
+            echo "--- CEF库文件 ---"  
+            dir "third_party\cef" /s /b | findstr /i "\.lib$" | head -5
+            echo "--- 目录结构 ---"
+            tree "third_party\cef" /F || dir "third_party\cef" /s /b | head -20
           )
           exit /b 1
         ) else (
           echo "✅ CEF验证成功 - 所有关键文件都存在"
+          echo "✅ 找到头文件: !HEADERS_FOUND!/3"
+          echo "✅ 找到库文件: libcef.lib"
           echo "CEF安装路径: third_party\cef\!CEF_BINARY_NAME!"
         )
 
@@ -306,10 +367,10 @@ jobs:
         retention-days: 90
 
   # Linux构建 - 暂时屏蔽，专注Windows平台修复
-  build-linux-disabled:
+  build-linux:
     if: false  # 屏蔽Linux构建
     runs-on: ubuntu-latest
-    name: Linux 64-bit (Disabled)
+    name: Linux 64-bit
     
     steps:
     - name: Checkout code
@@ -350,15 +411,55 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-linux-x64-118.7.1
+        key: cef-linux-x64-118.7.1-verified-v3
         restore-keys: |
-          cef-linux-x64-
+          cef-linux-x64-118.7.1-verified-
 
-    - name: Download CEF
-      if: steps.cache-cef-linux.outputs.cache-hit != 'true'
+    - name: Verify CEF Cache Integrity (Linux)
+      id: verify-cef-cache-linux
       run: |
+        echo "验证Linux CEF缓存完整性..."
+        CEF_VALID=false
+        CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119"
+        CEF_PLATFORM="linux64"
+        CEF_BINARY_NAME="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
+        
+        # 支持多种可能的CEF目录结构
+        CEF_CHECK_PATHS=(
+          "third_party/cef/${CEF_BINARY_NAME}/include/cef_version.h"
+          "third_party/cef/include/cef_version.h"
+          "third_party/cef/${CEF_BINARY_NAME}/cef_version.h"
+        )
+        
+        echo "检查CEF头文件的多个可能路径..."
+        
+        for CHECK_PATH in "${CEF_CHECK_PATHS[@]}"; do
+          echo "检查路径: $CHECK_PATH"
+          if [[ -f "$CHECK_PATH" ]]; then
+            echo "✓ CEF头文件验证成功: $CHECK_PATH"
+            CEF_VALID=true
+            break
+          fi
+        done
+        
+        if [[ "$CEF_VALID" == "false" ]]; then
+          echo "✗ CEF头文件在所有预期路径中都不存在，需要重新下载"
+          if [[ -d "third_party/cef" ]]; then
+            echo "显示当前CEF目录结构用于诊断:"
+            find third_party/cef -name "cef_version.h" -type f 2>/dev/null || echo "未找到任何cef_version.h文件"
+            echo "删除不完整的CEF缓存..."
+            rm -rf third_party/cef
+          fi
+        fi
+        
+        echo "cef-valid=$CEF_VALID" >> $GITHUB_OUTPUT
+
+    - name: Download CEF (Linux)
+      if: steps.cache-cef-linux.outputs.cache-hit != 'true' || steps.verify-cef-cache-linux.outputs.cef-valid != 'true'
+      run: |
+        echo "下载CEF for Linux x64..."
         chmod +x scripts/download-cef.sh
-        scripts/download-cef.sh --platform=linux64
+        scripts/download-cef.sh --platform=linux64 --force
 
     - name: Configure CMake
       run: |
