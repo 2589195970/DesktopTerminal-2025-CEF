@@ -30,8 +30,8 @@ public:
     virtual CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
     virtual CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return this; }
     virtual void OnBeforeCommandLineProcessing(const CefString& process_type, CefRefPtr<CefCommandLine> command_line) override;
-    // 注意：CEF 75中OnRegisterCustomSchemes签名可能不同，暂时移除override
-    virtual void OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar);
+    // 注意：CEF 75中OnRegisterCustomSchemes签名可能不同，暂时完全移除
+    // virtual void OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar);
 
     // CefBrowserProcessHandler接口
     virtual void OnContextInitialized() override;

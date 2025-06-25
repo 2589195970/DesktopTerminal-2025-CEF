@@ -210,6 +210,8 @@ CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRef
     return nullptr;
 }
 
+// 注意：CEF 75中此方法签名可能不同，暂时注释掉
+/*
 bool CEFClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback)
 {
     QString url = QString::fromStdString(request->GetURL().ToString());
@@ -222,6 +224,7 @@ bool CEFClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<Ce
     
     return false; // 允许资源加载
 }
+*/
 
 // ==================== CefKeyboardHandler接口实现（安全控制）====================
 

@@ -63,6 +63,8 @@ void CEFApp::OnBeforeCommandLineProcessing(const CefString& process_type, CefRef
     }
 }
 
+// 注意：CEF 75中OnRegisterCustomSchemes签名可能不同，暂时注释掉
+/*
 void CEFApp::OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar)
 {
     // 注册自定义协议（如果需要）
@@ -75,6 +77,7 @@ void CEFApp::OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar)
     
     m_logger->appEvent("自定义协议注册完成");
 }
+*/
 
 // ==================== CefBrowserProcessHandler接口实现 ====================
 
@@ -167,6 +170,8 @@ CefRefPtr<CefLoadHandler> CEFApp::GetLoadHandler()
     return nullptr;
 }
 
+// 注意：CEF 75中此方法可能不存在，暂时注释掉
+/*
 bool CEFApp::OnBeforeNavigation(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, NavigationType navigation_type, bool is_redirect)
 {
     CEF_REQUIRE_RENDERER_THREAD();
@@ -182,6 +187,7 @@ bool CEFApp::OnBeforeNavigation(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFram
     // 返回true阻止导航，false允许导航
     return false;
 }
+*/
 
 void CEFApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
