@@ -166,6 +166,12 @@ if(WIN32)
         message(STATUS "✓ 找到CEF Wrapper库: ${CEF_WRAPPER_LIBRARY}")
     else()
         message(WARNING "✗ CEF Wrapper库未找到，将从源码编译")
+        
+        # Windows平台也需要查找wrapper源码目录
+        if(EXISTS "${CEF_ROOT_DIR}/libcef_dll")
+            set(CEF_WRAPPER_SOURCE_DIR "${CEF_ROOT_DIR}/libcef_dll")
+            message(STATUS "找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR}")
+        endif()
     endif()
 elseif(APPLE)
     # macOS使用Framework路径

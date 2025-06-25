@@ -81,8 +81,31 @@ endif()
 find_package(CEF REQUIRED)
 
 # 如果CEF wrapper库不存在但有源码，则编译wrapper库
+message(STATUS "=== CEF Wrapper库编译检查 ===")
+message(STATUS "CEF_FOUND: ${CEF_FOUND}")
+message(STATUS "CEF_WRAPPER_SOURCE_DIR: ${CEF_WRAPPER_SOURCE_DIR}")
+message(STATUS "CEF_WRAPPER_LIBRARY: ${CEF_WRAPPER_LIBRARY}")
+
 if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
     message(STATUS "编译CEF Wrapper库从源码: ${CEF_WRAPPER_SOURCE_DIR}")
+elif(CEF_FOUND AND NOT CEF_WRAPPER_SOURCE_DIR)
+    # 尝试手动查找wrapper源码目录
+    set(POSSIBLE_WRAPPER_DIRS
+        "${CEF_ROOT_DIR}/libcef_dll"
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/libcef_dll"
+    )
+    
+    foreach(wrapper_dir ${POSSIBLE_WRAPPER_DIRS})
+        if(EXISTS "${wrapper_dir}" AND NOT CEF_WRAPPER_SOURCE_DIR)
+            set(CEF_WRAPPER_SOURCE_DIR "${wrapper_dir}")
+            message(STATUS "手动找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
+    message(STATUS "开始编译CEF Wrapper库: ${CEF_WRAPPER_SOURCE_DIR}")
     
     # 收集wrapper库源文件
     file(GLOB_RECURSE CEF_WRAPPER_SOURCES
