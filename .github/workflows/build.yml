@@ -671,6 +671,12 @@ jobs:
         version: '5.15.2'
         cache: true
 
+    - name: Download CEF for CMake test
+      run: |
+        echo "🔽 Downloading CEF for CMake configuration test..."
+        chmod +x scripts/download-cef.sh
+        scripts/download-cef.sh --platform=linux64
+
     - name: Validate CMake Configuration
       run: |
         echo "🔍 Checking CMake configuration..."
