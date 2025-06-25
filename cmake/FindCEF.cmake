@@ -162,6 +162,10 @@ find_package_handle_standard_args(CEF
 )
 
 if(CEF_FOUND)
+    # 确保CEF_ROOT变量被正确设置，供其他脚本使用
+    set(CEF_ROOT "${CEF_ROOT_DIR}" PARENT_SCOPE)
+    set(CEF_ROOT "${CEF_ROOT_DIR}")
+    
     message(STATUS "找到CEF: ${CEF_ROOT_DIR}")
     message(STATUS "CEF版本: ${CEF_VERSION}")
     message(STATUS "CEF平台: ${CEF_PLATFORM_SUFFIX}")
