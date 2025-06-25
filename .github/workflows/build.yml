@@ -70,6 +70,7 @@ jobs:
       id: verify-cef-cache
       shell: cmd
       run: |
+        setlocal enabledelayedexpansion
         echo "验证CEF缓存完整性..."
         set "CEF_VALID=false"
         
@@ -99,7 +100,7 @@ jobs:
           )
         )
         
-        echo "##[set-output name=cef-valid]!CEF_VALID!"
+        echo "cef-valid=!CEF_VALID!" >> %GITHUB_OUTPUT%
 
     - name: Download CEF
       if: steps.cache-cef.outputs.cache-hit != 'true' || steps.verify-cef-cache.outputs.cef-valid != 'true'
@@ -115,6 +116,7 @@ jobs:
     - name: Final CEF Verification
       shell: cmd
       run: |
+        setlocal enabledelayedexpansion
         echo "最终CEF验证..."
         set "VERIFICATION_FAILED=false"
         
@@ -240,6 +242,7 @@ jobs:
     - name: Create Windows Installer
       shell: cmd
       run: |
+        setlocal enabledelayedexpansion
         echo "=== 安装NSIS ==="
         choco install nsis -y
         
@@ -477,7 +480,7 @@ jobs:
         ====================================
         Architecture: x64
         Platform: macOS 64-bit
-        CEF Version: 118.6.8+g1e19f4c+chromium-118.0.5993.119
+        CEF Version: 118.7.1+g99817d2+chromium-118.0.5993.119
         Qt Version: ${{ env.QT_VERSION }}
         Build Type: ${{ env.BUILD_TYPE }}
         Build Date: $(date -u)

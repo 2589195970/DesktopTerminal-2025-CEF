@@ -115,22 +115,14 @@ select_cef_version() {
 
 # 构建下载URL
 build_download_url() {
-    # CEF下载镜像URLs
-    CEF_BASE_URLS=(
-        "https://cef-builds.spotifycdn.com"
-        "https://github.com/chromiumembedded/cef/releases/download"
-    )
+    # 所有CEF版本统一使用Spotify CDN下载，需要URL编码特殊字符
+    CEF_ARCHIVE_NAME_ENCODED="$CEF_ARCHIVE_NAME"
     
-    # 根据版本构建不同的URL
-    if [[ "$CEF_VERSION" == "75."* ]]; then
-        # CEF 75版本使用旧的URL格式
-        DOWNLOAD_URL="${CEF_BASE_URLS[0]}/${CEF_ARCHIVE_NAME}"
-    else
-        # 较新版本使用GitHub releases
-        # 提取主版本号用于GitHub URL
-        CEF_MAJOR_VERSION=$(echo $CEF_VERSION | cut -d'.' -f1)
-        DOWNLOAD_URL="${CEF_BASE_URLS[1]}/v${CEF_MAJOR_VERSION}.0.0/${CEF_ARCHIVE_NAME}"
-    fi
+    # 对CEF版本号中的+号进行URL编码（+变为%2B）
+    CEF_ARCHIVE_NAME_ENCODED="${CEF_ARCHIVE_NAME_ENCODED//+/%2B}"
+    
+    # 统一使用Spotify CDN
+    DOWNLOAD_URL="https://cef-builds.spotifycdn.com/${CEF_ARCHIVE_NAME_ENCODED}"
     
     log_info "下载URL: $DOWNLOAD_URL"
 }
