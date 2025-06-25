@@ -62,29 +62,96 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}
+        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-v2
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-
+          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-
+
+    - name: Verify CEF Cache Integrity
+      id: verify-cef-cache
+      shell: cmd
+      run: |
+        echo "验证CEF缓存完整性..."
+        set "CEF_VALID=false"
+        
+        REM 根据架构确定CEF版本
+        if "${{ matrix.arch }}"=="x86" (
+          set "CEF_VERSION=${{ matrix.cef_version }}"
+          set "CEF_PLATFORM=windows32"
+        ) else (
+          set "CEF_VERSION=${{ matrix.cef_version }}"
+          set "CEF_PLATFORM=windows64"
+        )
+        
+        REM 构建预期的CEF目录名
+        set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
+        set "CEF_HEADER_PATH=third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h"
+        
+        echo "检查CEF头文件: !CEF_HEADER_PATH!"
+        
+        if exist "!CEF_HEADER_PATH!" (
+          echo "✓ CEF头文件验证成功"
+          set "CEF_VALID=true"
+        ) else (
+          echo "✗ CEF头文件不存在，需要重新下载"
+          if exist "third_party\cef" (
+            echo "删除不完整的CEF缓存..."
+            rmdir /s /q "third_party\cef"
+          )
+        )
+        
+        echo "##[set-output name=cef-valid]!CEF_VALID!"
 
     - name: Download CEF
-      if: steps.cache-cef.outputs.cache-hit != 'true'
+      if: steps.cache-cef.outputs.cache-hit != 'true' || steps.verify-cef-cache.outputs.cef-valid != 'true'
       shell: cmd
       run: |
-        echo "Downloading CEF for ${{ matrix.arch }}..."
+        echo "下载CEF for ${{ matrix.arch }}..."
         if "${{ matrix.arch }}"=="x86" (
-          scripts\download-cef.bat "/platform=windows32"
+          scripts\download-cef.bat "/platform=windows32" "/force"
         ) else (
-          scripts\download-cef.bat "/platform=windows64"
+          scripts\download-cef.bat "/platform=windows64" "/force"
         )
 
-    - name: Verify CEF Download
+    - name: Final CEF Verification
       shell: cmd
       run: |
-        if exist "third_party\cef" (
-          echo "CEF directory found"
-          dir third_party\cef
+        echo "最终CEF验证..."
+        set "VERIFICATION_FAILED=false"
+        
+        REM 根据架构确定CEF版本和路径
+        if "${{ matrix.arch }}"=="x86" (
+          set "CEF_VERSION=${{ matrix.cef_version }}"
+          set "CEF_PLATFORM=windows32"
         ) else (
-          echo "CEF directory not found - build may fail"
+          set "CEF_VERSION=${{ matrix.cef_version }}"
+          set "CEF_PLATFORM=windows64"
+        )
+        
+        set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
+        
+        REM 检查关键CEF文件
+        set "REQUIRED_FILES=include\cef_version.h include\cef_app.h include\cef_client.h Release\libcef.lib"
+        
+        for %%f in (!REQUIRED_FILES!) do (
+          set "FILE_PATH=third_party\cef\!CEF_BINARY_NAME!\%%f"
+          if exist "!FILE_PATH!" (
+            echo "✓ 找到: %%f"
+          ) else (
+            echo "✗ 缺失: %%f"
+            set "VERIFICATION_FAILED=true"
+          )
+        )
+        
+        if "!VERIFICATION_FAILED!"=="true" (
+          echo "❌ CEF验证失败 - 关键文件缺失"
+          echo "CEF目录结构:"
+          if exist "third_party\cef" (
+            dir "third_party\cef" /s /b | findstr /i "\.h$ \.lib$ \.dll$"
+          )
+          exit /b 1
+        ) else (
+          echo "✅ CEF验证成功 - 所有关键文件都存在"
+          echo "CEF安装路径: third_party\cef\!CEF_BINARY_NAME!"
         )
 
     - name: Configure CMake

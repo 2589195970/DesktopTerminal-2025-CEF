@@ -119,7 +119,12 @@ error C2662: 'bool WindowManager::isWindowFullscreen(void)': cannot convert 'thi
 
 **修复策略：** 采用屏蔽非关键平台的方式，专注解决Windows平台的编译问题
 
-**下一步：** 提交修复代码，重新触发Windows构建验证
+**提交信息：**
+- Commit: 0d92474
+- 提交时间: 2025-06-25
+- 已推送到GitHub，Windows构建已触发
+
+**等待结果：** 🔄 Windows构建进行中，等待验证修复效果
 
 ---
 

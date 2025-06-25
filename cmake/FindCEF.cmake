@@ -139,20 +139,29 @@ endif()
 # 检查是否找到了必要的组件
 include(FindPackageHandleStandardArgs)
 
-# 在CI环境中，如果CEF库不存在，设置mock值以通过配置检查
+# CI环境中的特殊处理 - 确保CEF确实存在才通过验证
 if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
-    if(NOT CEF_LIBRARIES AND CEF_VERSION)
-        message(STATUS "CI环境检测：CEF库文件未下载，设置mock配置以通过CMake检查")
-        set(CEF_LIBRARIES "mock-cef-library")
-        if(NOT CEF_INCLUDE_PATH)
-            set(CEF_INCLUDE_PATH "${CEF_ROOT_DIR}/include")
+    message(STATUS "CI环境检测：验证CEF文件完整性")
+    
+    # 检查关键CEF头文件是否存在
+    set(CEF_CRITICAL_HEADERS
+        "${CEF_INCLUDE_PATH}/cef_version.h"
+        "${CEF_INCLUDE_PATH}/cef_app.h"
+        "${CEF_INCLUDE_PATH}/cef_client.h"
+    )
+    
+    set(CEF_HEADERS_MISSING FALSE)
+    foreach(header ${CEF_CRITICAL_HEADERS})
+        if(NOT EXISTS "${header}")
+            message(WARNING "CEF关键头文件缺失: ${header}")
+            set(CEF_HEADERS_MISSING TRUE)
         endif()
-        if(NOT CEF_BINARY_DIR)
-            set(CEF_BINARY_DIR "${CEF_ROOT_DIR}")
-        endif()
-        if(NOT CEF_RESOURCE_DIR)
-            set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}")
-        endif()
+    endforeach()
+    
+    if(CEF_HEADERS_MISSING)
+        message(STATUS "CEF头文件不完整，将触发下载流程")
+        # 清空库列表，让find_package_handle_standard_args失败
+        set(CEF_LIBRARIES)
     endif()
 endif()
 
@@ -180,7 +189,29 @@ if(CEF_FOUND)
         message(STATUS "启用32位CEF构建优化")
     endif()
 else()
-    message(WARNING "CEF未找到，请运行下载脚本或手动安装CEF")
+    message(FATAL_ERROR "
+    ❌ CEF未找到或不完整！
+    
+    📋 解决方案：
+    1. 自动下载 (推荐)：
+       Windows: scripts/download-cef.bat
+       Linux/macOS: scripts/download-cef.sh
+    
+    2. 手动安装：
+       - 下载CEF版本: ${CEF_VERSION}
+       - 平台: ${CEF_PLATFORM_SUFFIX}
+       - 解压到: ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/
+    
+    3. 在CI环境中：
+       确保CEF下载步骤正确执行且文件完整
+    
+    🔍 当前配置：
+    - CEF根目录: ${CEF_ROOT_DIR}
+    - 预期头文件: ${CEF_INCLUDE_PATH}/cef_version.h
+    - 预期库目录: ${CEF_LIBRARY_DIR}
+    
+    请运行相应的下载脚本后重新构建项目。
+    ")
 endif()
 
 # 标记变量为高级变量（在cmake-gui中隐藏）
