@@ -5,8 +5,8 @@
 #include <QString>
 #include <QStringList>
 
-#include "include/cef_app.h"
-#include "include/cef_client.h"
+#include "cef_app.h"
+#include "cef_client.h"
 
 class Application;
 class Logger;
