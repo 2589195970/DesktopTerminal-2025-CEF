@@ -1,15 +1,17 @@
-#ifndef CEF_CLIENT_H
-#define CEF_CLIENT_H
+#ifndef CEF_CLIENT_IMPL_H
+#define CEF_CLIENT_IMPL_H
 
-#include "cef_client.h"
-#include "cef_display_handler.h"
-#include "cef_life_span_handler.h"
-#include "cef_load_handler.h"
-#include "cef_request_handler.h"
-#include "cef_keyboard_handler.h"
-#include "cef_context_menu_handler.h"
-#include "cef_jsdialog_handler.h"
-#include "cef_download_handler.h"
+// CEF主头文件
+#include "include/cef_client.h"
+#include "include/cef_display_handler.h"
+#include "include/cef_life_span_handler.h"
+#include "include/cef_load_handler.h"
+#include "include/cef_request_handler.h"
+#include "include/cef_keyboard_handler.h"
+#include "include/cef_context_menu_handler.h"
+#include "include/cef_jsdialog_handler.h"
+#include "include/cef_download_handler.h"
+#include "include/cef_browser.h"
 
 #include <QString>
 #include <QStringList>
@@ -143,4 +145,4 @@ private:
     IMPLEMENT_REFCOUNTING(CEFClient);
 };
 
-#endif // CEF_CLIENT_H
+#endif // CEF_CLIENT_IMPL_H

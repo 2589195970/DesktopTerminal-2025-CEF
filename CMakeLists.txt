@@ -134,8 +134,8 @@ set(SOURCES
     src/core/cef_manager.cpp
     src/core/secure_browser.cpp
     src/core/window_manager.cpp
-    src/cef/cef_client.cpp
-    src/cef/cef_app.cpp
+    src/cef/cef_client_impl.cpp
+    src/cef/cef_app_impl.cpp
     src/config/config_manager.cpp
     src/logging/logger.cpp
     src/security/security_controller.cpp
@@ -148,8 +148,8 @@ set(HEADERS
     src/core/cef_manager.h
     src/core/secure_browser.h
     src/core/window_manager.h
-    src/cef/cef_client.h
-    src/cef/cef_app.h
+    src/cef/cef_client_impl.h
+    src/cef/cef_app_impl.h
     src/config/config_manager.h
     src/logging/logger.h
     src/security/security_controller.h

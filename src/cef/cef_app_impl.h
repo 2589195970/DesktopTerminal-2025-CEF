@@ -1,9 +1,12 @@
-#ifndef CEF_APP_H
-#define CEF_APP_H
+#ifndef CEF_APP_IMPL_H
+#define CEF_APP_IMPL_H
 
-#include "cef_app.h"
-#include "cef_browser_process_handler.h"
-#include "cef_render_process_handler.h"
+// CEF主头文件
+#include "include/cef_app.h"
+#include "include/cef_browser_process_handler.h"
+#include "include/cef_render_process_handler.h"
+#include "include/cef_command_line.h"
+#include "include/cef_scheme.h"
 
 #include <QString>
 
@@ -27,7 +30,7 @@ public:
     virtual CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
     virtual CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return this; }
     virtual void OnBeforeCommandLineProcessing(const CefString& process_type, CefRefPtr<CefCommandLine> command_line) override;
-    virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
+    virtual void OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar) override;
 
     // CefBrowserProcessHandler接口
     virtual void OnContextInitialized() override;
@@ -88,4 +91,4 @@ private:
     IMPLEMENT_REFCOUNTING(CEFApp);
 };
 
-#endif // CEF_APP_H
+#endif // CEF_APP_IMPL_H

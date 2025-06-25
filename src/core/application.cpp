@@ -141,13 +141,13 @@ void Application::shutdown()
     if (m_logger) {
         m_logger->appEvent("应用程序关闭完成");
         m_logger->shutdown();
-        delete m_logger;
+        // 注意：不要delete单例对象，它们有自己的生命周期管理
         m_logger = nullptr;
     }
 
-    // 删除配置管理器
+    // 清理配置管理器引用
     if (m_configManager) {
-        delete m_configManager;
+        // 注意：不要delete单例对象，它们有自己的生命周期管理
         m_configManager = nullptr;
     }
 }
@@ -155,7 +155,7 @@ void Application::shutdown()
 Application::ArchType Application::getSystemArchitecture()
 {
     if (!s_systemInfoDetected) {
-        const_cast<Application*>(static_cast<const Application*>(nullptr))->detectSystemInfo();
+        Application::detectSystemInfoStatic();
     }
     return s_architecture;
 }
@@ -163,7 +163,7 @@ Application::ArchType Application::getSystemArchitecture()
 Application::PlatformType Application::getSystemPlatform()
 {
     if (!s_systemInfoDetected) {
-        const_cast<Application*>(static_cast<const Application*>(nullptr))->detectSystemInfo();
+        Application::detectSystemInfoStatic();
     }
     return s_platform;
 }
@@ -171,7 +171,7 @@ Application::PlatformType Application::getSystemPlatform()
 Application::CompatibilityLevel Application::getCompatibilityLevel()
 {
     if (!s_systemInfoDetected) {
-        const_cast<Application*>(static_cast<const Application*>(nullptr))->detectSystemInfo();
+        Application::detectSystemInfoStatic();
     }
     return s_compatibility;
 }
@@ -179,7 +179,7 @@ Application::CompatibilityLevel Application::getCompatibilityLevel()
 QString Application::getSystemDescription()
 {
     if (!s_systemInfoDetected) {
-        const_cast<Application*>(static_cast<const Application*>(nullptr))->detectSystemInfo();
+        Application::detectSystemInfoStatic();
     }
     return s_systemDescription;
 }
@@ -231,11 +231,11 @@ bool Application::checkSystemRequirements()
 
 #ifdef Q_OS_WIN
     // Windows特定检查
-    if (!checkWindowsVersion()) {
+    if (!this->checkWindowsVersion()) {
         return false;
     }
     
-    if (!checkWindowsAPI()) {
+    if (!this->checkWindowsAPI()) {
         return false;
     }
 #endif
@@ -373,6 +373,79 @@ bool Application::createMainWindow()
         }
         return false;
     }
+}
+
+void Application::detectSystemInfoStatic()
+{
+    if (s_systemInfoDetected) {
+        return;
+    }
+
+    // 检测平台
+#ifdef Q_OS_WIN
+    s_platform = PlatformType::Windows;
+#elif defined(Q_OS_MAC)
+    s_platform = PlatformType::MacOS;
+#elif defined(Q_OS_LINUX)
+    s_platform = PlatformType::Linux;
+#else
+    s_platform = PlatformType::Unknown;
+#endif
+
+    // 检测架构
+    if (sizeof(void*) == 8) {
+        QString arch = QSysInfo::currentCpuArchitecture();
+        if (arch.contains("arm", Qt::CaseInsensitive)) {
+            s_architecture = ArchType::ARM64;
+        } else {
+            s_architecture = ArchType::X86_64;
+        }
+    } else {
+        s_architecture = ArchType::X86_32;
+    }
+
+    // 检测兼容性级别
+    QString product = QSysInfo::productType();
+    QString version = QSysInfo::productVersion();
+    
+    if (s_platform == PlatformType::Windows) {
+        QVersionNumber winVersion = QVersionNumber::fromString(version);
+        
+        if (winVersion.majorVersion() < 6 || 
+            (winVersion.majorVersion() == 6 && winVersion.minorVersion() < 1)) {
+            // Windows Vista或更早版本
+            s_compatibility = CompatibilityLevel::Unknown;
+        } else if (winVersion.majorVersion() == 6 && winVersion.minorVersion() == 1) {
+            // Windows 7
+            s_compatibility = CompatibilityLevel::LegacySystem;
+        } else if (winVersion.majorVersion() == 6 || winVersion.majorVersion() == 10) {
+            // Windows 8/8.1/10
+            s_compatibility = CompatibilityLevel::ModernSystem;
+        } else {
+            // Windows 11+
+            s_compatibility = CompatibilityLevel::OptimalSystem;
+        }
+    } else if (s_platform == PlatformType::MacOS) {
+        QVersionNumber macVersion = QVersionNumber::fromString(version);
+        
+        if (macVersion < QVersionNumber(10, 14)) {
+            s_compatibility = CompatibilityLevel::LegacySystem;
+        } else if (macVersion < QVersionNumber(12, 0)) {
+            s_compatibility = CompatibilityLevel::ModernSystem;
+        } else {
+            s_compatibility = CompatibilityLevel::OptimalSystem;
+        }
+    } else {
+        s_compatibility = CompatibilityLevel::ModernSystem; // Linux一般都是现代系统
+    }
+
+    // 构建系统描述
+    s_systemDescription = QString("%1 %2 (%3)")
+        .arg(QSysInfo::prettyProductName())
+        .arg(QSysInfo::currentCpuArchitecture())
+        .arg(s_architecture == ArchType::X86_32 ? "32位" : "64位");
+
+    s_systemInfoDetected = true;
 }
 
 void Application::detectSystemInfo()

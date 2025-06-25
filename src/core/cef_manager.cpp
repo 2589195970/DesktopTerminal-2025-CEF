@@ -2,7 +2,7 @@
 #include "application.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
-#include "../cef/cef_app.h"
+#include "../cef/cef_app_impl.h"
 
 #include <QDir>
 #include <QStandardPaths>
@@ -177,7 +177,7 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         browserSettings.plugins = STATE_DISABLED;
 
         // 创建CEF客户端
-        CefRefPtr<CefClient> client = new CEFClient();
+        CefRefPtr<CEFClient> client = new CEFClient();
 
         // 创建浏览器
         bool result = CefBrowserHost::CreateBrowser(
@@ -384,15 +384,18 @@ bool CEFManager::initializeCEFContext()
 void CEFManager::buildCEFSettings(CefSettings& settings)
 {
     // 基础设置
-    settings.single_process = (m_processMode == ProcessMode::SingleProcess);
+    // 注意：CEF 75不支持single_process字段，改为使用命令行参数
     settings.no_sandbox = true;
     settings.multi_threaded_message_loop = false;
     settings.log_severity = LOGSEVERITY_WARNING;
-    settings.windowless_rendering_enabled = false;
-
+    
+    // CEF 75版本兼容性设置
+    // windowless_rendering_enabled 在CEF 75中可能不存在
+    
     // 进程限制
     if (m_processMode == ProcessMode::MultiProcess) {
-        settings.browser_subprocess_path = CefString();
+        // 使用默认的子进程路径
+        // settings.browser_subprocess_path = CefString();
     }
 }
 
@@ -414,9 +417,7 @@ void CEFManager::applyMemoryOptimizations(CefSettings& settings)
 
 void CEFManager::apply32BitOptimizations(CefSettings& settings)
 {
-    // 强制单进程模式
-    settings.single_process = true;
-    
+    // CEF 75兼容性：不能直接设置single_process，需要通过命令行参数
     // 禁用多线程
     settings.multi_threaded_message_loop = false;
     
@@ -428,13 +429,15 @@ void CEFManager::apply32BitOptimizations(CefSettings& settings)
 void CEFManager::applyWindowsSettings(CefSettings& settings)
 {
     // Windows特定设置
-    settings.auto_detect_proxy_settings_enabled = true;
+    // 注意：CEF 75不支持auto_detect_proxy_settings_enabled字段
+    // 代替方案是使用命令行参数 --auto-detect-proxy-settings-enabled
 }
 
 void CEFManager::applyWindows7Optimizations(CefSettings& settings)
 {
     // Windows 7特殊优化
-    settings.single_process = true;
+    // 注意：CEF 75不支持直接设置single_process字段，改为使用命令行参数
+    // 在buildCEFCommandLine()方法中已经添加了--single-process参数
     settings.log_severity = LOGSEVERITY_ERROR;
     
     m_logger->appEvent("应用Windows 7 CEF优化设置");

@@ -1,11 +1,11 @@
-#include "cef_app.h"
+#include "cef_app_impl.h"
 #include "../logging/logger.h"
 #include "../core/application.h"
 
-#include "cef_browser.h"
-#include "cef_command_line.h"
-#include "cef_v8.h"
-#include "wrapper/cef_helpers.h"
+#include "include/cef_browser.h"
+#include "include/cef_command_line.h"
+#include "include/cef_v8.h"
+#include "include/wrapper/cef_helpers.h"
 
 CEFApp::CEFApp()
     : m_logger(&Logger::instance())
@@ -63,7 +63,7 @@ void CEFApp::OnBeforeCommandLineProcessing(const CefString& process_type, CefRef
     }
 }
 
-void CEFApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar)
+void CEFApp::OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar)
 {
     // 注册自定义协议（如果需要）
     // 例如：exam:// 协议用于安全的考试资源

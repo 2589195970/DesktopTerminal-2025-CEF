@@ -1,4 +1,4 @@
-#include "cef_client.h"
+#include "cef_client_impl.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../core/application.h"
@@ -453,12 +453,13 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
     }
     
     // 允许方向键、回车、退格等基本导航键
-    if (event.windows_key_code >= VK_LEFT && event.windows_key_code <= VK_DOWN) {
+    // CEF 75兼容性：使用数值而不是VK_常量以确保跨版本兼容
+    if (event.windows_key_code >= 37 && event.windows_key_code <= 40) { // VK_LEFT到VK_DOWN
         return true;
     }
     
-    if (event.windows_key_code == VK_RETURN || event.windows_key_code == VK_BACK || 
-        event.windows_key_code == VK_TAB || event.windows_key_code == VK_ESCAPE) {
+    if (event.windows_key_code == 13 || event.windows_key_code == 8 ||  // VK_RETURN, VK_BACK
+        event.windows_key_code == 9 || event.windows_key_code == 27) {   // VK_TAB, VK_ESCAPE
         return true;
     }
     
@@ -469,15 +470,16 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
 bool CEFClient::isSystemShortcut(const CefKeyEvent& event)
 {
     // 检测系统快捷键
+    // CEF 75兼容性：使用数值而不是VK_常量
     if (event.modifiers & EVENTFLAG_ALT_DOWN) {
-        if (event.windows_key_code == VK_TAB || event.windows_key_code == VK_F4) {
+        if (event.windows_key_code == 9 || event.windows_key_code == 115) { // VK_TAB, VK_F4
             return true;
         }
     }
     
     if (event.modifiers & EVENTFLAG_CONTROL_DOWN) {
         if (event.windows_key_code == 'W' || event.windows_key_code == 'T' || 
-            event.windows_key_code == 'N' || event.windows_key_code == VK_F4) {
+            event.windows_key_code == 'N' || event.windows_key_code == 115) { // VK_F4
             return true;
         }
     }

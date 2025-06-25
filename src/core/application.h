@@ -97,6 +97,7 @@ private:
 
     // 系统检测
     void detectSystemInfo();
+    static void detectSystemInfoStatic();  // 静态版本，用于静态方法调用
     void applyCompatibilitySettings();
     void logSystemInfo();
 
