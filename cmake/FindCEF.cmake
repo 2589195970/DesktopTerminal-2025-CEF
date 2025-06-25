@@ -110,8 +110,9 @@ if(WIN32)
         message(WARNING "CEF库目录不存在: ${CEF_LIBRARY_DIR}")
     endif()
     
+    # 首先尝试标准名称和路径
     find_library(CEF_LIBRARY
-        NAMES cef libcef
+        NAMES libcef cef
         PATHS ${CEF_LIBRARY_DIR}
         NO_DEFAULT_PATH
     )
@@ -120,18 +121,38 @@ if(WIN32)
         message(STATUS "✓ 找到CEF主库: ${CEF_LIBRARY}")
     else()
         message(WARNING "✗ CEF主库未找到，搜索路径: ${CEF_LIBRARY_DIR}")
-        # 尝试其他可能的路径
+        message(STATUS "尝试扩展搜索...")
+        
+        # 尝试其他可能的路径和名称
         find_library(CEF_LIBRARY
-            NAMES cef libcef
+            NAMES libcef cef libcef_dll_wrapper cef_dll_wrapper
             PATHS 
                 "${CEF_ROOT_DIR}/Release"
                 "${CEF_ROOT_DIR}/Debug"
                 "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
                 "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/lib"
+                "${CEF_ROOT_DIR}/lib"
             NO_DEFAULT_PATH
         )
         if(CEF_LIBRARY)
             message(STATUS "✓ 在备用路径找到CEF主库: ${CEF_LIBRARY}")
+        else()
+            # 最后尝试: 手动查找所有.lib文件
+            message(STATUS "执行深度搜索CEF库文件...")
+            file(GLOB_RECURSE ALL_CEF_LIBS 
+                "${CEF_ROOT_DIR}/*.lib"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/*.lib"
+            )
+            foreach(lib_file ${ALL_CEF_LIBS})
+                get_filename_component(lib_name "${lib_file}" NAME_WE)
+                message(STATUS "  发现库文件: ${lib_name} -> ${lib_file}")
+                if(lib_name MATCHES "cef" OR lib_name MATCHES "libcef")
+                    set(CEF_LIBRARY "${lib_file}")
+                    message(STATUS "✓ 选择CEF库文件: ${CEF_LIBRARY}")
+                    break()
+                endif()
+            endforeach()
         endif()
     endif()
     

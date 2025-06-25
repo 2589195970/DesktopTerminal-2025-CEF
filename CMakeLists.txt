@@ -100,10 +100,14 @@ if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
             ${CEF_INCLUDE_PATH}/include
         )
         
-        # 设置编译定义
+        # 设置编译定义 - CEF wrapper需要的所有定义
         target_compile_definitions(cef_dll_wrapper PRIVATE
             -DUSING_CEF_SHARED
             -DNOMINMAX
+            -DWIN32_LEAN_AND_MEAN
+            -D_CRT_SECURE_NO_WARNINGS
+            -D_SCL_SECURE_NO_WARNINGS
+            -DWRAPPING_CEF_SHARED
         )
         
         # 平台特定设置
@@ -182,13 +186,50 @@ add_subdirectory(third_party/QHotkey)
 # 创建可执行文件
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
-# 链接库
+# 验证CEF库并配置链接
+message(STATUS "=== CEF库链接配置 ===")
+message(STATUS "CEF_LIBRARIES: ${CEF_LIBRARIES}")
+
+# 确保CEF库存在
+if(NOT CEF_LIBRARIES)
+    message(FATAL_ERROR "CEF_LIBRARIES为空！CEF库未找到。")
+endif()
+
+# 链接库 - 注意顺序很重要
 target_link_libraries(${PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
-    ${CEF_LIBRARIES}
     qhotkey
 )
+
+# 单独链接CEF库以更好地控制顺序
+foreach(cef_lib ${CEF_LIBRARIES})
+    if(EXISTS "${cef_lib}")
+        message(STATUS "✓ 链接CEF库: ${cef_lib}")
+        target_link_libraries(${PROJECT_NAME} "${cef_lib}")
+    else()
+        message(WARNING "✗ CEF库文件不存在: ${cef_lib}")
+    endif()
+endforeach()
+
+# 如果没有找到CEF库，尝试手动添加
+if(WIN32 AND NOT CEF_LIBRARY)
+    message(STATUS "尝试手动查找并链接CEF库...")
+    set(MANUAL_CEF_PATHS
+        "${CEF_ROOT_DIR}/Release"
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
+        "${CEF_ROOT_DIR}/Debug"
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"
+    )
+    
+    foreach(manual_path ${MANUAL_CEF_PATHS})
+        if(EXISTS "${manual_path}/libcef.lib")
+            message(STATUS "✓ 手动找到CEF库: ${manual_path}/libcef.lib")
+            target_link_libraries(${PROJECT_NAME} "${manual_path}/libcef.lib")
+            break()
+        endif()
+    endforeach()
+endif()
 
 # CEF库特殊处理
 if(CEF_FOUND)
@@ -206,14 +247,39 @@ if(CEF_FOUND)
     endif()
 endif()
 
-# Windows特定链接库
+# Windows特定链接库 - CEF需要的所有系统库
 if(WIN32)
     target_link_libraries(${PROJECT_NAME}
+        # 基础系统库
         comctl32.lib
         rpcrt4.lib
         shlwapi.lib
         ws2_32.lib
+        
+        # CEF特定的Windows库
+        advapi32.lib
+        dbghelp.lib
+        dnsapi.lib
+        gdi32.lib
+        psapi.lib
+        user32.lib
+        version.lib
+        winmm.lib
+        winspool.lib
+        ole32.lib
+        oleaut32.lib
+        uuid.lib
+        shell32.lib
+        kernel32.lib
     )
+    
+    # CEF特定的链接选项
+    if(MSVC)
+        target_link_options(${PROJECT_NAME} PRIVATE
+            /SUBSYSTEM:WINDOWS
+            /DELAYLOAD:libcef.dll
+        )
+    endif()
 endif()
 
 # 编译器特定设置
