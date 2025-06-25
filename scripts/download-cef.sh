@@ -207,23 +207,82 @@ download_cef() {
     
     log_success "CEF解压完成: $CEF_DIR/$CEF_BINARY_NAME"
     
-    # 验证解压结果 - 支持多种目录结构
+    # 验证解压结果 - 多路径验证策略，支持不同的CEF目录结构
     log_info "验证CEF解压结果..."
-    local CEF_INCLUDE_CHECK1="$CEF_DIR/$CEF_BINARY_NAME/include/cef_version.h"
-    local CEF_INCLUDE_CHECK2="$CEF_DIR/include/cef_version.h"
-    local CEF_INCLUDE_CHECK3="$CEF_DIR/$CEF_BINARY_NAME/cef_version.h"
     
-    if [[ -f "$CEF_INCLUDE_CHECK1" ]]; then
-        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK1"
-    elif [[ -f "$CEF_INCLUDE_CHECK2" ]]; then
-        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK2"
-    elif [[ -f "$CEF_INCLUDE_CHECK3" ]]; then
-        log_success "CEF头文件验证成功: $CEF_INCLUDE_CHECK3"
+    local CEF_FOUND=false
+    local CEF_VALID_PATH=""
+    
+    # 可能的CEF头文件路径（按优先级排序）
+    local CEF_CHECK_PATHS=(
+        "$CEF_DIR/$CEF_BINARY_NAME/include/cef_version.h"
+        "$CEF_DIR/include/cef_version.h"
+        "$CEF_DIR/$CEF_BINARY_NAME/cef_version.h"
+    )
+    
+    # 遍历所有可能的路径
+    for CHECK_PATH in "${CEF_CHECK_PATHS[@]}"; do
+        if [[ "$CEF_FOUND" == "false" ]] && [[ -f "$CHECK_PATH" ]]; then
+            CEF_FOUND=true
+            CEF_VALID_PATH="$CHECK_PATH"
+            log_success "CEF头文件验证成功: $CHECK_PATH"
+            break
+        fi
+    done
+    
+    # 如果标准路径都找不到，进行深度搜索
+    if [[ "$CEF_FOUND" == "false" ]]; then
+        log_info "标准路径未找到，进行深度搜索..."
+        
+        if [[ -d "$CEF_DIR" ]]; then
+            log_info "搜索CEF目录中的所有cef_version.h文件..."
+            
+            # 使用find进行递归搜索
+            local FOUND_FILES=($(find "$CEF_DIR" -name "cef_version.h" -type f 2>/dev/null))
+            
+            if [[ ${#FOUND_FILES[@]} -gt 0 ]]; then
+                CEF_FOUND=true
+                CEF_VALID_PATH="${FOUND_FILES[0]}"
+                log_success "在深度搜索中找到CEF头文件: $CEF_VALID_PATH"
+            else
+                # 如果还是找不到，显示详细的目录结构用于诊断
+                log_warning "显示CEF目录结构用于诊断:"
+                
+                # 查找相关CEF头文件
+                local CEF_HEADERS=($(find "$CEF_DIR" -name "*.h" -type f 2>/dev/null | grep -i cef | head -5))
+                if [[ ${#CEF_HEADERS[@]} -gt 0 ]]; then
+                    log_info "找到相关CEF头文件，但不是cef_version.h:"
+                    for header in "${CEF_HEADERS[@]}"; do
+                        log_info "  - $header"
+                    done
+                fi
+                
+                # 查找include目录
+                local INCLUDE_DIRS=($(find "$CEF_DIR" -name "include" -type d 2>/dev/null))
+                if [[ ${#INCLUDE_DIRS[@]} -gt 0 ]]; then
+                    log_info "找到include目录:"
+                    for dir in "${INCLUDE_DIRS[@]}"; do
+                        log_info "  - $dir"
+                    done
+                else
+                    log_warning "未找到include目录"
+                fi
+            fi
+        else
+            log_error "CEF目录不存在: $CEF_DIR"
+        fi
+    fi
+    
+    # 最终验证结果
+    if [[ "$CEF_FOUND" == "true" ]]; then
+        log_success "CEF验证成功！有效路径: $CEF_VALID_PATH"
+        return 0
     else
-        log_error "CEF解压后未找到cef_version.h文件"
-        log_info "检查解压目录结构:"
-        find "$CEF_DIR" -name "cef_version.h" -type f 2>/dev/null || log_warning "未找到cef_version.h文件"
-        find "$CEF_DIR" -name "include" -type d 2>/dev/null || log_warning "未找到include目录"
+        log_error "CEF验证失败：未找到必需的cef_version.h文件"
+        log_error "可能的原因："
+        log_error "1. CEF解压不完整"
+        log_error "2. CEF版本的目录结构与预期不符"
+        log_error "3. 下载的CEF包损坏"
         return 1
     fi
     

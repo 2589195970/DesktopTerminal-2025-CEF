@@ -184,23 +184,72 @@ call :log_success "CEF解压完成: %CEF_DIR%\%CEF_BINARY_NAME%"
 
 REM 验证解压结果
 call :log_info "验证CEF解压结果..."
-set "CEF_INCLUDE_CHECK1=%CEF_DIR%\%CEF_BINARY_NAME%\include\cef_version.h"
-set "CEF_INCLUDE_CHECK2=%CEF_DIR%\include\cef_version.h"
-set "CEF_INCLUDE_CHECK3=%CEF_DIR%\%CEF_BINARY_NAME%\cef_version.h"
 
-if exist "!CEF_INCLUDE_CHECK1!" (
-    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK1!"
-) else if exist "!CEF_INCLUDE_CHECK2!" (
-    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK2!"
-) else if exist "!CEF_INCLUDE_CHECK3!" (
-    call :log_success "CEF头文件验证成功: !CEF_INCLUDE_CHECK3!"
-) else (
-    call :log_error "CEF解压后未找到cef_version.h文件"
-    call :log_info "检查解压目录结构:"
-    if exist "%CEF_DIR%" (
-        dir "%CEF_DIR%" /s | findstr /i "cef_version.h" || call :log_warning "未找到cef_version.h文件"
-        dir "%CEF_DIR%" /s | findstr /i "include" || call :log_warning "未找到include目录"
+REM 多路径验证策略 - 支持不同的CEF目录结构
+set "CEF_FOUND=false"
+set "CEF_VALID_PATH="
+
+REM 可能的CEF头文件路径（按优先级排序）
+set "CEF_CHECK[1]=%CEF_DIR%\%CEF_BINARY_NAME%\include\cef_version.h"
+set "CEF_CHECK[2]=%CEF_DIR%\include\cef_version.h"
+set "CEF_CHECK[3]=%CEF_DIR%\%CEF_BINARY_NAME%\cef_version.h"
+
+REM 遍历所有可能的路径
+for /l %%i in (1,1,3) do (
+    if "!CEF_FOUND!"=="false" (
+        if exist "!CEF_CHECK[%%i]!" (
+            set "CEF_FOUND=true"
+            set "CEF_VALID_PATH=!CEF_CHECK[%%i]!"
+            call :log_success "CEF头文件验证成功: !CEF_CHECK[%%i]!"
+        )
     )
+)
+
+REM 如果标准路径都找不到，进行深度搜索
+if "!CEF_FOUND!"=="false" (
+    call :log_info "标准路径未找到，进行深度搜索..."
+    
+    REM 检查CEF目录是否存在
+    if exist "%CEF_DIR%" (
+        call :log_info "搜索CEF目录中的所有cef_version.h文件..."
+        
+        REM 使用for /r递归搜索cef_version.h
+        for /r "%CEF_DIR%" %%f in (cef_version.h) do (
+            if "!CEF_FOUND!"=="false" (
+                if exist "%%f" (
+                    set "CEF_FOUND=true"
+                    set "CEF_VALID_PATH=%%f"
+                    call :log_success "在深度搜索中找到CEF头文件: %%f"
+                )
+            )
+        )
+        
+        REM 如果还是找不到，显示详细的目录结构用于诊断
+        if "!CEF_FOUND!"=="false" (
+            call :log_warning "显示CEF目录结构用于诊断:"
+            dir "%CEF_DIR%" /s /b | findstr /i "\.h$" | findstr /i "cef" && (
+                call :log_info "找到相关CEF头文件，但不是cef_version.h"
+            )
+            dir "%CEF_DIR%" /s /b | findstr /i "include" && (
+                call :log_info "找到include目录"
+            ) || (
+                call :log_warning "未找到include目录"
+            )
+        )
+    ) else (
+        call :log_error "CEF目录不存在: %CEF_DIR%"
+    )
+)
+
+REM 最终验证结果
+if "!CEF_FOUND!"=="true" (
+    call :log_success "CEF验证成功！有效路径: !CEF_VALID_PATH!"
+) else (
+    call :log_error "CEF验证失败：未找到必需的cef_version.h文件"
+    call :log_error "可能的原因："
+    call :log_error "1. CEF解压不完整"
+    call :log_error "2. CEF版本的目录结构与预期不符"
+    call :log_error "3. 下载的CEF包损坏"
     exit /b 1
 )
 
