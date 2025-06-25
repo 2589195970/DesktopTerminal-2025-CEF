@@ -57,7 +57,27 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# 查找CEF
+# 查找CEF - 启用详细调试
+message(STATUS "=== CEF查找过程开始 ===")
+message(STATUS "项目根目录: ${CMAKE_CURRENT_SOURCE_DIR}")
+message(STATUS "构建目录: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE模块路径: ${CMAKE_MODULE_PATH}")
+
+# 检查third_party/cef目录
+set(CEF_CHECK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef")
+if(EXISTS "${CEF_CHECK_DIR}")
+    message(STATUS "✓ third_party/cef目录存在")
+    file(GLOB CEF_SUBDIRS "${CEF_CHECK_DIR}/*")
+    foreach(subdir ${CEF_SUBDIRS})
+        if(IS_DIRECTORY "${subdir}")
+            get_filename_component(dirname "${subdir}" NAME)
+            message(STATUS "  发现子目录: ${dirname}")
+        endif()
+    endforeach()
+else()
+    message(WARNING "✗ third_party/cef目录不存在！")
+endif()
+
 find_package(CEF REQUIRED)
 
 # 如果CEF wrapper库不存在但有源码，则编译wrapper库

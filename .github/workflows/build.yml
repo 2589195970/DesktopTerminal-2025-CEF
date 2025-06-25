@@ -62,9 +62,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v3
+        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v4-force-rebuild
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-
+          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v4-
 
     - name: Verify CEF Cache Integrity
       id: verify-cef-cache
@@ -142,15 +142,64 @@ jobs:
       shell: cmd
       run: |
         echo "下载CEF for ${{ matrix.arch }}..."
+        echo "强制重新下载以确保库文件完整..."
+        if exist "third_party\cef" (
+          echo "删除现有CEF目录以确保全新安装..."
+          rmdir /s /q "third_party\cef"
+        )
         if "${{ matrix.arch }}"=="x86" (
           scripts\download-cef.bat "/platform=windows32" "/force"
         ) else (
           scripts\download-cef.bat "/platform=windows64" "/force"
         )
+        
+        echo "验证下载结果..."
+        if exist "third_party\cef" (
+          echo "CEF目录结构："
+          dir "third_party\cef" /s | findstr /i "\.lib \.dll include Release"
+        )
 
     - name: Final CEF Verification
       shell: cmd
       run: |
+        echo "=== 详细CEF验证 ==="
+        echo "检查CEF目录结构和关键文件..."
+        
+        if exist "third_party\cef" (
+          echo "CEF根目录内容："
+          dir "third_party\cef" /b
+          
+          REM 查找所有cef_binary目录
+          for /d %%d in ("third_party\cef\cef_binary_*") do (
+            echo "=== 检查 %%d ==="
+            if exist "%%d\include\cef_version.h" (
+              echo "✓ 头文件存在: %%d\include\cef_version.h"
+            ) else (
+              echo "✗ 头文件缺失: %%d\include\cef_version.h"
+            )
+            
+            if exist "%%d\Release" (
+              echo "✓ Release目录存在，内容："
+              dir "%%d\Release" /b | findstr /i "\.lib"
+              if exist "%%d\Release\libcef.lib" (
+                echo "✓ 关键库文件存在: libcef.lib"
+              ) else (
+                echo "✗ 关键库文件缺失: libcef.lib"
+              )
+            ) else (
+              echo "✗ Release目录缺失"
+            )
+            
+            if exist "%%d\libcef_dll" (
+              echo "✓ CEF Wrapper源码目录存在"
+              dir "%%d\libcef_dll" /b | findstr /i "\.h \.cc"
+            ) else (
+              echo "✗ CEF Wrapper源码目录缺失"
+            )
+          )
+        ) else (
+          echo "✗ CEF目录完全不存在！"
+        )
         setlocal enabledelayedexpansion
         echo "最终CEF验证..."
         set "VERIFICATION_FAILED=false"
