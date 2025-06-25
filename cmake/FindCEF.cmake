@@ -1,27 +1,26 @@
 # FindCEF.cmake - CEF库查找模块
-# 支持Windows 7 SP1 32位和现代64位系统
+# 全平台统一使用CEF 75以获得最大兼容性
 
-# 根据架构确定CEF版本和平台
+# 统一CEF版本 - 所有平台使用CEF 75
+set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")
+
+# 根据平台确定CEF平台后缀
 if(WIN32)
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(CEF_PLATFORM_SUFFIX "windows64")
-        set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
     else()
         set(CEF_PLATFORM_SUFFIX "windows32")
-        set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")
     endif()
 endif()
 
 # macOS平台检测
 if(APPLE)
     set(CEF_PLATFORM_SUFFIX "macosx64")
-    set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
 endif()
 
 # Linux平台检测
 if(UNIX AND NOT APPLE)
     set(CEF_PLATFORM_SUFFIX "linux64")
-    set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119")
 endif()
 
 # 使用传入的版本或默认版本

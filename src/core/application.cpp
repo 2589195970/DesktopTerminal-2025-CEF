@@ -231,11 +231,11 @@ bool Application::checkSystemRequirements()
 
 #ifdef Q_OS_WIN
     // Windows特定检查
-    if (!this->checkWindowsVersion()) {
+    if (!checkWindowsVersion()) {
         return false;
     }
     
-    if (!this->checkWindowsAPI()) {
+    if (!checkWindowsAPI()) {
         return false;
     }
 #endif

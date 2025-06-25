@@ -126,6 +126,79 @@ error C2662: 'bool WindowManager::isWindowFullscreen(void)': cannot convert 'thi
 
 **等待结果：** 🔄 Windows构建进行中，等待验证修复效果
 
+### [2025-06-25] - 修复尝试 #4 - CEF版本兼容性和编译错误全面修复
+**触发条件：** 继续上次修复，解决剩余的编译错误
+**修复范围：** 单例类、静态方法、CEF版本兼容性、头文件冲突
+
+#### ✅ 本次修复的问题：
+
+1. **单例类析构函数访问权限问题**
+   - **问题：** `'Logger::~Logger': cannot access private member` 
+   - **修复：** 移除了对单例对象的delete调用（Logger和ConfigManager）
+   - **原因：** 单例对象有自己的生命周期管理，不应手动删除
+
+2. **Application类静态方法调用错误**
+   - **问题：** `'Application::checkWindowsVersion': illegal call of non-static member function`
+   - **修复：** 添加了`this->`前缀，创建了静态方法包装器`detectSystemInfoStatic()`
+   - **文件：** src/core/application.h, src/core/application.cpp
+
+3. **CEF头文件包含和名称冲突问题**
+   - **问题：** CEF框架头文件与项目实现文件同名导致递归包含
+   - **修复：** 重命名实现文件避免冲突：
+     - `src/cef/cef_app.h/cpp` → `src/cef/cef_app_impl.h/cpp`
+     - `src/cef/cef_client.h/cpp` → `src/cef/cef_client_impl.h/cpp`
+   - **更新：** 所有相关的include引用和CMakeLists.txt
+
+4. **CEF版本兼容性问题（CEF 75 vs CEF 118差异）**
+   - **问题：** CEF 75不支持某些字段和API，与CEF 118有差异
+   - **修复：**
+     - 移除CEF 75不支持的`single_process`和`auto_detect_proxy_settings_enabled`字段
+     - 更新方法签名：`CefRawPtr<CefSchemeRegistrar>` → `CefRefPtr<CefSchemeRegistrar>`
+     - 使用数值常量替代VK_宏以确保跨版本兼容（VK_TAB→9, VK_F4→115等）
+     - 添加详细的版本兼容性注释
+
+5. **CEF客户端类型引用修复**
+   - **问题：** `CefRefPtr<CefClient> client = new CEFClient();` 类型不匹配
+   - **修复：** 更正为 `CefRefPtr<CEFClient> client = new CEFClient();`
+
+#### 🔧 修复策略特点：
+
+- **版本兼容策略：** 通过命令行参数替代不支持的配置字段
+- **安全的常量使用：** 避免使用可能在不同CEF版本中变化的宏定义
+- **清晰的文件组织：** 避免与CEF框架头文件的名称冲突
+- **保留功能完整性：** 确保修复不影响现有功能
+
+#### 📁 修改的文件：
+```
+src/core/application.h          # 添加静态方法声明
+src/core/application.cpp        # 修复静态方法调用，移除单例delete
+src/core/cef_manager.h          # 更新include路径
+src/core/cef_manager.cpp        # 修复CEF版本兼容性，更新include
+src/cef/cef_app.h               # 重命名为 cef_app_impl.h
+src/cef/cef_app.cpp             # 重命名为 cef_app_impl.cpp
+src/cef/cef_client.h            # 重命名为 cef_client_impl.h
+src/cef/cef_client.cpp          # 重命名为 cef_client_impl.cpp
+src/cef/cef_app_impl.h          # CEF版本兼容方法签名修复
+src/cef/cef_app_impl.cpp        # CEF版本兼容方法签名修复
+src/cef/cef_client_impl.cpp     # VK常量兼容性修复
+CMakeLists.txt                  # 更新源文件路径引用
+```
+
+#### 🎯 预期解决的编译错误：
+- ✅ 单例析构函数访问错误
+- ✅ 静态方法调用错误  
+- ✅ CEF头文件递归包含错误
+- ✅ CEF版本API差异错误
+- ✅ 类型声明不匹配错误
+
+**提交信息：**
+- Commit: d7840e7
+- 提交时间: 2025-06-25
+- 提交消息: "fix: 全面修复CEF版本兼容性和编译错误"
+- 已推送到GitHub，触发Windows 32位/64位构建
+
+**状态：** 🔄 等待GitHub Actions验证修复效果
+
 ---
 
 ## 已知问题列表

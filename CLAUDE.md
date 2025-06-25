@@ -802,10 +802,10 @@ Application outputs current working directory and attempts multiple config paths
 
 | 平台 | CEF版本 | 下载URL | 文件大小 | 用途 |
 |------|---------|---------|----------|------|
-| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | Win7 SP1兼容 (Standard Distribution) |
-| Windows 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_windows64.tar.bz2` | 275MB | 现代系统 |
-| Linux 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_linux64.tar.bz2` | 659MB | Linux构建 |
-| macOS 64位 | `118.7.1+g99817d2+chromium-118.0.5993.119` | `https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_macosx64.tar.bz2` | 229MB | macOS构建 |
+| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | 全平台统一版本 - 最大兼容性 |
+| Windows 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows64.tar.bz2` | 228MB | 全平台统一版本 - 最大兼容性 |
+| Linux 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_linux64.tar.bz2` | 412MB | 全平台统一版本 - 最大兼容性 |
+| macOS 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_macosx64.tar.bz2` | 156MB | 全平台统一版本 - 最大兼容性 |
 
 ### 配置文件一致性检查清单
 
@@ -813,32 +813,27 @@ Application outputs current working directory and attempts multiple config paths
 
 1. **`.github/workflows/build.yml`** - GitHub Actions构建配置
    ```yaml
-   cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"  # 32位
-   cef_version: "118.7.1+g99817d2+chromium-118.0.5993.119" # 64位
+   cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
    ```
 
 2. **`scripts/download-cef.bat`** - Windows下载脚本
    ```batch
-   set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"  # windows32
-   set "CEF_VERSION=118.7.1+g99817d2+chromium-118.0.5993.119" # windows64
+   set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
    ```
 
 3. **`scripts/download-cef.sh`** - Linux/macOS下载脚本
    ```bash
-   CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"  # windows32
-   CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119" # 其他平台
+   CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
    ```
 
 4. **`CMakeLists.txt`** - 主CMake配置
    ```cmake
-   set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")  # 32位
-   set(CEF_VERSION "118.7.1+g99817d2+chromium-118.0.5993.119") # 其他
+   set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")  # 全平台统一版本
    ```
 
 5. **`cmake/FindCEF.cmake`** - ⚠️ 关键模块 - 覆盖主配置
    ```cmake
-   set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")  # windows32
-   set(CEF_VERSION_DEFAULT "118.7.1+g99817d2+chromium-118.0.5993.119") # 其他平台
+   set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")  # 全平台统一版本
    ```
 
 ### 常见CEF构建问题解决方案

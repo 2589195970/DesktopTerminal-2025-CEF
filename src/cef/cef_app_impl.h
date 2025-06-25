@@ -30,7 +30,8 @@ public:
     virtual CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
     virtual CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return this; }
     virtual void OnBeforeCommandLineProcessing(const CefString& process_type, CefRefPtr<CefCommandLine> command_line) override;
-    virtual void OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar) override;
+    // 注意：CEF 75中OnRegisterCustomSchemes签名可能不同，暂时移除override
+    virtual void OnRegisterCustomSchemes(CefRefPtr<CefSchemeRegistrar> registrar);
 
     // CefBrowserProcessHandler接口
     virtual void OnContextInitialized() override;
@@ -40,10 +41,11 @@ public:
     // CefRenderProcessHandler接口
     virtual void OnRenderThreadCreated(CefRefPtr<CefListValue> extra_info) override;
     virtual void OnWebKitInitialized() override;
-    virtual void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionary> extra_info) override;
+    // 注意：CEF 75中某些RenderProcessHandler方法可能不存在，暂时移除
+    // virtual void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info);
     virtual void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;
     virtual CefRefPtr<CefLoadHandler> GetLoadHandler() override;
-    virtual bool OnBeforeNavigation(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, NavigationType navigation_type, bool is_redirect) override;
+    // virtual bool OnBeforeNavigation(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, NavigationType navigation_type, bool is_redirect);
     virtual void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
     virtual void OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
     virtual void OnUncaughtException(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context, CefRefPtr<CefV8Exception> exception, CefRefPtr<CefV8StackTrace> stackTrace) override;

@@ -25,12 +25,12 @@ jobs:
             platform: Win32
             cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
             qt_arch: win32_msvc2019
-            name: "Windows 32-bit (Win7 SP1 Compatible)"
+            name: "Windows 32-bit (CEF 75 - Maximum Compatibility)"
           - arch: x64
             platform: x64
-            cef_version: "118.7.1+g99817d2+chromium-118.0.5993.119"
+            cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
             qt_arch: win64_msvc2019_64
-            name: "Windows 64-bit"
+            name: "Windows 64-bit (CEF 75 - Maximum Compatibility)"
 
     name: ${{ matrix.name }}
     
@@ -411,16 +411,16 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-linux-x64-118.7.1-verified-v3
+        key: cef-linux-x64-75.1.14-verified-v3
         restore-keys: |
-          cef-linux-x64-118.7.1-verified-
+          cef-linux-x64-75.1.14-verified-
 
     - name: Verify CEF Cache Integrity (Linux)
       id: verify-cef-cache-linux
       run: |
         echo "验证Linux CEF缓存完整性..."
         CEF_VALID=false
-        CEF_VERSION="118.7.1+g99817d2+chromium-118.0.5993.119"
+        CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
         CEF_PLATFORM="linux64"
         CEF_BINARY_NAME="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
         
@@ -499,7 +499,7 @@ jobs:
         ====================================
         Architecture: x64
         Platform: Linux 64-bit
-        CEF Version: 118.7.1+g99817d2+chromium-118.0.5993.119
+        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
         Qt Version: ${{ env.QT_VERSION }}
         Build Type: ${{ env.BUILD_TYPE }}
         Build Date: $(date -u)
@@ -534,7 +534,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-macos-x64-118.7.1
+        key: cef-macos-x64-75.1.14
         restore-keys: |
           cef-macos-x64-
 
@@ -581,7 +581,7 @@ jobs:
         ====================================
         Architecture: x64
         Platform: macOS 64-bit
-        CEF Version: 118.7.1+g99817d2+chromium-118.0.5993.119
+        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
         Qt Version: ${{ env.QT_VERSION }}
         Build Type: ${{ env.BUILD_TYPE }}
         Build Date: $(date -u)
@@ -747,10 +747,10 @@ jobs:
           ## DesktopTerminal-CEF Release ${{ github.ref_name }}
           
           ### 📦 包含的平台
-          - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75)
-          - **Windows 64-bit**: 支持Windows 10及以上系统 (CEF 118)  
-          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 118)
-          - **Linux 64-bit**: 支持Ubuntu 18.04及以上系统 (CEF 118)
+          - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
+          - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)  
+          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 75 - 最大兼容性)
+          - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 75 - 最大兼容性)
           
           ### 🔧 主要特性
           - Qt5 + CEF集成的安全桌面终端

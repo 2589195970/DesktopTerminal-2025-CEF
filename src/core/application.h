@@ -103,8 +103,8 @@ private:
 
     // Windows特定功能
 #ifdef Q_OS_WIN
-    bool checkWindowsVersion();
-    bool checkWindowsAPI();
+    static bool checkWindowsVersion();
+    static bool checkWindowsAPI();
     void applyWindows7Optimizations();
 #endif
 

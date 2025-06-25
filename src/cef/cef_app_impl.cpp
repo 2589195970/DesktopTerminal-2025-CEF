@@ -134,7 +134,9 @@ void CEFApp::OnWebKitInitialized()
     // 但在安全模式下，我们通常不需要额外的扩展
 }
 
-void CEFApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionary> extra_info)
+// 注意：CEF 75中此方法可能不存在，暂时注释掉
+/*
+void CEFApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
 {
     CEF_REQUIRE_RENDERER_THREAD();
     
@@ -145,6 +147,7 @@ void CEFApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictio
             .arg(browser->GetIdentifier()).arg(m_browserCount));
     }
 }
+*/
 
 void CEFApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 {

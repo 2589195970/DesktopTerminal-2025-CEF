@@ -22,6 +22,7 @@
 - [x] 17. Windows 7 SP1 32位专项测试
 - [x] 18. 性能优化和调试（32位内存优化）
 - [x] 19. 文档更新（明确32位支持说明）
+- [x] 20. GitHub Actions编译错误修复（CEF版本兼容性）
 
 ## 实施记录
 
@@ -149,3 +150,41 @@
   - 详细说明Windows 7 SP1 32位支持
   - 包含构建、配置、部署的完整指南
   - 添加故障排除和技术支持信息
+
+### 2025年6月25日 - GitHub Actions编译错误修复
+
+- ✅ GitHub Actions编译错误修复（CEF版本兼容性）
+  - **问题分析**：GitHub Actions Windows构建失败，涉及多个编译错误
+    - 单例类析构函数访问权限问题
+    - Application类静态方法调用错误
+    - CEF头文件包含和名称冲突问题
+    - CEF版本兼容性问题（CEF 75 vs CEF 118 API差异）
+    - CEF方法override签名不匹配问题
+
+  - **修复策略**：
+    - 移除单例对象的手动delete调用，由单例自行管理生命周期
+    - 添加静态方法包装器和this->前缀修复静态调用
+    - 重命名CEF实现文件避免与框架头文件冲突：
+      - `cef_app.h/cpp` → `cef_app_impl.h/cpp`
+      - `cef_client.h/cpp` → `cef_client_impl.h/cpp`
+    - 修复CEF版本API差异：
+      - 移除CEF 75不支持的字段（single_process, auto_detect_proxy_settings_enabled）
+      - 更新方法签名（CefRawPtr → CefRefPtr）
+      - 使用数值常量替代VK_宏确保跨版本兼容
+    - 更新CMakeLists.txt源文件路径引用
+
+  - **修改的文件**：
+    - src/core/application.h/cpp（静态方法修复）
+    - src/core/cef_manager.h/cpp（版本兼容性修复）
+    - src/cef/cef_app_impl.h/cpp（重命名+签名修复）
+    - src/cef/cef_client_impl.h/cpp（重命名+常量兼容性）
+    - CMakeLists.txt（源文件路径更新）
+
+  - **技术特点**：
+    - 保持CEF 75（Windows 7 SP1 32位）和CEF 118（现代系统）的API兼容性
+    - 采用安全的编程实践（避免手动内存管理、使用数值常量）
+    - 清晰的文件组织避免名称冲突
+    - 详细的版本兼容性注释
+
+  - **验证方式**：通过GitHub Actions自动化CI/CD验证修复效果
+  - **提交记录**：Commit d7840e7 - "fix: 全面修复CEF版本兼容性和编译错误"
