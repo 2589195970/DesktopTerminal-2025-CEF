@@ -190,9 +190,56 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 message(STATUS "=== CEF库链接配置 ===")
 message(STATUS "CEF_LIBRARIES: ${CEF_LIBRARIES}")
 
-# 确保CEF库存在
+# 详细验证CEF库状态
+message(STATUS "=== CEF库状态详细检查 ===")
+message(STATUS "CEF_FOUND: ${CEF_FOUND}")
+message(STATUS "CEF_LIBRARIES: ${CEF_LIBRARIES}")
+message(STATUS "CEF_LIBRARY: ${CEF_LIBRARY}")
+message(STATUS "CEF_WRAPPER_LIBRARY: ${CEF_WRAPPER_LIBRARY}")
+message(STATUS "CEF_ROOT_DIR: ${CEF_ROOT_DIR}")
+
+# 紧急修复：如果CEF库问题严重，提供临时绕过
+if(NOT CEF_LIBRARIES AND DEFINED ENV{GITHUB_ACTIONS})
+    message(WARNING "=== CEF库缺失紧急处理 ===")
+    message(WARNING "在CI环境中检测到CEF库完全缺失")
+    message(WARNING "这通常意味着CEF下载或解压失败")
+    
+    # 尝试手动查找任何可能的CEF库文件
+    file(GLOB_RECURSE EMERGENCY_CEF_LIBS 
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/**/*.lib"
+    )
+    
+    if(EMERGENCY_CEF_LIBS)
+        message(WARNING "找到紧急CEF库文件:")
+        foreach(emergency_lib ${EMERGENCY_CEF_LIBS})
+            message(WARNING "  - ${emergency_lib}")
+            # 添加任何找到的.lib文件
+            list(APPEND CEF_LIBRARIES "${emergency_lib}")
+        endforeach()
+    else()
+        message(FATAL_ERROR "
+        ❌ 严重错误：CEF库完全缺失！
+        
+        这表明CEF下载过程存在根本性问题。
+        请检查上面的CEF下载日志以确定失败原因。
+        
+        可能的原因：
+        1. 网络连接问题导致下载失败
+        2. CEF包URL错误或不可访问
+        3. 解压过程失败
+        4. 权限问题
+        
+        建议的解决方案：
+        1. 检查CEF下载日志
+        2. 验证CEF版本URL的有效性
+        3. 检查GitHub Actions的网络连接
+        ")
+    endif()
+endif()
+
+# 正常情况下确保CEF库存在
 if(NOT CEF_LIBRARIES)
-    message(FATAL_ERROR "CEF_LIBRARIES为空！CEF库未找到。")
+    message(FATAL_ERROR "CEF_LIBRARIES为空！CEF库未找到。请检查CEF安装。")
 endif()
 
 # 链接库 - 注意顺序很重要

@@ -57,22 +57,38 @@ jobs:
         cache: true
         cache-key-prefix: qt-${{ matrix.qt_arch }}
 
-    - name: Cache CEF ${{ matrix.arch }}
-      id: cache-cef
-      uses: actions/cache@v3
-      with:
-        path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v4-force-rebuild
-        restore-keys: |
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v4-
+    # 临时禁用CEF缓存以解决链接问题
+    # - name: Cache CEF ${{ matrix.arch }}
+    #   id: cache-cef
+    #   uses: actions/cache@v3
+    #   with:
+    #     path: third_party/cef
+    #     key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v5-no-cache
+    #     restore-keys: |
+    #       cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v5-
 
-    - name: Verify CEF Cache Integrity
-      id: verify-cef-cache
+    - name: Force Clean CEF Directory  
       shell: cmd
       run: |
-        setlocal enabledelayedexpansion
-        echo "验证CEF缓存完整性..."
-        set "CEF_VALID=false"
+        echo "强制清理CEF目录以确保全新下载..."
+        if exist "third_party\cef" (
+          echo "删除现有CEF目录..."
+          rmdir /s /q "third_party\cef"
+        )
+        echo "CEF目录已清理"
+        
+    - name: Verify CEF Status
+      id: verify-cef-cache  
+      shell: cmd
+      run: |
+        echo "CEF目录状态检查..."
+        if exist "third_party\cef" (
+          echo "CEF目录存在（异常）"
+          set "CEF_VALID=true"
+        ) else (
+          echo "CEF目录不存在（正常，将触发下载）"
+          set "CEF_VALID=false"
+        )
         
         REM 根据架构确定CEF版本
         if "${{ matrix.arch }}"=="x86" (
@@ -135,10 +151,9 @@ jobs:
           )
         )
         
-        echo "cef-valid=!CEF_VALID!" >> %GITHUB_OUTPUT%
+        echo "cef-valid=false" >> %GITHUB_OUTPUT%
 
-    - name: Download CEF
-      if: steps.cache-cef.outputs.cache-hit != 'true' || steps.verify-cef-cache.outputs.cef-valid != 'true'
+    - name: Download CEF (No Cache)
       shell: cmd
       run: |
         echo "下载CEF for ${{ matrix.arch }}..."
@@ -153,10 +168,38 @@ jobs:
           scripts\download-cef.bat "/platform=windows64" "/force"
         )
         
-        echo "验证下载结果..."
+        echo "=== 详细验证下载结果 ==="
         if exist "third_party\cef" (
-          echo "CEF目录结构："
-          dir "third_party\cef" /s | findstr /i "\.lib \.dll include Release"
+          echo "CEF根目录内容："
+          dir "third_party\cef" /b
+          
+          echo "查找所有库文件："
+          dir "third_party\cef" /s /b | findstr /i "\.lib$"
+          
+          echo "查找所有DLL文件："
+          dir "third_party\cef" /s /b | findstr /i "\.dll$"
+          
+          echo "查找头文件："
+          dir "third_party\cef" /s /b | findstr /i "cef_version\.h$"
+          
+          REM 特别检查预期的库文件
+          for /d %%d in ("third_party\cef\cef_binary_*") do (
+            echo "=== 检查 %%d ==="
+            if exist "%%d\Release\libcef.lib" (
+              echo "✓ 找到主库: %%d\Release\libcef.lib"
+              for %%f in ("%%d\Release\libcef.lib") do echo "  大小: %%~zf bytes"
+            ) else (
+              echo "✗ 主库缺失: %%d\Release\libcef.lib"
+            )
+            
+            if exist "%%d\libcef_dll" (
+              echo "✓ Wrapper源码存在: %%d\libcef_dll"
+            ) else (
+              echo "✗ Wrapper源码缺失: %%d\libcef_dll"
+            )
+          )
+        ) else (
+          echo "✗ CEF目录下载失败！"
         )
 
     - name: Final CEF Verification
