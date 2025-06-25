@@ -60,6 +60,66 @@ set(CMAKE_AUTOUIC ON)
 # 查找CEF
 find_package(CEF REQUIRED)
 
+# 如果CEF wrapper库不存在但有源码，则编译wrapper库
+if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
+    message(STATUS "编译CEF Wrapper库从源码: ${CEF_WRAPPER_SOURCE_DIR}")
+    
+    # 收集wrapper库源文件
+    file(GLOB_RECURSE CEF_WRAPPER_SOURCES
+        "${CEF_WRAPPER_SOURCE_DIR}/*.cc"
+        "${CEF_WRAPPER_SOURCE_DIR}/*.cpp"
+    )
+    
+    if(CEF_WRAPPER_SOURCES)
+        # 创建wrapper静态库
+        add_library(cef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
+        
+        # 设置wrapper库的include目录
+        target_include_directories(cef_dll_wrapper PRIVATE
+            ${CEF_INCLUDE_PATH}
+            ${CEF_INCLUDE_PATH}/include
+        )
+        
+        # 设置编译定义
+        target_compile_definitions(cef_dll_wrapper PRIVATE
+            -DUSING_CEF_SHARED
+            -DNOMINMAX
+        )
+        
+        # 平台特定设置
+        if(WIN32)
+            target_compile_definitions(cef_dll_wrapper PRIVATE
+                -DWIN32
+                -D_WINDOWS
+                -DUNICODE
+                -D_UNICODE
+            )
+            
+            # 32位系统特殊处理
+            if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+                target_compile_definitions(cef_dll_wrapper PRIVATE
+                    -DCEF_32BIT_BUILD
+                )
+            endif()
+        elseif(APPLE)
+            target_compile_definitions(cef_dll_wrapper PRIVATE
+                -DMACOSX
+            )
+        elseif(UNIX)
+            target_compile_definitions(cef_dll_wrapper PRIVATE
+                -DLINUX
+            )
+        endif()
+        
+        # 将编译的wrapper库添加到CEF_LIBRARIES
+        list(APPEND CEF_LIBRARIES cef_dll_wrapper)
+        
+        message(STATUS "CEF Wrapper库编译配置完成")
+    else()
+        message(WARNING "CEF Wrapper源码目录为空: ${CEF_WRAPPER_SOURCE_DIR}")
+    endif()
+endif()
+
 # 包含目录
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -110,6 +170,22 @@ target_link_libraries(${PROJECT_NAME}
     qhotkey
 )
 
+# CEF库特殊处理
+if(CEF_FOUND)
+    # 确保CEF include路径被正确设置
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CEF_INCLUDE_PATH}
+        ${CEF_INCLUDE_PATH}/include
+    )
+    
+    # macOS Framework特殊处理
+    if(APPLE AND CEF_FRAMEWORK_PATH)
+        message(STATUS "链接CEF Framework: ${CEF_FRAMEWORK_PATH}")
+        target_link_libraries(${PROJECT_NAME} "-framework Cocoa")
+        target_link_libraries(${PROJECT_NAME} "-framework ApplicationServices")
+    endif()
+endif()
+
 # Windows特定链接库
 if(WIN32)
     target_link_libraries(${PROJECT_NAME}
@@ -143,17 +219,35 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # 部署CEF文件
 if(CEF_FOUND)
-    deploy_cef_files(${PROJECT_NAME}
-        CEF_ROOT "${CEF_ROOT}"
-        BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-        RESOURCES_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    )
+    # 确保有CEF_ROOT变量用于部署
+    if(NOT CEF_ROOT)
+        set(CEF_ROOT "${CEF_ROOT_DIR}")
+    endif()
     
-    # 配置CEF运行环境
-    configure_cef_environment(${PROJECT_NAME})
-    
-    # 验证CEF部署
-    verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    # 检查DeployCEF模块是否存在
+    if(COMMAND deploy_cef_files)
+        deploy_cef_files(${PROJECT_NAME}
+            CEF_ROOT "${CEF_ROOT}"
+            BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            RESOURCES_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        )
+        
+        # 配置CEF运行环境
+        if(COMMAND configure_cef_environment)
+            configure_cef_environment(${PROJECT_NAME})
+        endif()
+        
+        # 验证CEF部署
+        if(COMMAND verify_cef_deployment)
+            verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+        endif()
+    else()
+        message(STATUS "DeployCEF模块不可用，跳过CEF文件部署")
+        message(STATUS "请确保CEF二进制文件和资源在运行时可用")
+        message(STATUS "CEF根目录: ${CEF_ROOT}")
+        message(STATUS "CEF二进制目录: ${CEF_BINARY_DIR}")
+        message(STATUS "CEF资源目录: ${CEF_RESOURCE_DIR}")
+    endif()
 endif()
 
 # 安装配置

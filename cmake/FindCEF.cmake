@@ -70,22 +70,30 @@ set(CEF_BINARY_DIR "${CEF_ROOT_DIR}")
 
 # 平台特定的库和资源路径
 if(WIN32)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(CEF_LIBRARY_DIR "${CEF_ROOT_DIR}/Release")
-        set(CEF_BINARY_DIR "${CEF_ROOT_DIR}/Release")
+    set(CEF_LIBRARY_DIR "${CEF_ROOT_DIR}/Release")
+    set(CEF_BINARY_DIR "${CEF_ROOT_DIR}/Release")
+    # Windows可能有独立的Resources目录或在Release中
+    if(EXISTS "${CEF_ROOT_DIR}/Resources")
+        set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Resources")
     else()
-        set(CEF_LIBRARY_DIR "${CEF_ROOT_DIR}/Release")
-        set(CEF_BINARY_DIR "${CEF_ROOT_DIR}/Release")
+        set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Release")
     endif()
-    set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Resources")
 elseif(APPLE)
     set(CEF_LIBRARY_DIR "${CEF_ROOT_DIR}/Release")
     set(CEF_BINARY_DIR "${CEF_ROOT_DIR}/Release")
-    set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Resources")
+    # macOS的Resources在Framework内部
+    set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Release/Chromium Embedded Framework.framework/Resources")
+    # macOS使用Framework路径
+    set(CEF_FRAMEWORK_PATH "${CEF_ROOT_DIR}/Release/Chromium Embedded Framework.framework")
 else() # Linux
     set(CEF_LIBRARY_DIR "${CEF_ROOT_DIR}/Release")
     set(CEF_BINARY_DIR "${CEF_ROOT_DIR}/Release")
-    set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Resources")
+    # Linux检查Resources目录是否存在
+    if(EXISTS "${CEF_ROOT_DIR}/Resources")
+        set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Resources")
+    else()
+        set(CEF_RESOURCE_DIR "${CEF_ROOT_DIR}/Release")
+    endif()
 endif()
 
 # 查找CEF库文件
@@ -102,29 +110,52 @@ if(WIN32)
         NO_DEFAULT_PATH
     )
 elseif(APPLE)
-    find_library(CEF_LIBRARY
-        NAMES "Chromium Embedded Framework"
-        PATHS ${CEF_LIBRARY_DIR}
+    # macOS使用Framework路径
+    if(EXISTS "${CEF_FRAMEWORK_PATH}")
+        set(CEF_LIBRARY "${CEF_FRAMEWORK_PATH}")
+        message(STATUS "找到CEF Framework: ${CEF_LIBRARY}")
+    else()
+        find_library(CEF_LIBRARY
+            NAMES "Chromium Embedded Framework"
+            PATHS ${CEF_LIBRARY_DIR}
+            NO_DEFAULT_PATH
+        )
+    endif()
+    
+    # 查找编译好的wrapper库或静态库
+    find_library(CEF_WRAPPER_LIBRARY
+        NAMES cef_dll_wrapper
+        PATHS ${CEF_LIBRARY_DIR} "${CEF_ROOT_DIR}/build/libcef_dll_wrapper"
         NO_DEFAULT_PATH
     )
     
-    find_library(CEF_WRAPPER_LIBRARY
-        NAMES cef_dll_wrapper
-        PATHS ${CEF_LIBRARY_DIR}
-        NO_DEFAULT_PATH
-    )
+    # 如果没找到编译好的，查找源码目录
+    if(NOT CEF_WRAPPER_LIBRARY)
+        if(EXISTS "${CEF_ROOT_DIR}/libcef_dll")
+            set(CEF_WRAPPER_SOURCE_DIR "${CEF_ROOT_DIR}/libcef_dll")
+            message(STATUS "找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR}")
+        endif()
+    endif()
 else() # Linux
     find_library(CEF_LIBRARY
-        NAMES cef
+        NAMES cef libcef
         PATHS ${CEF_LIBRARY_DIR}
         NO_DEFAULT_PATH
     )
     
     find_library(CEF_WRAPPER_LIBRARY
         NAMES cef_dll_wrapper
-        PATHS ${CEF_LIBRARY_DIR}
+        PATHS ${CEF_LIBRARY_DIR} "${CEF_ROOT_DIR}/build/libcef_dll_wrapper"
         NO_DEFAULT_PATH
     )
+    
+    # 如果没找到编译好的，查找源码目录
+    if(NOT CEF_WRAPPER_LIBRARY)
+        if(EXISTS "${CEF_ROOT_DIR}/libcef_dll")
+            set(CEF_WRAPPER_SOURCE_DIR "${CEF_ROOT_DIR}/libcef_dll")
+            message(STATUS "找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR}")
+        endif()
+    endif()
 endif()
 
 # 设置CEF库列表
@@ -134,6 +165,26 @@ if(CEF_LIBRARY)
 endif()
 if(CEF_WRAPPER_LIBRARY)
     list(APPEND CEF_LIBRARIES ${CEF_WRAPPER_LIBRARY})
+endif()
+
+# 查找额外的CEF库文件
+if(APPLE OR UNIX)
+    # 查找sandbox库（可选）
+    find_library(CEF_SANDBOX_LIBRARY
+        NAMES cef_sandbox
+        PATHS ${CEF_LIBRARY_DIR}
+        NO_DEFAULT_PATH
+    )
+    if(CEF_SANDBOX_LIBRARY)
+        list(APPEND CEF_LIBRARIES ${CEF_SANDBOX_LIBRARY})
+        message(STATUS "找到CEF Sandbox库: ${CEF_SANDBOX_LIBRARY}")
+    endif()
+endif()
+
+# 如果没有找到wrapper库但有源码，记录信息
+if(NOT CEF_WRAPPER_LIBRARY AND CEF_WRAPPER_SOURCE_DIR)
+    message(STATUS "CEF Wrapper库未编译，源码目录: ${CEF_WRAPPER_SOURCE_DIR}")
+    message(STATUS "将在构建时编译CEF Wrapper")
 endif()
 
 # 检查是否找到了必要的组件
