@@ -96,6 +96,11 @@ public:
     void collectSystemInfo();
 
     /**
+     * @brief 记录系统信息
+     */
+    void logSystemInfo();
+
+    /**
      * @brief 关闭日志系统
      */
     void shutdown();

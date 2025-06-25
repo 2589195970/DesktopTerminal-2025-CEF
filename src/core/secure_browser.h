@@ -45,7 +45,7 @@ public:
     /**
      * @brief 设置窗口标题
      */
-    void setWindowTitle(const QString& title) override;
+    void setWindowTitle(const QString& title);
 
 protected:
     // 事件处理（保持与原项目相同的安全控制逻辑）

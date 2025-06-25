@@ -322,12 +322,12 @@ void WindowManager::connectScreenSignals()
     }
 }
 
-bool WindowManager::isWindowInCorrectState()
+bool WindowManager::isWindowInCorrectState() const
 {
     return isWindowFullscreen() && isWindowFocused() && isWindowOnTop();
 }
 
-bool WindowManager::isWindowFullscreen()
+bool WindowManager::isWindowFullscreen() const
 {
     if (!m_targetWindow) return false;
     
@@ -335,7 +335,7 @@ bool WindowManager::isWindowFullscreen()
            m_targetWindow->isFullScreen();
 }
 
-bool WindowManager::isWindowFocused()
+bool WindowManager::isWindowFocused() const
 {
     if (!m_targetWindow) return false;
     
@@ -344,7 +344,7 @@ bool WindowManager::isWindowFocused()
            QApplication::activeWindow() == m_targetWindow;
 }
 
-bool WindowManager::isWindowOnTop()
+bool WindowManager::isWindowOnTop() const
 {
     if (!m_targetWindow) return false;
     

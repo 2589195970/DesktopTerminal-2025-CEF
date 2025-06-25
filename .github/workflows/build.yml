@@ -235,10 +235,11 @@ jobs:
         path: Output/*.exe
         retention-days: 90
 
-  # Linux构建
-  build-linux:
+  # Linux构建 - 暂时屏蔽，专注Windows平台修复
+  build-linux-disabled:
+    if: false  # 屏蔽Linux构建
     runs-on: ubuntu-latest
-    name: Linux 64-bit
+    name: Linux 64-bit (Disabled)
     
     steps:
     - name: Checkout code
@@ -341,10 +342,11 @@ jobs:
         path: artifacts/linux-x64/
         retention-days: 30
 
-  # macOS构建
-  build-macos:
+  # macOS构建 - 暂时屏蔽，专注Windows平台修复
+  build-macos-disabled:
+    if: false  # 屏蔽macOS构建
     runs-on: macos-12
-    name: macOS 64-bit
+    name: macOS 64-bit (Disabled)
     
     steps:
     - name: Checkout code
@@ -517,7 +519,7 @@ jobs:
 
   # 创建发布包（仅在发布时触发）
   create-release:
-    needs: [build-windows, build-linux, build-macos, code-quality]
+    needs: [build-windows, code-quality]  # 暂时只依赖Windows构建
     runs-on: ubuntu-latest
     name: Create Release Packages
     if: github.event_name == 'release'

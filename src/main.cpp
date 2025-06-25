@@ -68,10 +68,10 @@ int main(int argc, char *argv[])
     logger.appEvent(QString("目标URL: %1").arg(configManager.getUrl()));
     
     // 创建应用程序实例
-    Application application;
+    Application application(argc, argv);
     
     // 检查系统兼容性
-    if (!application.checkSystemCompatibility()) {
+    if (!Application::checkSystemRequirements()) {
         logger.errorEvent("系统兼容性检查失败");
         QMessageBox::critical(nullptr, "系统兼容性错误", 
             "当前系统不满足运行要求。\\n\\n详细信息请查看日志文件。");
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     }
     
     // 显示主窗口
-    if (!application.showMainWindow()) {
+    if (!application.startMainWindow()) {
         logger.errorEvent("主窗口显示失败");
         QMessageBox::critical(nullptr, "窗口错误", 
             "无法显示主窗口。\\n\\n详细信息请查看日志文件。");

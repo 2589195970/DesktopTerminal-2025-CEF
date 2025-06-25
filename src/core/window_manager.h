@@ -109,10 +109,10 @@ private:
     void setupWindowFlags();
     void setupWindowGeometry();
     void connectScreenSignals();
-    bool isWindowInCorrectState();
-    bool isWindowFullscreen();
-    bool isWindowFocused();
-    bool isWindowOnTop();
+    bool isWindowInCorrectState() const;
+    bool isWindowFullscreen() const;
+    bool isWindowFocused() const;
+    bool isWindowOnTop() const;
     void fixWindowFlags();
     void fixWindowGeometry();
     void fixWindowFocus();

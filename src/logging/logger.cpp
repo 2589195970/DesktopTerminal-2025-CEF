@@ -201,3 +201,15 @@ void Logger::onTimerTimeout()
 {
     flushAllLogBuffers();
 }
+
+void Logger::logSystemInfo()
+{
+    systemEvent("=== 系统信息记录 ===");
+    systemEvent(QString("操作系统: %1").arg(QSysInfo::prettyProductName()));
+    systemEvent(QString("架构: %1").arg(QSysInfo::currentCpuArchitecture()));
+    systemEvent(QString("内核类型: %1").arg(QSysInfo::kernelType()));
+    systemEvent(QString("内核版本: %1").arg(QSysInfo::kernelVersion()));
+    systemEvent(QString("主机名: %1").arg(QSysInfo::machineHostName()));
+    systemEvent(QString("Qt版本: %1").arg(qVersion()));
+    systemEvent("=== 系统信息记录完成 ===");
+}
