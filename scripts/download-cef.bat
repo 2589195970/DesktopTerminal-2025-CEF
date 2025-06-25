@@ -287,15 +287,70 @@ if "!CEF_FOUND!"=="false" (
     )
 )
 
+REM 验证关键库文件 - 这是链接成功的关键
+if "!CEF_FOUND!"=="true" (
+    call :log_info "验证CEF库文件..."
+    set "CEF_LIB_FOUND=false"
+    set "CEF_LIB_PATH="
+    
+    REM 检查libcef.lib的可能路径
+    set "LIB_CHECK[1]=%CEF_DIR%\%CEF_BINARY_NAME%\Release\libcef.lib"
+    set "LIB_CHECK[2]=%CEF_DIR%\%CEF_BINARY_NAME%\Debug\libcef.lib"
+    set "LIB_CHECK[3]=%CEF_DIR%\Release\libcef.lib"
+    
+    for /l %%i in (1,1,3) do (
+        if "!CEF_LIB_FOUND!"=="false" (
+            if exist "!LIB_CHECK[%%i]!" (
+                set "CEF_LIB_FOUND=true"
+                set "CEF_LIB_PATH=!LIB_CHECK[%%i]!"
+                call :log_success "找到CEF主库: !LIB_CHECK[%%i]!"
+            )
+        )
+    )
+    
+    REM 检查libcef_dll_wrapper源码目录（通常需要自己编译）
+    set "WRAPPER_FOUND=false"
+    set "WRAPPER_CHECK[1]=%CEF_DIR%\%CEF_BINARY_NAME%\libcef_dll"
+    set "WRAPPER_CHECK[2]=%CEF_DIR%\libcef_dll"
+    
+    for /l %%i in (1,1,2) do (
+        if "!WRAPPER_FOUND!"=="false" (
+            if exist "!WRAPPER_CHECK[%%i]!" (
+                set "WRAPPER_FOUND=true"
+                call :log_success "找到CEF Wrapper源码: !WRAPPER_CHECK[%%i]!"
+            )
+        )
+    )
+    
+    REM 综合验证结果
+    if "!CEF_LIB_FOUND!"=="true" (
+        if "!WRAPPER_FOUND!"=="true" (
+            call :log_success "CEF验证完整通过！"
+            call :log_success "头文件: !CEF_VALID_PATH!"
+            call :log_success "主库文件: !CEF_LIB_PATH!"
+        ) else (
+            call :log_warning "CEF Wrapper源码未找到，将尝试从主库目录查找预编译版本"
+        )
+    ) else (
+        call :log_error "CEF主库文件libcef.lib未找到！"
+        call :log_error "这会导致链接失败。请检查CEF包完整性。"
+        set "CEF_FOUND=false"
+    )
+)
+
 REM 最终验证结果
 if "!CEF_FOUND!"=="true" (
     call :log_success "CEF验证成功！有效路径: !CEF_VALID_PATH!"
 ) else (
-    call :log_error "CEF验证失败：未找到必需的cef_version.h文件"
+    call :log_error "CEF验证失败：关键文件缺失"
+    call :log_error "缺失的文件："
+    call :log_error "1. CEF头文件 (cef_version.h)"
+    call :log_error "2. CEF主库文件 (libcef.lib)"
     call :log_error "可能的原因："
     call :log_error "1. CEF解压不完整"
     call :log_error "2. CEF版本的目录结构与预期不符"
     call :log_error "3. 下载的CEF包损坏"
+    call :log_error "4. CEF库文件路径配置错误"
     exit /b 1
 )
 

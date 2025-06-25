@@ -99,16 +99,37 @@ jobs:
             echo "检查路径 %%i: !CEF_CHECK[%%i]!"
             if exist "!CEF_CHECK[%%i]!" (
               echo "✓ CEF头文件验证成功: !CEF_CHECK[%%i]!"
-              set "CEF_VALID=true"
+              
+              REM 头文件存在，进一步验证库文件
+              echo "验证CEF库文件..."
+              set "CEF_LIB_VALID=false"
+              set "LIB_CHECK[1]=third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib"
+              set "LIB_CHECK[2]=third_party\cef\!CEF_BINARY_NAME!\Debug\libcef.lib"
+              set "LIB_CHECK[3]=third_party\cef\Release\libcef.lib"
+              
+              for /l %%j in (1,1,3) do (
+                if "!CEF_LIB_VALID!"=="false" (
+                  if exist "!LIB_CHECK[%%j]!" (
+                    echo "✓ CEF主库验证成功: !LIB_CHECK[%%j]!"
+                    set "CEF_LIB_VALID=true"
+                  )
+                )
+              )
+              
+              if "!CEF_LIB_VALID!"=="true" (
+                set "CEF_VALID=true"
+              ) else (
+                echo "✗ CEF主库文件libcef.lib缺失，这会导致链接失败"
+              )
             )
           )
         )
         
         if "!CEF_VALID!"=="false" (
-          echo "✗ CEF头文件在所有预期路径中都不存在，需要重新下载"
+          echo "✗ CEF验证失败（头文件或库文件缺失），需要重新下载"
           if exist "third_party\cef" (
             echo "显示当前CEF目录结构用于诊断:"
-            dir "third_party\cef" /s /b | findstr /i "cef_version.h" || echo "未找到任何cef_version.h文件"
+            dir "third_party\cef" /s /b | findstr /i "cef_version.h libcef.lib" || echo "未找到关键CEF文件"
             echo "删除不完整的CEF缓存..."
             rmdir /s /q "third_party\cef"
           )

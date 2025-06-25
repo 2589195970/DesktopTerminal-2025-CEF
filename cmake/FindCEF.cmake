@@ -95,19 +95,57 @@ else() # Linux
     endif()
 endif()
 
-# 查找CEF库文件
+# 查找CEF库文件 - 增强调试信息
 if(WIN32)
+    message(STATUS "查找CEF库文件在目录: ${CEF_LIBRARY_DIR}")
+    
+    # 检查库目录是否存在
+    if(EXISTS "${CEF_LIBRARY_DIR}")
+        message(STATUS "CEF库目录存在，列出内容:")
+        file(GLOB CEF_LIB_FILES "${CEF_LIBRARY_DIR}/*.lib")
+        foreach(lib_file ${CEF_LIB_FILES})
+            message(STATUS "  找到库文件: ${lib_file}")
+        endforeach()
+    else()
+        message(WARNING "CEF库目录不存在: ${CEF_LIBRARY_DIR}")
+    endif()
+    
     find_library(CEF_LIBRARY
         NAMES cef libcef
         PATHS ${CEF_LIBRARY_DIR}
         NO_DEFAULT_PATH
     )
     
+    if(CEF_LIBRARY)
+        message(STATUS "✓ 找到CEF主库: ${CEF_LIBRARY}")
+    else()
+        message(WARNING "✗ CEF主库未找到，搜索路径: ${CEF_LIBRARY_DIR}")
+        # 尝试其他可能的路径
+        find_library(CEF_LIBRARY
+            NAMES cef libcef
+            PATHS 
+                "${CEF_ROOT_DIR}/Release"
+                "${CEF_ROOT_DIR}/Debug"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"
+            NO_DEFAULT_PATH
+        )
+        if(CEF_LIBRARY)
+            message(STATUS "✓ 在备用路径找到CEF主库: ${CEF_LIBRARY}")
+        endif()
+    endif()
+    
     find_library(CEF_WRAPPER_LIBRARY
         NAMES cef_dll_wrapper libcef_dll_wrapper
         PATHS ${CEF_LIBRARY_DIR}
         NO_DEFAULT_PATH
     )
+    
+    if(CEF_WRAPPER_LIBRARY)
+        message(STATUS "✓ 找到CEF Wrapper库: ${CEF_WRAPPER_LIBRARY}")
+    else()
+        message(WARNING "✗ CEF Wrapper库未找到，将从源码编译")
+    endif()
 elseif(APPLE)
     # macOS使用Framework路径
     if(EXISTS "${CEF_FRAMEWORK_PATH}")
