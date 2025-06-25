@@ -159,19 +159,44 @@ if not exist "%CEF_DIR%" mkdir "%CEF_DIR%"
 REM 检查是否有7-Zip
 where 7z >nul 2>&1
 if !errorlevel! equ 0 (
-    call :log_info "使用7-Zip解压..."
-    7z x "%TEMP_DIR%\%CEF_ARCHIVE_NAME%" -o"%CEF_DIR%" -y
+    call :log_info "使用7-Zip两步解压tar.bz2文件..."
+    
+    REM 第一步：解压.bz2得到.tar文件
+    call :log_info "步骤1: 解压bzip2压缩层..."
+    7z x "%TEMP_DIR%\%CEF_ARCHIVE_NAME%" -o"%TEMP_DIR%" -y
     if !errorlevel! neq 0 (
-        call :log_error "7-Zip解压失败"
+        call :log_error "第一步解压失败（bzip2层）"
         rmdir /s /q "%TEMP_DIR%"
         exit /b 1
     )
+    
+    REM 检查.tar文件是否存在
+    set "TAR_FILE=%TEMP_DIR%\%CEF_BINARY_NAME%.tar"
+    if not exist "!TAR_FILE!" (
+        call :log_error "未找到解压后的tar文件: !TAR_FILE!"
+        call :log_info "临时目录内容："
+        dir "%TEMP_DIR%"
+        rmdir /s /q "%TEMP_DIR%"
+        exit /b 1
+    )
+    
+    REM 第二步：解压.tar文件到最终目录
+    call :log_info "步骤2: 解压tar归档到CEF目录..."
+    7z x "!TAR_FILE!" -o"%CEF_DIR%" -y
+    if !errorlevel! neq 0 (
+        call :log_error "第二步解压失败（tar归档）"
+        rmdir /s /q "%TEMP_DIR%"
+        exit /b 1
+    )
+    
+    call :log_success "7-Zip两步解压完成"
 ) else (
-    REM 尝试使用PowerShell解压
+    REM 尝试使用PowerShell解压（对于tar.bz2格式支持有限）
+    call :log_warning "未找到7-Zip，PowerShell对tar.bz2支持有限"
     call :log_info "使用PowerShell解压..."
     powershell -Command "& { Add-Type -AssemblyName System.IO.Compression.FileSystem; try { [System.IO.Compression.ZipFile]::ExtractToDirectory('%TEMP_DIR%\%CEF_ARCHIVE_NAME%', '%CEF_DIR%') } catch { exit 1 } }"
     if !errorlevel! neq 0 (
-        call :log_error "解压失败，请安装7-Zip或确保PowerShell版本支持"
+        call :log_error "PowerShell解压失败，建议安装7-Zip处理tar.bz2文件"
         rmdir /s /q "%TEMP_DIR%"
         exit /b 1
     )
@@ -179,6 +204,29 @@ if !errorlevel! equ 0 (
 
 REM 清理临时文件
 rmdir /s /q "%TEMP_DIR%"
+
+REM 检查解压后的目录结构
+call :log_info "检查CEF解压后的目录结构..."
+if exist "%CEF_DIR%" (
+    call :log_info "CEF目录内容："
+    dir "%CEF_DIR%" /b
+    
+    REM 查找实际解压出的CEF目录
+    for /d %%d in ("%CEF_DIR%\cef_binary_*") do (
+        call :log_info "找到CEF目录: %%d"
+        if exist "%%d\include" (
+            call :log_info "  - 包含include目录"
+        )
+        if exist "%%d\Release" (
+            call :log_info "  - 包含Release目录"
+        )
+        if exist "%%d\Resources" (
+            call :log_info "  - 包含Resources目录"
+        )
+    )
+) else (
+    call :log_error "CEF目录不存在: %CEF_DIR%"
+)
 
 call :log_success "CEF解压完成: %CEF_DIR%\%CEF_BINARY_NAME%"
 
