@@ -65,7 +65,7 @@ if(NOT CEF_ROOT_DIR)
 endif()
 
 # 设置CEF路径
-set(CEF_INCLUDE_PATH "${CEF_ROOT_DIR}/include")
+set(CEF_INCLUDE_PATH "${CEF_ROOT_DIR}")
 set(CEF_BINARY_DIR "${CEF_ROOT_DIR}")
 
 # 平台特定的库和资源路径
@@ -152,7 +152,7 @@ if(DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{CI})
         
         # 检查多个可能的路径
         set(POSSIBLE_PATHS
-            "${CEF_INCLUDE_PATH}/${header_name}"
+            "${CEF_INCLUDE_PATH}/include/${header_name}"
             "${CEF_ROOT_DIR}/include/${header_name}"
             "${CEF_ROOT_DIR}/${header_name}"
         )
