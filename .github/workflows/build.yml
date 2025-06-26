@@ -418,8 +418,15 @@ jobs:
           exit /b 1
         ) else (
           echo "✅ CMake配置成功"
-          echo "CMAKE_CONFIG_SUCCESS=true" >> %GITHUB_ENV%
-          echo "CMAKE_BUILD_DIR=%CD%" >> %GITHUB_ENV%
+          
+          REM 正确设置环境变量给后续步骤
+          echo CMAKE_CONFIG_SUCCESS=true>>%GITHUB_ENV%
+          echo CMAKE_BUILD_DIR=%CD%>>%GITHUB_ENV%
+          
+          echo "--- 环境变量设置验证 ---"
+          echo "设置CMAKE_CONFIG_SUCCESS=true"
+          echo "设置CMAKE_BUILD_DIR=%CD%"
+          
           echo "--- 配置验证 ---"
           echo "解决方案文件:"
           dir *.sln /b || echo "未找到解决方案文件"
@@ -431,15 +438,22 @@ jobs:
     - name: Build Project  
       shell: cmd
       run: |
+        setlocal enabledelayedexpansion
         echo "=== 项目编译阶段 ==="
-        echo "CMAKE_CONFIG_SUCCESS: %CMAKE_CONFIG_SUCCESS%"
-        echo "CMAKE_BUILD_DIR: %CMAKE_BUILD_DIR%"
+        
+        echo "--- 环境变量读取验证 ---"
+        echo "CMAKE_CONFIG_SUCCESS环境变量: '%CMAKE_CONFIG_SUCCESS%'"
+        echo "CMAKE_BUILD_DIR环境变量: '%CMAKE_BUILD_DIR%'"
         
         REM 验证前置条件
         if not "%CMAKE_CONFIG_SUCCESS%"=="true" (
           echo "❌ CMake配置未成功，无法继续构建"
-          echo "请检查CMake配置步骤是否成功完成"
+          echo "CMAKE_CONFIG_SUCCESS='%CMAKE_CONFIG_SUCCESS%' (应该是'true')"
+          echo "这表明环境变量传递失败或CMake配置步骤未成功"
+          echo "请检查前一步骤的环境变量设置"
           exit /b 1
+        ) else (
+          echo "✅ 环境变量验证通过：CMAKE_CONFIG_SUCCESS=true"
         )
         
         if not exist "%CMAKE_BUILD_DIR%" (
@@ -566,11 +580,14 @@ jobs:
           )
           
           echo "🎉 Windows ${{ matrix.arch }}位构建完成！"
-          echo "BUILD_SUCCESS=true" >> %GITHUB_ENV%
+          
+          REM 正确设置构建成功环境变量
+          echo BUILD_SUCCESS=true>>%GITHUB_ENV%
           echo "--- 构建成功总结 ---"
           echo "✅ 编译成功完成"
           echo "✅ 可执行文件应已生成"
           echo "✅ 库文件已编译"
+          echo "✅ 设置BUILD_SUCCESS=true"
           echo "🎯 准备进行构建验证..."
         )
 
@@ -604,7 +621,8 @@ jobs:
         :found_exe
         if "%FOUND_EXE%"=="true" (
           echo "🎉 构建验证成功！"
-          echo "BUILD_SUCCESS=true" >> %GITHUB_ENV%
+          echo BUILD_SUCCESS=true>>%GITHUB_ENV%
+          echo "✅ 设置BUILD_SUCCESS=true以供后续步骤使用"
         ) else (
           echo "❌ 构建验证失败 - 未找到可执行文件"
           echo "--- 详细诊断 ---"
@@ -620,7 +638,8 @@ jobs:
           ) else (
             echo "build目录不存在！"
           )
-          echo "BUILD_SUCCESS=false" >> %GITHUB_ENV%
+          echo BUILD_SUCCESS=false>>%GITHUB_ENV%
+          echo "✅ 设置BUILD_SUCCESS=false"
           exit 1
         )
 
