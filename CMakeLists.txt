@@ -80,91 +80,173 @@ endif()
 
 find_package(CEF REQUIRED)
 
-# 如果CEF wrapper库不存在但有源码，则编译wrapper库
+# CEF Wrapper库编译 - 修复链接错误的关键逻辑
 message(STATUS "=== CEF Wrapper库编译检查 ===")
 message(STATUS "CEF_FOUND: ${CEF_FOUND}")
 message(STATUS "CEF_WRAPPER_SOURCE_DIR: ${CEF_WRAPPER_SOURCE_DIR}")
 message(STATUS "CEF_WRAPPER_LIBRARY: ${CEF_WRAPPER_LIBRARY}")
+message(STATUS "CEF_ROOT_DIR: ${CEF_ROOT_DIR}")
+message(STATUS "CEF_BINARY_NAME: ${CEF_BINARY_NAME}")
 
-if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
-    message(STATUS "编译CEF Wrapper库从源码: ${CEF_WRAPPER_SOURCE_DIR}")
-elseif(CEF_FOUND AND NOT CEF_WRAPPER_SOURCE_DIR)
-    # 尝试手动查找wrapper源码目录
+# 强化的CEF Wrapper源码目录查找逻辑
+if(CEF_FOUND)
+    message(STATUS "开始查找CEF Wrapper源码目录...")
+    
+    # 扩展的wrapper源码搜索路径
     set(POSSIBLE_WRAPPER_DIRS
         "${CEF_ROOT_DIR}/libcef_dll"
-        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/libcef_dll"
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/libcef_dll"  
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/${CEF_BINARY_NAME}/libcef_dll"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/libcef_dll"
     )
     
+    # 重置wrapper源码目录变量以确保重新查找
+    set(CEF_WRAPPER_SOURCE_DIR "")
+    
     foreach(wrapper_dir ${POSSIBLE_WRAPPER_DIRS})
+        message(STATUS "检查wrapper目录: ${wrapper_dir}")
         if(EXISTS "${wrapper_dir}" AND NOT CEF_WRAPPER_SOURCE_DIR)
-            set(CEF_WRAPPER_SOURCE_DIR "${wrapper_dir}")
-            message(STATUS "手动找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR}")
-            break()
+            # 验证目录中确实包含源码文件
+            file(GLOB WRAPPER_CC_FILES "${wrapper_dir}/*.cc")
+            if(WRAPPER_CC_FILES)
+                set(CEF_WRAPPER_SOURCE_DIR "${wrapper_dir}")
+                list(LENGTH WRAPPER_CC_FILES CC_COUNT)
+                message(STATUS "✅ 找到CEF Wrapper源码: ${CEF_WRAPPER_SOURCE_DIR} (${CC_COUNT}个.cc文件)")
+                break()
+            else()
+                message(STATUS "⚠️ 目录存在但无源码文件: ${wrapper_dir}")
+            endif()
         endif()
     endforeach()
+    
+    # 如果还是找不到，尝试递归搜索
+    if(NOT CEF_WRAPPER_SOURCE_DIR)
+        message(STATUS "执行递归搜索CEF Wrapper源码...")
+        file(GLOB_RECURSE LIBCEF_DLL_DIRS "${CEF_ROOT_DIR}/*/libcef_dll")
+        foreach(potential_dir ${LIBCEF_DLL_DIRS})
+            if(IS_DIRECTORY "${potential_dir}")
+                file(GLOB CC_FILES "${potential_dir}/*.cc")
+                if(CC_FILES)
+                    set(CEF_WRAPPER_SOURCE_DIR "${potential_dir}")
+                    list(LENGTH CC_FILES CC_COUNT)
+                    message(STATUS "🔍 递归搜索找到wrapper源码: ${CEF_WRAPPER_SOURCE_DIR} (${CC_COUNT}个.cc文件)")
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
 endif()
 
-if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR AND NOT CEF_WRAPPER_LIBRARY)
-    message(STATUS "开始编译CEF Wrapper库: ${CEF_WRAPPER_SOURCE_DIR}")
+# 强制编译CEF Wrapper库 - 无论是否找到预编译版本
+if(CEF_FOUND AND CEF_WRAPPER_SOURCE_DIR)
+    message(STATUS "⚡ 强制编译CEF Wrapper库: ${CEF_WRAPPER_SOURCE_DIR}")
     
-    # 收集wrapper库源文件
+    # 收集wrapper库源文件 - 使用更精确的搜索
     file(GLOB_RECURSE CEF_WRAPPER_SOURCES
         "${CEF_WRAPPER_SOURCE_DIR}/*.cc"
         "${CEF_WRAPPER_SOURCE_DIR}/*.cpp"
     )
     
+    # 显示找到的源码文件
+    list(LENGTH CEF_WRAPPER_SOURCES SOURCE_COUNT)
+    message(STATUS "找到 ${SOURCE_COUNT} 个CEF Wrapper源码文件")
+    
     if(CEF_WRAPPER_SOURCES)
-        # 创建wrapper静态库
-        add_library(cef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
+        # 显示部分源码文件用于验证
+        math(EXPR SHOW_COUNT "5")
+        if(SOURCE_COUNT LESS SHOW_COUNT)
+            set(SHOW_COUNT ${SOURCE_COUNT})
+        endif()
         
-        # 设置wrapper库的include目录
+        message(STATUS "源码文件示例:")
+        math(EXPR SHOW_LIMIT "${SHOW_COUNT} - 1")
+        foreach(i RANGE 0 ${SHOW_LIMIT})
+            list(GET CEF_WRAPPER_SOURCES ${i} SOURCE_FILE)
+            get_filename_component(SOURCE_NAME "${SOURCE_FILE}" NAME)
+            message(STATUS "  ${SOURCE_NAME}")
+        endforeach()
+        
+        # 强制创建wrapper静态库目标
+        add_library(cef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
+        message(STATUS "✅ 创建cef_dll_wrapper静态库目标")
+        
+        # 设置wrapper库的include目录 - 包含所有可能的路径
         target_include_directories(cef_dll_wrapper PRIVATE
             ${CEF_INCLUDE_PATH}
             ${CEF_INCLUDE_PATH}/include
+            ${CEF_ROOT_DIR}/include
+            ${CEF_ROOT_DIR}
         )
+        message(STATUS "✅ 配置cef_dll_wrapper包含目录")
         
         # 设置编译定义 - CEF wrapper需要的所有定义
         target_compile_definitions(cef_dll_wrapper PRIVATE
-            -DUSING_CEF_SHARED
-            -DNOMINMAX
-            -DWIN32_LEAN_AND_MEAN
-            -D_CRT_SECURE_NO_WARNINGS
-            -D_SCL_SECURE_NO_WARNINGS
-            -DWRAPPING_CEF_SHARED
+            USING_CEF_SHARED
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+            _CRT_SECURE_NO_WARNINGS
+            _SCL_SECURE_NO_WARNINGS
+            WRAPPING_CEF_SHARED
         )
         
         # 平台特定设置
         if(WIN32)
             target_compile_definitions(cef_dll_wrapper PRIVATE
-                -DWIN32
-                -D_WINDOWS
-                -DUNICODE
-                -D_UNICODE
+                WIN32
+                _WINDOWS
+                UNICODE
+                _UNICODE
             )
+            message(STATUS "✅ 配置Windows特定定义")
             
             # 32位系统特殊处理
             if(CMAKE_SIZEOF_VOID_P EQUAL 4)
                 target_compile_definitions(cef_dll_wrapper PRIVATE
-                    -DCEF_32BIT_BUILD
+                    CEF_32BIT_BUILD
                 )
+                message(STATUS "✅ 启用32位CEF构建优化")
             endif()
         elseif(APPLE)
             target_compile_definitions(cef_dll_wrapper PRIVATE
-                -DMACOSX
+                MACOSX
             )
+            message(STATUS "✅ 配置macOS特定定义")
         elseif(UNIX)
             target_compile_definitions(cef_dll_wrapper PRIVATE
-                -DLINUX
+                LINUX
             )
+            message(STATUS "✅ 配置Linux特定定义")
         endif()
         
-        # 将编译的wrapper库添加到CEF_LIBRARIES
-        list(APPEND CEF_LIBRARIES cef_dll_wrapper)
+        # 确保wrapper库链接到正确的位置
+        set_target_properties(cef_dll_wrapper PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        )
         
-        message(STATUS "CEF Wrapper库编译配置完成")
+        # 强制将编译的wrapper库添加到CEF_LIBRARIES - 确保链接顺序正确
+        if(CEF_LIBRARIES)
+            # 将wrapper库插入到列表开头，确保正确的链接顺序
+            list(INSERT CEF_LIBRARIES 0 cef_dll_wrapper)
+        else()
+            list(APPEND CEF_LIBRARIES cef_dll_wrapper)
+        endif()
+        
+        message(STATUS "🎉 CEF Wrapper库编译配置完成！")
+        message(STATUS "更新后的CEF_LIBRARIES: ${CEF_LIBRARIES}")
+        
+        # 验证目标已创建
+        if(TARGET cef_dll_wrapper)
+            message(STATUS "✅ cef_dll_wrapper目标验证成功")
+        else()
+            message(FATAL_ERROR "❌ cef_dll_wrapper目标创建失败！")
+        endif()
     else()
-        message(WARNING "CEF Wrapper源码目录为空: ${CEF_WRAPPER_SOURCE_DIR}")
+        message(FATAL_ERROR "❌ CEF Wrapper源码目录为空或无效: ${CEF_WRAPPER_SOURCE_DIR}")
     endif()
+else()
+    message(WARNING "⚠️ 跳过CEF Wrapper编译 - CEF_FOUND: ${CEF_FOUND}, CEF_WRAPPER_SOURCE_DIR: ${CEF_WRAPPER_SOURCE_DIR}")
 endif()
 
 # 包含目录
@@ -305,9 +387,10 @@ target_link_libraries(${PROJECT_NAME}
     qhotkey
 )
 
-# CEF库链接 - 关键的链接顺序修复（包含fallback支持）
+# CEF库链接 - 修复LNK2019的关键逻辑，确保wrapper库正确链接
 if(CEF_FOUND AND CEF_LIBRARIES)
-    message(STATUS "链接CEF库列表: ${CEF_LIBRARIES}")
+    message(STATUS "🔗 开始CEF库链接配置...")
+    message(STATUS "当前CEF库列表: ${CEF_LIBRARIES}")
     
     # 检查是否为fallback模式
     if(CEF_LIBRARIES STREQUAL "# CEF库将在链接时自动发现")
@@ -315,56 +398,85 @@ if(CEF_FOUND AND CEF_LIBRARIES)
         # 在fallback模式下，跳过手动链接，让FindCEF.cmake处理
     else()
         message(STATUS "✅ 使用标准CEF库链接模式")
-    endif()
-    
-    # Windows特殊处理：确保正确的链接顺序
-    if(WIN32 AND NOT (CEF_LIBRARIES STREQUAL "# CEF库将在链接时自动发现"))
-        # 分离CEF主库和wrapper库（仅在非fallback模式）
-        set(CEF_MAIN_LIBS)
-        set(CEF_WRAPPER_LIBS)
         
-        foreach(cef_lib ${CEF_LIBRARIES})
-            get_filename_component(lib_name "${cef_lib}" NAME_WE)
-            if(lib_name MATCHES "^(lib)?cef$")
-                list(APPEND CEF_MAIN_LIBS "${cef_lib}")
-                message(STATUS "✓ CEF主库: ${cef_lib}")
-            elseif(lib_name MATCHES "wrapper")
-                list(APPEND CEF_WRAPPER_LIBS "${cef_lib}")
-                message(STATUS "✓ CEF Wrapper库: ${cef_lib}")
+        # 特殊处理：确保正确的链接顺序修复LNK2019错误
+        if(WIN32)
+            message(STATUS "=== Windows CEF库链接顺序优化 ===")
+            
+            # 分离不同类型的CEF库
+            set(CEF_WRAPPER_TARGETS)  # CMake目标
+            set(CEF_MAIN_LIBS)        # 文件路径
+            set(CEF_OTHER_LIBS)       # 其他库
+            
+            foreach(cef_lib ${CEF_LIBRARIES})
+                # 检查是否为CMake目标
+                if(TARGET ${cef_lib})
+                    message(STATUS "🎯 发现CMake目标: ${cef_lib}")
+                    list(APPEND CEF_WRAPPER_TARGETS "${cef_lib}")
+                else()
+                    get_filename_component(lib_name "${cef_lib}" NAME_WE)
+                    if(lib_name MATCHES "^(lib)?cef$")
+                        list(APPEND CEF_MAIN_LIBS "${cef_lib}")
+                        message(STATUS "📚 CEF主库: ${cef_lib}")
+                    else()
+                        list(APPEND CEF_OTHER_LIBS "${cef_lib}")
+                        message(STATUS "📦 其他CEF库: ${cef_lib}")
+                    endif()
+                endif()
+            endforeach()
+            
+            # 正确的链接顺序：Wrapper目标 -> 主库 -> 其他库
+            # 1. 首先链接CEF Wrapper目标（最重要，解决LNK2019）
+            foreach(wrapper_target ${CEF_WRAPPER_TARGETS})
+                if(TARGET ${wrapper_target})
+                    target_link_libraries(${PROJECT_NAME} ${wrapper_target})
+                    message(STATUS "🎯 链接CEF Wrapper目标: ${wrapper_target}")
+                else()
+                    message(ERROR "❌ CEF Wrapper目标不存在: ${wrapper_target}")
+                endif()
+            endforeach()
+            
+            # 2. 然后链接CEF主库
+            foreach(main_lib ${CEF_MAIN_LIBS})
+                if(EXISTS "${main_lib}")
+                    target_link_libraries(${PROJECT_NAME} "${main_lib}")
+                    message(STATUS "📚 链接CEF主库: ${main_lib}")
+                else()
+                    message(WARNING "⚠️ CEF主库文件不存在: ${main_lib}")
+                endif()
+            endforeach()
+            
+            # 3. 最后链接其他库
+            foreach(other_lib ${CEF_OTHER_LIBS})
+                if(EXISTS "${other_lib}")
+                    target_link_libraries(${PROJECT_NAME} "${other_lib}")
+                    message(STATUS "📦 链接其他CEF库: ${other_lib}")
+                else()
+                    message(WARNING "⚠️ 其他CEF库文件不存在: ${other_lib}")
+                endif()
+            endforeach()
+            
+            # 验证关键目标已链接
+            if(CEF_WRAPPER_TARGETS)
+                message(STATUS "✅ CEF Wrapper目标链接完成，应解决LNK2019错误")
             else()
-                list(APPEND CEF_MAIN_LIBS "${cef_lib}")
-                message(STATUS "✓ 其他CEF库: ${cef_lib}")
+                message(ERROR "❌ 未找到CEF Wrapper目标！这将导致LNK2019错误。")
             endif()
-        endforeach()
-        
-        # 正确的链接顺序：先链接主库，再链接wrapper库
-        foreach(main_lib ${CEF_MAIN_LIBS})
-            if(EXISTS "${main_lib}")
-                target_link_libraries(${PROJECT_NAME} "${main_lib}")
-                message(STATUS "✅ 已链接CEF主库: ${main_lib}")
-            else()
-                message(WARNING "⚠️ CEF主库文件不存在: ${main_lib}")
-            endif()
-        endforeach()
-        
-        foreach(wrapper_lib ${CEF_WRAPPER_LIBS})
-            if(EXISTS "${wrapper_lib}")
-                target_link_libraries(${PROJECT_NAME} "${wrapper_lib}")
-                message(STATUS "✅ 已链接CEF Wrapper库: ${wrapper_lib}")
-            else()
-                message(STATUS "ℹ️ CEF Wrapper库不存在（将从源码编译）: ${wrapper_lib}")
-            endif()
-        endforeach()
-    else()
-        # 非Windows平台的标准链接
-        foreach(cef_lib ${CEF_LIBRARIES})
-            if(EXISTS "${cef_lib}")
-                target_link_libraries(${PROJECT_NAME} "${cef_lib}")
-                message(STATUS "✅ 已链接CEF库: ${cef_lib}")
-            else()
-                message(WARNING "⚠️ CEF库文件不存在: ${cef_lib}")
-            endif()
-        endforeach()
+        else()
+            # 非Windows平台的标准链接
+            message(STATUS "=== 非Windows平台CEF库链接 ===")
+            foreach(cef_lib ${CEF_LIBRARIES})
+                if(TARGET ${cef_lib})
+                    target_link_libraries(${PROJECT_NAME} ${cef_lib})
+                    message(STATUS "🎯 链接CEF目标: ${cef_lib}")
+                elseif(EXISTS "${cef_lib}")
+                    target_link_libraries(${PROJECT_NAME} "${cef_lib}")
+                    message(STATUS "📚 链接CEF库文件: ${cef_lib}")
+                else()
+                    message(WARNING "⚠️ CEF库不存在: ${cef_lib}")
+                endif()
+            endforeach()
+        endif()
     endif()
 else()
     message(WARNING "⚠️ CEF库列表为空，尝试手动查找和链接...")
