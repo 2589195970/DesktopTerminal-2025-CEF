@@ -252,3 +252,118 @@ CMakeLists.txt                  # 更新源文件路径引用
 **下一步计划：** 
 ---
 ```
+
+## 2025-01-XX - PowerShell字符串终止符错误修复记录
+
+### 🐛 问题描述
+GitHub Actions中Windows构建步骤反复出现PowerShell错误：
+```
+The string is missing the terminator: ".
++ CategoryInfo          : ParserError: (:) [], ParseException
++ FullyQualifiedErrorId : TerminatorExpectedAtEndOfString
+```
+
+### 🔍 错误分析
+**根本原因：**
+1. GitHub Actions YAML模板变量替换(`${{ matrix.arch }}`)与PowerShell字符串解析冲突
+2. PowerShell 5.1在GitHub Actions环境中对管道操作和复杂参数解析异常
+3. 多层引号嵌套和字符串转义问题
+
+**错误位置：** Package Windows Build步骤中的BUILD_INFO.txt生成代码
+
+### 🔧 尝试的修复方案
+
+#### 方案1：修改编码参数 ❌
+```powershell
+# 尝试：-Encoding UTF8 改为 -Encoding utf8
+"Commit: $commitSha" | Out-File "$artifactPath\BUILD_INFO.txt" -Append -Encoding utf8
+```
+**结果：** 失败，问题不在编码参数
+
+#### 方案2：使用Write-Output ❌ 
+```powershell
+# 尝试：使用Write-Output替代直接字符串
+Write-Output "Commit: $commitSha" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
+```
+**结果：** 失败，问题仍然存在
+
+#### 方案3：移除复杂参数 ❌
+```powershell
+# 尝试：移除-FilePath和-Encoding参数
+"Commit: $commitSha" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
+```
+**结果：** 失败，char:62位置仍报错
+
+#### 方案4：HERE-String语法 ❌
+```powershell
+# 尝试：使用HERE-String
+$buildInfoContent = @"
+DesktopTerminal-CEF Build Information
+"@
+```
+**结果：** YAML语法错误，HERE-String与YAML冲突
+
+### ✅ 最终解决方案
+
+#### 方案5：字符串拼接法 ✅
+```powershell
+# 成功方案：逐行拼接字符串，避免管道操作
+$buildInfoContent = "DesktopTerminal-CEF Build Information`r`n"
+$buildInfoContent += "====================================`r`n"
+$buildInfoContent += "Architecture: $arch`r`n"
+$buildInfoContent += "Platform: $platform`r`n"  
+$buildInfoContent += "CEF Version: $cefVersion`r`n"
+$buildInfoContent += "Qt Version: $qtVersion`r`n"
+$buildInfoContent += "Build Type: $buildType`r`n"
+$buildInfoContent += "Build Date: $buildDate`r`n"
+$buildInfoContent += "Commit: $commitSha`r`n"
+
+# 单次写入，避免-Append参数
+$buildInfoContent | Set-Content -Path "$artifactPath\BUILD_INFO.txt"
+```
+
+### 📊 修复详情
+- **提交哈希：** `ac28a03`
+- **修复时间：** 2025-01-XX
+- **修改文件：** `.github/workflows/build.yml`
+- **核心改进：**
+  1. 使用字符串拼接替代管道操作
+  2. 显式换行符`\`r\`n`确保兼容性
+  3. 单次`Set-Content`调用避免复杂参数
+  4. 移除所有可能引起解析冲突的语法
+
+### 🎯 关键经验教训
+1. **GitHub Actions + PowerShell 5.1 组合极其敏感**
+2. **避免复杂的管道操作和多参数cmdlet调用**
+3. **字符串拼接比管道操作更可靠**
+4. **YAML模板变量替换可能破坏PowerShell字符串完整性**
+5. **问题反复出现时要深入分析环境特殊性，不要只看表面语法**
+
+### 🚫 避免的陷阱
+- ❌ 在GitHub Actions YAML中使用PowerShell HERE-String
+- ❌ 多次使用`Out-File -Append`
+- ❌ 复杂的参数组合如`-FilePath -Encoding -Append`
+- ❌ 假设本地PowerShell行为与GitHub Actions一致
+
+### ✅ 推荐做法
+- ✅ 使用字符串拼接构建多行内容
+- ✅ 单次文件写入操作
+- ✅ 最简化的cmdlet参数
+- ✅ 显式换行符处理
+
+---
+
+## 其他构建问题记录
+
+### CEF库链接问题
+- **状态：** 进行中
+- **症状：** LNK2019未解析的外部符号错误
+- **当前方案：** 多架构CEF缓存和验证机制
+
+### Qt5架构兼容性
+- **状态：** 已解决
+- **解决方案：** 使用aqtinstall动态检查可用架构
+
+---
+
+*最后更新：2025-01-XX*
