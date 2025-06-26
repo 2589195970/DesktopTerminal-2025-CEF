@@ -714,7 +714,7 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Create version info using array join to avoid backtick issues
+        # Create version info using secure string concatenation
         $arch = "${{ matrix.arch }}"
         $platform = "${{ matrix.name }}"
         $cefVersion = "${{ matrix.cef_version }}"
@@ -723,19 +723,20 @@ jobs:
         $commitSha = "${{ github.sha }}"
         $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
         
-        $buildInfoLines = @(
-          "DesktopTerminal-CEF Build Information",
-          "====================================",
-          "Architecture: $arch",
-          "Platform: $platform", 
-          "CEF Version: $cefVersion",
-          "Qt Version: $qtVersion",
-          "Build Type: $buildType",
-          "Build Date: $buildDate",
-          "Commit: $commitSha"
-        )
-        $buildInfo = $buildInfoLines -join [Environment]::NewLine
-        Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value $buildInfo
+        # Create build info content line by line to avoid string terminator issues
+        $buildInfoContent = @()
+        $buildInfoContent += "DesktopTerminal-CEF Build Information"
+        $buildInfoContent += "===================================="
+        $buildInfoContent += "Architecture: $arch"
+        $buildInfoContent += "Platform: $platform"
+        $buildInfoContent += "CEF Version: $cefVersion"
+        $buildInfoContent += "Qt Version: $qtVersion"
+        $buildInfoContent += "Build Type: $buildType"
+        $buildInfoContent += "Build Date: $buildDate"
+        $buildInfoContent += "Commit: $commitSha"
+        
+        # Write each line separately to avoid encoding issues
+        $buildInfoContent | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Encoding utf8
 
     - name: Create Windows Installer
       shell: cmd
