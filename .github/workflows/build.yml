@@ -714,18 +714,16 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Create version info using here-string to avoid quoting issues
-        $buildInfo = @"
-DesktopTerminal-CEF Build Information
-====================================
-Architecture: ${{ matrix.arch }}
-Platform: ${{ matrix.name }}
-CEF Version: ${{ matrix.cef_version }}
-Qt Version: ${{ env.QT_VERSION }}
-Build Type: ${{ env.BUILD_TYPE }}
-Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
-Commit: ${{ github.sha }}
-"@
+        # Create version info using escaped strings to avoid YAML indentation issues
+        $buildInfo = "DesktopTerminal-CEF Build Information`r`n"
+        $buildInfo += "====================================`r`n"
+        $buildInfo += "Architecture: ${{ matrix.arch }}`r`n"
+        $buildInfo += "Platform: ${{ matrix.name }}`r`n"
+        $buildInfo += "CEF Version: ${{ matrix.cef_version }}`r`n"
+        $buildInfo += "Qt Version: ${{ env.QT_VERSION }}`r`n"
+        $buildInfo += "Build Type: ${{ env.BUILD_TYPE }}`r`n"
+        $buildInfo += "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`r`n"
+        $buildInfo += "Commit: ${{ github.sha }}"
         Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value $buildInfo
 
     - name: Create Windows Installer
