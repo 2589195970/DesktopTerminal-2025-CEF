@@ -1204,5 +1204,3 @@ jobs:
           1. 下载对应平台的包
           2. 解压到目标目录
           3. 运行主程序即可开始使用
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
