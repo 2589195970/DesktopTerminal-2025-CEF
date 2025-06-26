@@ -702,17 +702,18 @@ jobs:
         }
         
         # Create version info
-        Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value @"
-        DesktopTerminal-CEF Build Information
-        ====================================
-        Architecture: ${{ matrix.arch }}
-        Platform: ${{ matrix.name }}
-        CEF Version: ${{ matrix.cef_version }}
-        Qt Version: ${{ env.QT_VERSION }}
-        Build Type: ${{ env.BUILD_TYPE }}
-        Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
-        Commit: ${{ github.sha }}
-        "@
+        $buildInfo = @"
+DesktopTerminal-CEF Build Information
+====================================
+Architecture: ${{ matrix.arch }}
+Platform: ${{ matrix.name }}
+CEF Version: ${{ matrix.cef_version }}
+Qt Version: ${{ env.QT_VERSION }}
+Build Type: ${{ env.BUILD_TYPE }}
+Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+Commit: ${{ github.sha }}
+"@
+        Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value $buildInfo
 
     - name: Create Windows Installer
       shell: cmd
