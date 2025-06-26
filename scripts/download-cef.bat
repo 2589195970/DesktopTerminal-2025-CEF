@@ -311,10 +311,13 @@ if "!CEF_FOUND!"=="true" (
                 for %%f in ("!LIB_CHECK[%%i]!") do set "CEF_LIB_SIZE=%%~zf"
                 set /a CEF_LIB_SIZE_MB=!CEF_LIB_SIZE!/1024/1024
                 
-                if !CEF_LIB_SIZE! gtr 1000000 (
+                REM CEF 75版本使用Import Library，大小通常为30-50KB，这是正常的
+                if !CEF_LIB_SIZE! gtr 10000 (
                     set "CEF_LIB_FOUND=true"
                     set "CEF_LIB_PATH=!LIB_CHECK[%%i]!"
-                    call :log_success "✅ 找到有效的CEF主库: !LIB_CHECK[%%i]! (!CEF_LIB_SIZE_MB! MB)"
+                    set /a CEF_LIB_SIZE_KB=!CEF_LIB_SIZE!/1024
+                    call :log_success "✅ 找到有效的CEF主库: !LIB_CHECK[%%i]! (!CEF_LIB_SIZE_KB! KB)"
+                    call :log_info "注意：CEF 75使用Import Library，文件大小30-50KB是正常的"
                 ) else (
                     call :log_warning "⚠️ 文件太小，可能损坏: !LIB_CHECK[%%i]! (!CEF_LIB_SIZE! bytes)"
                 )
@@ -337,11 +340,11 @@ if "!CEF_FOUND!"=="true" (
                 )
                 
                 if "!LIB_NAME!"=="libcef" (
-                    if !LIB_SIZE! gtr 1000000 (
+                    if !LIB_SIZE! gtr 10000 (
                         set "CEF_LIB_FOUND=true"
                         set "CEF_LIB_PATH=%%f"
-                        set /a CEF_LIB_SIZE_MB=!LIB_SIZE!/1024/1024
-                        call :log_success "✅ 深度搜索找到CEF主库: %%f (!CEF_LIB_SIZE_MB! MB)"
+                        set /a CEF_LIB_SIZE_KB=!LIB_SIZE!/1024
+                        call :log_success "✅ 深度搜索找到CEF主库: %%f (!CEF_LIB_SIZE_KB! KB)"
                     )
                 )
             )
@@ -416,7 +419,8 @@ if "!CEF_FOUND!"=="true" (
         call :log_success "🎉 CEF库验证基本通过！应该可以成功编译。"
         call :log_info "主要文件位置:"
         call :log_info "  头文件: !CEF_VALID_PATH!"
-        call :log_info "  主库: !CEF_LIB_PATH! (!CEF_LIB_SIZE_MB! MB)"
+        set /a CEF_LIB_SIZE_FINAL_KB=!CEF_LIB_SIZE!/1024
+        call :log_info "  主库: !CEF_LIB_PATH! (!CEF_LIB_SIZE_FINAL_KB! KB - Import Library)"
     ) else (
         call :log_error "💥 CEF库验证失败！这将导致编译时出现LNK2019错误。"
         call :log_error ""
