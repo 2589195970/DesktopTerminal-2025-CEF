@@ -316,17 +316,13 @@ jobs:
             )
             :break_libs
             echo "--- 目录结构 (前20个文件) ---"
-            if exist "tree" (
-              tree "third_party\cef" /F
-            ) else (
-              set /a dir_count=0
-              for /f "tokens=*" %%i in ('dir "third_party\cef" /s /b') do (
-                echo %%i
-                set /a dir_count+=1
-                if !dir_count! geq 20 goto :break_dirs
-              )
-              :break_dirs
+            set /a dir_count=0
+            for /f "tokens=*" %%i in ('dir "third_party\cef" /s /b') do (
+              echo %%i
+              set /a dir_count+=1
+              if !dir_count! geq 20 goto :break_dirs
             )
+            :break_dirs
           )
           exit /b 1
         ) else (
