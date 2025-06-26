@@ -22,20 +22,15 @@ param(
     [string]$CommitSha
 )
 
-# Generate build information content
-$buildInfo = @"
-DesktopTerminal-CEF Build Information
-====================================
-Architecture: $Architecture
-Platform: $Platform
-CEF Version: $CefVersion
-Qt Version: $QtVersion
-Build Type: $BuildType
-Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
-Commit: $CommitSha
-"@
-
-# Write to output file
-$buildInfo | Out-File -FilePath $OutputPath -Encoding UTF8
+# Generate build information using simple Write-Output commands
+Write-Output "DesktopTerminal-CEF Build Information" | Out-File -FilePath $OutputPath -Encoding UTF8
+Write-Output "====================================" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Architecture: $Architecture" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Platform: $Platform" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "CEF Version: $CefVersion" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Qt Version: $QtVersion" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Build Type: $BuildType" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
+Write-Output "Commit: $CommitSha" | Out-File -FilePath $OutputPath -Append -Encoding UTF8
 
 Write-Host "✅ 构建信息文件已生成: $OutputPath" 
