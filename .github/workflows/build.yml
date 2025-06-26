@@ -62,9 +62,10 @@ jobs:
       uses: actions/cache@v4
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-v8
+        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v6-stable
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-
+          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v6-
+          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-
 
     - name: Verify CEF Cache Status
       id: verify-cef-cache  
@@ -229,66 +230,53 @@ jobs:
         
         set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
         
+        REM 支持多种CEF目录结构的验证
+        echo "检查CEF目录结构的多种可能性..."
+        
         REM 检查关键CEF头文件
+        set "HEADER_FILES=cef_version.h cef_app.h cef_client.h"
         set "HEADERS_FOUND=0"
         
-        REM 检查cef_version.h
-        set "HEADER_FOUND=false"
-        if exist "third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h" (
-          echo "✓ 找到头文件: cef_version.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else if exist "third_party\cef\include\cef_version.h" (
-          echo "✓ 找到头文件: cef_version.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else (
-          echo "✗ 缺失头文件: cef_version.h"
-          set "VERIFICATION_FAILED=true"
+        for %%h in (!HEADER_FILES!) do (
+          set "HEADER_FOUND=false"
+          
+          REM 多路径检查头文件
+          set "HEADER_PATHS[1]=third_party\cef\!CEF_BINARY_NAME!\include\%%h"
+          set "HEADER_PATHS[2]=third_party\cef\include\%%h"
+          set "HEADER_PATHS[3]=third_party\cef\!CEF_BINARY_NAME!\%%h"
+          
+          for /l %%i in (1,1,3) do (
+            if "!HEADER_FOUND!"=="false" (
+              if exist "!HEADER_PATHS[%%i]!" (
+                echo "✓ 找到头文件: %%h at !HEADER_PATHS[%%i]!"
+                set "HEADER_FOUND=true"
+                set /a HEADERS_FOUND+=1
+              )
+            )
+          )
+          
+          if "!HEADER_FOUND!"=="false" (
+            echo "✗ 缺失头文件: %%h"
+            set "VERIFICATION_FAILED=true"
+          )
         )
         
-        REM 检查cef_app.h
-        set "HEADER_FOUND=false"
-        if exist "third_party\cef\!CEF_BINARY_NAME!\include\cef_app.h" (
-          echo "✓ 找到头文件: cef_app.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else if exist "third_party\cef\include\cef_app.h" (
-          echo "✓ 找到头文件: cef_app.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else (
-          echo "✗ 缺失头文件: cef_app.h"
-          set "VERIFICATION_FAILED=true"
-        )
-        
-        REM 检查cef_client.h
-        set "HEADER_FOUND=false"
-        if exist "third_party\cef\!CEF_BINARY_NAME!\include\cef_client.h" (
-          echo "✓ 找到头文件: cef_client.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else if exist "third_party\cef\include\cef_client.h" (
-          echo "✓ 找到头文件: cef_client.h"
-          set "HEADER_FOUND=true"
-          set /a HEADERS_FOUND+=1
-        ) else (
-          echo "✗ 缺失头文件: cef_client.h"
-          set "VERIFICATION_FAILED=true"
-        )
-        
-        REM 检查CEF库文件
+        REM 检查CEF库文件（更灵活的路径）
         set "LIB_FOUND=false"
-        if exist "third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib" (
-          echo "✓ 找到CEF库文件: third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib"
-          set "LIB_FOUND=true"
-        ) else if exist "third_party\cef\Release\libcef.lib" (
-          echo "✓ 找到CEF库文件: third_party\cef\Release\libcef.lib"
-          set "LIB_FOUND=true"
-        ) else if exist "third_party\cef\!CEF_BINARY_NAME!\lib\libcef.lib" (
-          echo "✓ 找到CEF库文件: third_party\cef\!CEF_BINARY_NAME!\lib\libcef.lib"
-          set "LIB_FOUND=true"
-        ) else (
+        set "LIB_PATHS[1]=third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib"
+        set "LIB_PATHS[2]=third_party\cef\Release\libcef.lib"
+        set "LIB_PATHS[3]=third_party\cef\!CEF_BINARY_NAME!\lib\libcef.lib"
+        
+        for /l %%i in (1,1,3) do (
+          if "!LIB_FOUND!"=="false" (
+            if exist "!LIB_PATHS[%%i]!" (
+              echo "✓ 找到CEF库文件: !LIB_PATHS[%%i]!"
+              set "LIB_FOUND=true"
+            )
+          )
+        )
+        
+        if "!LIB_FOUND!"=="false" (
           echo "✗ 缺失CEF库文件(libcef.lib)"
           set "VERIFICATION_FAILED=true"
         )
@@ -299,30 +287,12 @@ jobs:
           echo "找到的头文件数量: !HEADERS_FOUND!/3"
           echo "CEF目录结构（用于诊断）:"
           if exist "third_party\cef" (
-            echo "--- CEF头文件 (前10个) ---"
-            set /a file_count=0
-            for /f "tokens=*" %%i in ('dir "third_party\cef" /s /b ^| findstr /i "\.h$" ^| findstr /i "cef"') do (
-              echo %%i
-              set /a file_count+=1
-              if !file_count! geq 10 goto :break_headers
-            )
-            :break_headers
-            echo "--- CEF库文件 (前5个) ---"
-            set /a lib_count=0
-            for /f "tokens=*" %%i in ('dir "third_party\cef" /s /b ^| findstr /i "\.lib$"') do (
-              echo %%i
-              set /a lib_count+=1
-              if !lib_count! geq 5 goto :break_libs
-            )
-            :break_libs
-            echo "--- 目录结构 (前20个文件) ---"
-            set /a dir_count=0
-            for /f "tokens=*" %%i in ('dir "third_party\cef" /s /b') do (
-              echo %%i
-              set /a dir_count+=1
-              if !dir_count! geq 20 goto :break_dirs
-            )
-            :break_dirs
+            echo "--- CEF头文件 ---"
+            dir "third_party\cef" /s /b | findstr /i "\.h$" | findstr /i "cef" | head -10
+            echo "--- CEF库文件 ---"  
+            dir "third_party\cef" /s /b | findstr /i "\.lib$" | head -5
+            echo "--- 目录结构 ---"
+            tree "third_party\cef" /F || dir "third_party\cef" /s /b | head -20
           )
           exit /b 1
         ) else (
@@ -473,15 +443,8 @@ jobs:
           echo "--- 配置验证 ---"
           echo "解决方案文件:"
           dir *.sln /b || echo "未找到解决方案文件"
-          echo "项目文件 (前5个):"
-          set /a proj_count=0
-          for /f "tokens=*" %%i in ('dir *.vcxproj /b 2^>nul') do (
-            echo %%i
-            set /a proj_count+=1
-            if !proj_count! geq 5 goto :break_projects
-          )
-          :break_projects
-          if !proj_count! equ 0 echo "未找到项目文件"
+          echo "项目文件:"
+          dir *.vcxproj /b | head -5 || echo "未找到项目文件"
           echo "🎯 准备执行构建步骤..."
         )
 
@@ -537,14 +500,8 @@ jobs:
         
         if exist "*.vcxproj" (
           echo "✓ 找到项目文件"
-          echo "项目文件列表 (前10个):"
-          set /a vcx_count=0
-          for /f "tokens=*" %%i in ('dir *.vcxproj /b 2^>nul') do (
-            echo %%i
-            set /a vcx_count+=1
-            if !vcx_count! geq 10 goto :break_vcx
-          )
-          :break_vcx
+          echo "项目文件列表:"
+          dir *.vcxproj /b | head -10
         ) else (
           echo "✗ 未找到项目文件"
           echo "❌ 这表明CMake配置可能未完全成功"
@@ -599,27 +556,8 @@ jobs:
           
           REM 检查中间文件
           echo "--- 中间文件检查 ---"
-          echo "目标文件 (前10个):"
-          set /a obj_count=0
-          for /f "tokens=*" %%i in ('dir /s /b *.obj 2^>nul') do (
-            echo %%i
-            set /a obj_count+=1
-            if !obj_count! geq 10 goto :break_obj
-          )
-          :break_obj
-          if !obj_count! equ 0 echo "未找到目标文件"
-          if !obj_count! geq 10 echo "..."
-          
-          echo "库文件 (前10个):"
-          set /a lib_count=0
-          for /f "tokens=*" %%i in ('dir /s /b *.lib 2^>nul') do (
-            echo %%i
-            set /a lib_count+=1
-            if !lib_count! geq 10 goto :break_lib_files
-          )
-          :break_lib_files
-          if !lib_count! equ 0 echo "未找到库文件"
-          if !lib_count! geq 10 echo "..."
+          dir /s /b *.obj | head -10 && echo "..." || echo "未找到目标文件"
+          dir /s /b *.lib | head -10 && echo "..." || echo "未找到库文件"
           
           echo "--- 错误总结 ---"
           echo "这很可能是CEF库链接问题导致的LNK2019错误"
@@ -776,7 +714,7 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Create version info using simple string concatenation to avoid YAML issues
+        # Create version info using array join to avoid backtick issues
         $arch = "${{ matrix.arch }}"
         $platform = "${{ matrix.name }}"
         $cefVersion = "${{ matrix.cef_version }}"
@@ -785,16 +723,18 @@ jobs:
         $commitSha = "${{ github.sha }}"
         $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
         
-        $buildInfo = "DesktopTerminal-CEF Build Information`n"
-        $buildInfo += "====================================`n"
-        $buildInfo += "Architecture: $arch`n"
-        $buildInfo += "Platform: $platform`n"
-        $buildInfo += "CEF Version: $cefVersion`n"
-        $buildInfo += "Qt Version: $qtVersion`n"
-        $buildInfo += "Build Type: $buildType`n"
-        $buildInfo += "Build Date: $buildDate`n"
-        $buildInfo += "Commit: $commitSha"
-        
+        $buildInfoLines = @(
+          "DesktopTerminal-CEF Build Information",
+          "====================================",
+          "Architecture: $arch",
+          "Platform: $platform", 
+          "CEF Version: $cefVersion",
+          "Qt Version: $qtVersion",
+          "Build Type: $buildType",
+          "Build Date: $buildDate",
+          "Commit: $commitSha"
+        )
+        $buildInfo = $buildInfoLines -join [Environment]::NewLine
         Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value $buildInfo
 
     - name: Create Windows Installer
@@ -863,6 +803,235 @@ jobs:
         path: Output/*.exe
         retention-days: 90
 
+  # Linux构建 - 暂时屏蔽，专注Windows平台修复
+  build-linux:
+    if: false  # 屏蔽Linux构建
+    runs-on: ubuntu-latest
+    name: Linux 64-bit
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          pkg-config \
+          libx11-dev \
+          libxss1 \
+          libnss3-dev \
+          libatk-bridge2.0-dev \
+          libdrm2 \
+          libxcomposite-dev \
+          libxdamage1 \
+          libxrandr2 \
+          libgbm1 \
+          libxkbcommon-dev \
+          libasound2-dev \
+          libxtst6 \
+          libxcomposite1 \
+          libxcursor1 \
+          libxi6
+
+    - name: Install Qt ${{ env.QT_VERSION }}
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        cache: true
+
+    - name: Cache CEF Linux
+      id: cache-cef-linux
+      uses: actions/cache@v3
+      with:
+        path: third_party/cef
+        key: cef-linux-x64-75.1.14-verified-v3
+        restore-keys: |
+          cef-linux-x64-75.1.14-verified-
+
+    - name: Verify CEF Cache Integrity (Linux)
+      id: verify-cef-cache-linux
+      run: |
+        echo "验证Linux CEF缓存完整性..."
+        CEF_VALID=false
+        CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
+        CEF_PLATFORM="linux64"
+        CEF_BINARY_NAME="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
+        
+        # 支持多种可能的CEF目录结构
+        CEF_CHECK_PATHS=(
+          "third_party/cef/${CEF_BINARY_NAME}/include/cef_version.h"
+          "third_party/cef/include/cef_version.h"
+          "third_party/cef/${CEF_BINARY_NAME}/cef_version.h"
+        )
+        
+        echo "检查CEF头文件的多个可能路径..."
+        
+        for CHECK_PATH in "${CEF_CHECK_PATHS[@]}"; do
+          echo "检查路径: $CHECK_PATH"
+          if [[ -f "$CHECK_PATH" ]]; then
+            echo "✓ CEF头文件验证成功: $CHECK_PATH"
+            CEF_VALID=true
+            break
+          fi
+        done
+        
+        if [[ "$CEF_VALID" == "false" ]]; then
+          echo "✗ CEF头文件在所有预期路径中都不存在，需要重新下载"
+          if [[ -d "third_party/cef" ]]; then
+            echo "显示当前CEF目录结构用于诊断:"
+            find third_party/cef -name "cef_version.h" -type f 2>/dev/null || echo "未找到任何cef_version.h文件"
+            echo "删除不完整的CEF缓存..."
+            rm -rf third_party/cef
+          fi
+        fi
+        
+        echo "cef-valid=$CEF_VALID" >> $GITHUB_OUTPUT
+
+    - name: Download CEF (Linux)
+      if: steps.cache-cef-linux.outputs.cache-hit != 'true' || steps.verify-cef-cache-linux.outputs.cef-valid != 'true'
+      run: |
+        echo "下载CEF for Linux x64..."
+        chmod +x scripts/download-cef.sh
+        scripts/download-cef.sh --platform=linux64 --force
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -G Ninja \
+          -DCMAKE_INSTALL_PREFIX=/usr/local
+
+    - name: Build Project
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Verify Build
+      run: |
+        if [ -f "build/bin/DesktopTerminal-CEF" ]; then
+          echo "✓ Main executable found"
+          ls -la build/bin/
+          file build/bin/DesktopTerminal-CEF
+        else
+          echo "✗ Main executable not found"
+          find build -name "*DesktopTerminal*" -type f
+          exit 1
+        fi
+
+    - name: Package Linux Build
+      run: |
+        mkdir -p artifacts/linux-x64
+        cp -r build/bin/* artifacts/linux-x64/
+        cp README.md todo.md artifacts/linux-x64/
+        
+        # Create build info
+        cat > artifacts/linux-x64/BUILD_INFO.txt << 'EOF'
+        DesktopTerminal-CEF Build Information
+        ====================================
+        Architecture: x64
+        Platform: Linux 64-bit
+        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
+        Qt Version: ${{ env.QT_VERSION }}
+        Build Type: ${{ env.BUILD_TYPE }}
+        Build Date: $(date -u)
+        Commit: ${{ github.sha }}
+        EOF
+
+    - name: Upload Linux Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DesktopTerminal-CEF-linux-x64
+        path: artifacts/linux-x64/
+        retention-days: 30
+
+  # macOS构建 - 暂时屏蔽，专注Windows平台修复
+  build-macos-disabled:
+    if: false  # 屏蔽macOS构建
+    runs-on: macos-12
+    name: macOS 64-bit (Disabled)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt ${{ env.QT_VERSION }}
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        cache: true
+
+    - name: Cache CEF macOS
+      id: cache-cef-macos
+      uses: actions/cache@v3
+      with:
+        path: third_party/cef
+        key: cef-macos-x64-75.1.14
+        restore-keys: |
+          cef-macos-x64-
+
+    - name: Download CEF
+      if: steps.cache-cef-macos.outputs.cache-hit != 'true'
+      run: |
+        chmod +x scripts/download-cef.sh
+        scripts/download-cef.sh --platform=macosx64
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.12
+
+    - name: Build Project
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Verify Build
+      run: |
+        if [ -f "build/bin/DesktopTerminal-CEF" ]; then
+          echo "✓ Main executable found"
+          ls -la build/bin/
+          file build/bin/DesktopTerminal-CEF
+        else
+          echo "✗ Main executable not found"
+          find build -name "*DesktopTerminal*" -type f
+          exit 1
+        fi
+
+    - name: Package macOS Build
+      run: |
+        mkdir -p artifacts/macos-x64
+        cp -r build/bin/* artifacts/macos-x64/
+        cp README.md todo.md artifacts/macos-x64/
+        
+        # Create build info
+        cat > artifacts/macos-x64/BUILD_INFO.txt << 'EOF'
+        DesktopTerminal-CEF Build Information
+        ====================================
+        Architecture: x64
+        Platform: macOS 64-bit
+        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
+        Qt Version: ${{ env.QT_VERSION }}
+        Build Type: ${{ env.BUILD_TYPE }}
+        Build Date: $(date -u)
+        Commit: ${{ github.sha }}
+        EOF
+
+    - name: Upload macOS Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DesktopTerminal-CEF-macos-x64
+        path: artifacts/macos-x64/
+        retention-days: 30
+
   # 代码质量和安全检查
   code-quality:
     runs-on: ubuntu-latest
@@ -918,6 +1087,7 @@ jobs:
       run: |
         echo "🔍 Verifying build scripts..."
         
+        # Check if scripts are executable
         if [ -x "scripts/build.sh" ]; then
           echo "✓ build.sh is executable"
         else
@@ -980,21 +1150,27 @@ jobs:
         echo "📦 Creating release packages..."
         
         # Windows 32-bit package
-        if [ -d "DesktopTerminal-CEF-windows-x86" ]; then
-          cd DesktopTerminal-CEF-windows-x86
-          zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip .
-          cd ..
-        fi
+        cd DesktopTerminal-CEF-windows-x86
+        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip .
+        cd ..
         
         # Windows 64-bit package  
-        if [ -d "DesktopTerminal-CEF-windows-x64" ]; then
-          cd DesktopTerminal-CEF-windows-x64
-          zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip .
-          cd ..
-        fi
+        cd DesktopTerminal-CEF-windows-x64
+        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip .
+        cd ..
+        
+        # macOS package
+        cd DesktopTerminal-CEF-macos-x64
+        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz .
+        cd ..
+        
+        # Linux package
+        cd DesktopTerminal-CEF-linux-x64
+        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz .
+        cd ..
         
         # Show created packages
-        ls -la *.zip || echo "No packages created"
+        ls -la *.zip *.tar.gz
 
     - name: Upload release assets
       uses: softprops/action-gh-release@v1
@@ -1002,20 +1178,27 @@ jobs:
         files: |
           DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip
           DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip
+          DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz
+          DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz
         body: |
           ## DesktopTerminal-CEF Release ${{ github.ref_name }}
           
           ### 📦 包含的平台
           - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
           - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)  
+          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 75 - 最大兼容性)
+          - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 75 - 最大兼容性)
           
           ### 🔧 主要特性
           - Qt5 + CEF集成的安全桌面终端
           - 完整的安全控制功能（键盘拦截、URL过滤、全屏锁定）
+          - 跨平台兼容性
           - 针对Windows 7 SP1 32位系统的特别优化
           
           ### 📋 系统要求
           - **Windows**: Windows 7 SP1 或更高版本
+          - **macOS**: macOS 10.12 或更高版本  
+          - **Linux**: Ubuntu 18.04 或等效发行版
           
           ### 🚀 快速开始
           1. 下载对应平台的包
