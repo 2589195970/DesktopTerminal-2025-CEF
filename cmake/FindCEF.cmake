@@ -110,65 +110,110 @@ if(WIN32)
         message(WARNING "CEF库目录不存在: ${CEF_LIBRARY_DIR}")
     endif()
     
-    # 首先尝试标准名称和路径 - 增强Windows搜索
-    message(STATUS "Windows CEF库搜索 - CEF_LIBRARY_DIR: ${CEF_LIBRARY_DIR}")
-    message(STATUS "Windows CEF库搜索 - CEF_ROOT_DIR: ${CEF_ROOT_DIR}")
-    find_library(CEF_LIBRARY
-        NAMES libcef cef
-        PATHS 
-            ${CEF_LIBRARY_DIR}
-            "${CEF_ROOT_DIR}/Release"
-            "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
-        NO_DEFAULT_PATH
+    # 增强的Windows CEF库搜索 - 支持多种目录结构和链接问题修复
+    message(STATUS "=== Windows CEF库详细搜索 ===")
+    message(STATUS "CEF_LIBRARY_DIR: ${CEF_LIBRARY_DIR}")
+    message(STATUS "CEF_ROOT_DIR: ${CEF_ROOT_DIR}")
+    message(STATUS "CEF_BINARY_NAME: ${CEF_BINARY_NAME}")
+    
+    # 优先搜索路径列表 - 确保正确的搜索顺序
+    set(CEF_SEARCH_PATHS
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"    # 标准CEF结构
+        "${CEF_ROOT_DIR}/Release"                       # 简化结构
+        "${CEF_LIBRARY_DIR}"                           # 配置的库目录
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"     # Debug构建
+        "${CEF_ROOT_DIR}/Debug"                        # 简化Debug
+        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/lib"       # 可选lib目录
+        "${CEF_ROOT_DIR}/lib"                          # 根lib目录
     )
     
-    if(CEF_LIBRARY)
-        message(STATUS "✓ 找到CEF主库: ${CEF_LIBRARY}")
-    else()
-        message(WARNING "✗ CEF主库未找到，搜索路径: ${CEF_LIBRARY_DIR}")
-        message(STATUS "尝试扩展搜索...")
-        message(STATUS "CEF_BINARY_NAME: ${CEF_BINARY_NAME}")
-        
-        # 尝试其他可能的路径和名称 - 优先搜索具体二进制目录
-        find_library(CEF_LIBRARY
-            NAMES libcef cef
-            PATHS 
-                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
-                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"
-                "${CEF_ROOT_DIR}/Release"
-                "${CEF_ROOT_DIR}/Debug"
-                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/lib"
-                "${CEF_ROOT_DIR}/lib"
-            NO_DEFAULT_PATH
-        )
-        
-        # 如果仍未找到，列出实际存在的库文件用于诊断
-        if(NOT CEF_LIBRARY)
-            message(STATUS "=== CEF库诊断信息 ===")
-            file(GLOB_RECURSE ALL_CEF_LIBS "${CEF_ROOT_DIR}/**/*.lib")
-            foreach(lib_file ${ALL_CEF_LIBS})
-                message(STATUS "发现库文件: ${lib_file}")
-            endforeach()
-        endif()
-        if(CEF_LIBRARY)
-            message(STATUS "✓ 在备用路径找到CEF主库: ${CEF_LIBRARY}")
-        else()
-            # 最后尝试: 手动查找所有.lib文件
-            message(STATUS "执行深度搜索CEF库文件...")
-            file(GLOB_RECURSE ALL_CEF_LIBS 
-                "${CEF_ROOT_DIR}/*.lib"
-                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/*.lib"
-            )
-            foreach(lib_file ${ALL_CEF_LIBS})
+    # 详细搜索每个路径
+    foreach(search_path ${CEF_SEARCH_PATHS})
+        if(NOT CEF_LIBRARY AND EXISTS "${search_path}")
+            message(STATUS "搜索路径: ${search_path}")
+            file(GLOB LIB_FILES "${search_path}/*.lib")
+            foreach(lib_file ${LIB_FILES})
                 get_filename_component(lib_name "${lib_file}" NAME_WE)
-                message(STATUS "  发现库文件: ${lib_name} -> ${lib_file}")
-                if(lib_name MATCHES "cef" OR lib_name MATCHES "libcef")
+                message(STATUS "  检查库: ${lib_name}")
+                if(lib_name MATCHES "^(lib)?cef$")
                     set(CEF_LIBRARY "${lib_file}")
-                    message(STATUS "✓ 选择CEF库文件: ${CEF_LIBRARY}")
+                    message(STATUS "✓ 找到CEF主库: ${CEF_LIBRARY}")
                     break()
                 endif()
             endforeach()
         endif()
+    endforeach()
+    
+    # 如果标准搜索失败，执行深度递归搜索
+    if(NOT CEF_LIBRARY)
+        message(STATUS "=== CEF库深度递归搜索 ===")
+        file(GLOB_RECURSE ALL_CEF_LIBS "${CEF_ROOT_DIR}/**/*.lib")
+        
+        if(ALL_CEF_LIBS)
+            message(STATUS "找到以下库文件:")
+            foreach(lib_file ${ALL_CEF_LIBS})
+                get_filename_component(lib_name "${lib_file}" NAME_WE)
+                get_filename_component(lib_dir "${lib_file}" DIRECTORY)
+                message(STATUS "  ${lib_name} -> ${lib_dir}")
+                
+                # 优先选择Release版本的libcef库
+                if(lib_name MATCHES "^(lib)?cef$" AND lib_dir MATCHES "Release")
+                    set(CEF_LIBRARY "${lib_file}")
+                    message(STATUS "✓ 优先选择Release版本: ${CEF_LIBRARY}")
+                    break()
+                elseif(lib_name MATCHES "^(lib)?cef$" AND NOT CEF_LIBRARY)
+                    set(CEF_LIBRARY "${lib_file}")
+                    message(STATUS "✓ 选择CEF库文件: ${CEF_LIBRARY}")
+                endif()
+            endforeach()
+        else()
+            message(WARNING "✗ 在CEF目录中未找到任何.lib文件")
+            message(STATUS "CEF目录内容诊断:")
+            if(EXISTS "${CEF_ROOT_DIR}")
+                file(GLOB_RECURSE ALL_FILES "${CEF_ROOT_DIR}/*")
+                foreach(file ${ALL_FILES})
+                    if(IS_DIRECTORY "${file}")
+                        continue()
+                    endif()
+                    get_filename_component(file_ext "${file}" EXT)
+                    if(file_ext MATCHES "\\.(lib|dll|exe)$")
+                        message(STATUS "  关键文件: ${file}")
+                    endif()
+                endforeach()
+            endif()
+        endif()
+    endif()
+    
+    # 最终验证和错误处理
+    if(CEF_LIBRARY)
+        if(EXISTS "${CEF_LIBRARY}")
+            file(SIZE "${CEF_LIBRARY}" CEF_LIB_SIZE)
+            math(EXPR CEF_LIB_SIZE_KB "${CEF_LIB_SIZE} / 1024")
+            message(STATUS "✅ CEF主库验证成功: ${CEF_LIBRARY} (${CEF_LIB_SIZE_KB} KB)")
+        else()
+            message(FATAL_ERROR "找到的CEF库路径无效: ${CEF_LIBRARY}")
+        endif()
+    else()
+        message(FATAL_ERROR "
+❌ 严重错误：无法找到CEF主库文件！
+
+🔍 诊断信息：
+- CEF根目录: ${CEF_ROOT_DIR}
+- 搜索的库名: libcef.lib, cef.lib
+- 搜索路径: ${CEF_SEARCH_PATHS}
+
+📋 可能的原因：
+1. CEF下载不完整或解压失败
+2. CEF版本目录结构与预期不符
+3. CEF库文件损坏或缺失
+4. 权限问题导致文件访问失败
+
+🔧 解决建议：
+1. 删除 third_party/cef 目录并重新运行CEF下载脚本
+2. 检查CEF下载脚本的输出日志
+3. 验证网络连接和下载完整性
+4. 确认有足够的磁盘空间和权限
+        ")
     endif()
     
     find_library(CEF_WRAPPER_LIBRARY

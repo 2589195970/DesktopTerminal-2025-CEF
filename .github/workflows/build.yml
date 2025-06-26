@@ -81,13 +81,13 @@ jobs:
       id: verify-cef-cache  
       shell: cmd
       run: |
-        echo "CEF目录状态检查..."
+        setlocal enabledelayedexpansion
+        echo "=== CEF目录状态深度检查 ==="
+        
+        REM 强制清理以确保全新下载
         if exist "third_party\cef" (
-          echo "CEF目录存在（异常）"
-          set "CEF_VALID=true"
-        ) else (
-          echo "CEF目录不存在（正常，将触发下载）"
-          set "CEF_VALID=false"
+          echo "强制删除现有CEF目录以确保全新安装..."
+          rmdir /s /q "third_party\cef" 2>nul
         )
         
         REM 根据架构确定CEF版本
@@ -99,59 +99,18 @@ jobs:
           set "CEF_PLATFORM=windows64"
         )
         
+        echo "CEF配置信息:"
+        echo "  架构: ${{ matrix.arch }}"
+        echo "  CEF版本: !CEF_VERSION!"
+        echo "  CEF平台: !CEF_PLATFORM!"
+        
         REM 构建预期的CEF目录名
         set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
+        echo "  预期CEF目录: !CEF_BINARY_NAME!"
         
-        REM 支持多种可能的CEF目录结构
-        set "CEF_CHECK[1]=third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h"
-        set "CEF_CHECK[2]=third_party\cef\include\cef_version.h"
-        set "CEF_CHECK[3]=third_party\cef\!CEF_BINARY_NAME!\cef_version.h"
-        
-        echo "检查CEF头文件的多个可能路径..."
-        
-        REM 遍历所有可能的路径
-        for /l %%i in (1,1,3) do (
-          if "!CEF_VALID!"=="false" (
-            echo "检查路径 %%i: !CEF_CHECK[%%i]!"
-            if exist "!CEF_CHECK[%%i]!" (
-              echo "✓ CEF头文件验证成功: !CEF_CHECK[%%i]!"
-              
-              REM 头文件存在，进一步验证库文件
-              echo "验证CEF库文件..."
-              set "CEF_LIB_VALID=false"
-              set "LIB_CHECK[1]=third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib"
-              set "LIB_CHECK[2]=third_party\cef\!CEF_BINARY_NAME!\Debug\libcef.lib"
-              set "LIB_CHECK[3]=third_party\cef\Release\libcef.lib"
-              
-              for /l %%j in (1,1,3) do (
-                if "!CEF_LIB_VALID!"=="false" (
-                  if exist "!LIB_CHECK[%%j]!" (
-                    echo "✓ CEF主库验证成功: !LIB_CHECK[%%j]!"
-                    set "CEF_LIB_VALID=true"
-                  )
-                )
-              )
-              
-              if "!CEF_LIB_VALID!"=="true" (
-                set "CEF_VALID=true"
-              ) else (
-                echo "✗ CEF主库文件libcef.lib缺失，这会导致链接失败"
-              )
-            )
-          )
-        )
-        
-        if "!CEF_VALID!"=="false" (
-          echo "✗ CEF验证失败（头文件或库文件缺失），需要重新下载"
-          if exist "third_party\cef" (
-            echo "显示当前CEF目录结构用于诊断:"
-            dir "third_party\cef" /s /b | findstr /i "cef_version.h libcef.lib" || echo "未找到关键CEF文件"
-            echo "删除不完整的CEF缓存..."
-            rmdir /s /q "third_party\cef"
-          )
-        )
-        
+        REM 设置强制下载标志
         echo "cef-valid=false" >> %GITHUB_OUTPUT%
+        echo "设置CEF状态为需要下载（强制模式）"
 
     - name: Download CEF (No Cache)
       shell: cmd
@@ -330,19 +289,96 @@ jobs:
           echo "CEF安装路径: third_party\cef\!CEF_BINARY_NAME!"
         )
 
+    - name: Pre-Build Environment Diagnostics
+      shell: cmd
+      run: |
+        echo "=== 构建环境诊断报告 ==="
+        echo "收集环境信息以协助问题诊断..."
+        
+        echo "--- 系统信息 ---"
+        echo "操作系统: %OS%"
+        echo "处理器架构: %PROCESSOR_ARCHITECTURE%"
+        echo "处理器标识: %PROCESSOR_IDENTIFIER%"
+        echo "构建架构: ${{ matrix.arch }}"
+        echo "Qt架构: ${{ matrix.qt_arch }}"
+        
+        echo "--- Qt环境 ---"
+        echo "Qt5_Dir: %Qt5_Dir%"
+        if exist "%Qt5_Dir%" (
+          echo "✓ Qt5目录存在"
+          echo "Qt5版本信息:"
+          if exist "%Qt5_Dir%\bin\qmake.exe" (
+            "%Qt5_Dir%\bin\qmake.exe" -query QT_VERSION 2>nul || echo "无法获取Qt版本"
+          )
+        ) else (
+          echo "✗ Qt5目录不存在"
+        )
+        
+        echo "--- CEF环境检查 ---"
+        if exist "third_party\cef" (
+          echo "✓ CEF目录存在"
+          echo "CEF目录大小和内容:"
+          for /d %%d in ("third_party\cef\cef_binary_*") do (
+            echo "  CEF目录: %%d"
+            if exist "%%d\Release\libcef.lib" (
+              for %%f in ("%%d\Release\libcef.lib") do echo "    libcef.lib: %%~zf bytes"
+            ) else (
+              echo "    ✗ libcef.lib缺失"
+            )
+            if exist "%%d\include\cef_version.h" (
+              echo "    ✓ 头文件存在"
+            ) else (
+              echo "    ✗ 头文件缺失"
+            )
+          )
+        ) else (
+          echo "✗ CEF目录不存在 - 这将导致构建失败"
+        )
+        
+        echo "--- 编译工具链 ---"
+        echo "Visual Studio版本:"
+        where cl 2>nul && cl 2>&1 | findstr "Version" || echo "无法找到cl编译器"
+        echo "CMake版本:"
+        cmake --version 2>nul || echo "无法找到cmake"
+        echo "MSBuild版本:"
+        where msbuild 2>nul && msbuild -version 2>nul || echo "无法找到msbuild"
+        
+        echo "--- 磁盘空间 ---"
+        for %%d in (C: D:) do (
+          if exist %%d\ (
+            for /f "tokens=3" %%a in ('dir %%d\ /-c ^| find "bytes free"') do echo "%%d 可用空间: %%a bytes"
+          )
+        )
+        
+        echo "=== 诊断报告完成 ==="
+
     - name: Configure CMake
       shell: cmd
       run: |
+        echo "=== CMake配置阶段 ==="
         echo "Qt5_Dir environment: %Qt5_Dir%"
-        echo "Checking Qt5 installation..."
-        if exist "%Qt5_Dir%" (echo "Qt5 directory found") else (echo "Qt5 directory not found")
+        echo "当前工作目录: %CD%"
+        echo "验证构建环境..."
         
-        mkdir build
+        REM 检查关键依赖
+        if not exist "%Qt5_Dir%" (
+          echo "❌ Qt5目录不存在: %Qt5_Dir%"
+          exit /b 1
+        )
+        
+        if not exist "third_party\cef" (
+          echo "❌ CEF目录不存在 - 这将导致CMake配置失败"
+          exit /b 1
+        )
+        
+        echo "✅ 基础依赖检查通过"
+        mkdir build 2>nul
         cd build
         
+        echo "--- CMake配置开始 ---"
         REM Configure for Windows 7 SP1 compatibility
         if "${{ matrix.arch }}"=="x86" (
-          echo "Configuring for Windows 7 SP1 32-bit compatibility..."
+          echo "配置Windows 7 SP1 32位兼容性构建..."
           cmake .. ^
             -A ${{ matrix.platform }} ^
             -T v142 ^
@@ -350,22 +386,145 @@ jobs:
             -DCEF_VERSION="${{ matrix.cef_version }}" ^
             -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
             -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5" ^
-            -DCMAKE_SYSTEM_VERSION=7.1
+            -DCMAKE_SYSTEM_VERSION=7.1 ^
+            -DCMAKE_VERBOSE_MAKEFILE=ON
         ) else (
-          echo "Configuring for Windows 10+ 64-bit..."
+          echo "配置Windows 10+ 64位构建..."
           cmake .. ^
             -A ${{ matrix.platform }} ^
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
             -DCEF_VERSION="${{ matrix.cef_version }}" ^
             -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
-            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5"
+            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5" ^
+            -DCMAKE_VERBOSE_MAKEFILE=ON
+        )
+        
+        if %errorlevel% neq 0 (
+          echo "❌ CMake配置失败"
+          echo "错误级别: %errorlevel%"
+          echo "--- CMake错误诊断 ---"
+          echo "CMakeCache.txt内容（如果存在）:"
+          if exist "CMakeCache.txt" (
+            findstr /i "cef\|qt\|error" CMakeCache.txt || echo "未找到相关错误信息"
+          ) else (
+            echo "CMakeCache.txt不存在"
+          )
+          echo "CMakeFiles/CMakeError.log内容（如果存在）:"
+          if exist "CMakeFiles\CMakeError.log" (
+            type "CMakeFiles\CMakeError.log"
+          ) else (
+            echo "CMakeError.log不存在"
+          )
+          exit /b 1
+        ) else (
+          echo "✅ CMake配置成功"
         )
 
-    - name: Build Project
+    - name: Build Project  
       shell: cmd
       run: |
+        echo "=== 项目编译阶段 ==="
         cd build
-        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS%
+        
+        echo "--- 编译前最后检查 ---"
+        echo "构建目录内容:"
+        dir . /b
+        
+        echo "检查生成的项目文件:"
+        if exist "*.sln" (
+          for %%f in (*.sln) do echo "✓ 解决方案文件: %%f"
+        ) else (
+          echo "✗ 未找到解决方案文件"
+        )
+        
+        if exist "*.vcxproj" (
+          echo "✓ 找到项目文件"
+        ) else (
+          echo "✗ 未找到项目文件"
+        )
+        
+        echo "--- 开始编译 ---"
+        echo "编译配置: ${{ env.BUILD_TYPE }}"
+        echo "并行数: %NUMBER_OF_PROCESSORS%"
+        echo "目标平台: ${{ matrix.platform }}"
+        
+        REM 设置详细输出以便诊断链接错误
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose
+        
+        set "BUILD_RESULT=%errorlevel%"
+        
+        if !BUILD_RESULT! neq 0 (
+          echo "❌ 编译失败，错误级别: !BUILD_RESULT!"
+          echo "--- 编译错误诊断 ---"
+          
+          REM 检查是否是链接错误（LNK2019等）
+          if exist "*.log" (
+            echo "检查构建日志中的链接错误..."
+            for %%f in (*.log) do (
+              findstr /i "LNK2019\|LNK1120\|unresolved external symbol" "%%f" && (
+                echo "发现链接错误在: %%f"
+                echo "--- 链接错误详情 ---"
+                findstr /i "LNK\|unresolved\|external symbol" "%%f"
+              )
+            )
+          )
+          
+          REM 检查构建输出目录
+          echo "--- 构建输出检查 ---"
+          if exist "bin" (
+            echo "bin目录内容:"
+            dir bin /s /b
+          ) else (
+            echo "bin目录不存在"
+          )
+          
+          if exist "lib" (
+            echo "lib目录内容:"
+            dir lib /s /b
+          ) else (
+            echo "lib目录不存在"
+          )
+          
+          REM 检查中间文件
+          echo "--- 中间文件检查 ---"
+          dir /s /b *.obj | head -10 && echo "..." || echo "未找到目标文件"
+          dir /s /b *.lib | head -10 && echo "..." || echo "未找到库文件"
+          
+          echo "--- 错误总结 ---"
+          echo "这很可能是CEF库链接问题导致的LNK2019错误"
+          echo "请检查以上诊断信息，特别是链接错误详情"
+          
+          exit /b !BUILD_RESULT!
+        ) else (
+          echo "✅ 编译成功！"
+          echo "--- 编译结果验证 ---"
+          
+          REM 验证生成的可执行文件
+          if exist "bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
+            echo "✅ 主程序文件生成成功"
+            for %%f in ("bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe") do (
+              echo "  文件大小: %%~zf bytes"
+            )
+          ) else (
+            echo "⚠️ 主程序文件未找到，但编译报告成功"
+            echo "检查bin目录结构:"
+            if exist "bin" (
+              dir bin /s /b
+            ) else (
+              echo "bin目录不存在"
+            )
+          )
+          
+          REM 验证生成的库文件
+          if exist "lib\${{ env.BUILD_TYPE }}\*.lib" (
+            echo "✅ 库文件生成:"
+            dir "lib\${{ env.BUILD_TYPE }}\*.lib" /b
+          ) else (
+            echo "ℹ️ 未找到生成的库文件（可能正常）"
+          )
+          
+          echo "🎉 Windows ${{ matrix.arch }}位构建完成！"
+        )
 
     - name: Verify Build
       shell: cmd

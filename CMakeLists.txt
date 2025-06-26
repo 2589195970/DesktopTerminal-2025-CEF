@@ -265,40 +265,107 @@ if(NOT CEF_LIBRARIES)
     message(FATAL_ERROR "CEF_LIBRARIES为空！CEF库未找到。请检查CEF安装。")
 endif()
 
-# 链接库 - 注意顺序很重要
+# 链接库配置 - 优化CEF链接顺序解决LNK2019错误
+message(STATUS "=== 配置库链接 ===")
+
+# 首先链接Qt5库
 target_link_libraries(${PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
     qhotkey
 )
 
-# 单独链接CEF库以更好地控制顺序
-foreach(cef_lib ${CEF_LIBRARIES})
-    if(EXISTS "${cef_lib}")
-        message(STATUS "✓ 链接CEF库: ${cef_lib}")
-        target_link_libraries(${PROJECT_NAME} "${cef_lib}")
-    else()
-        message(WARNING "✗ CEF库文件不存在: ${cef_lib}")
-    endif()
-endforeach()
-
-# 如果没有找到CEF库，尝试手动添加
-if(WIN32 AND NOT CEF_LIBRARY)
-    message(STATUS "尝试手动查找并链接CEF库...")
-    set(MANUAL_CEF_PATHS
-        "${CEF_ROOT_DIR}/Release"
-        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release"
-        "${CEF_ROOT_DIR}/Debug"
-        "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug"
-    )
+# CEF库链接 - 关键的链接顺序修复
+if(CEF_FOUND AND CEF_LIBRARIES)
+    message(STATUS "链接CEF库列表: ${CEF_LIBRARIES}")
     
-    foreach(manual_path ${MANUAL_CEF_PATHS})
-        if(EXISTS "${manual_path}/libcef.lib")
-            message(STATUS "✓ 手动找到CEF库: ${manual_path}/libcef.lib")
-            target_link_libraries(${PROJECT_NAME} "${manual_path}/libcef.lib")
-            break()
+    # Windows特殊处理：确保正确的链接顺序
+    if(WIN32)
+        # 分离CEF主库和wrapper库
+        set(CEF_MAIN_LIBS)
+        set(CEF_WRAPPER_LIBS)
+        
+        foreach(cef_lib ${CEF_LIBRARIES})
+            get_filename_component(lib_name "${cef_lib}" NAME_WE)
+            if(lib_name MATCHES "^(lib)?cef$")
+                list(APPEND CEF_MAIN_LIBS "${cef_lib}")
+                message(STATUS "✓ CEF主库: ${cef_lib}")
+            elseif(lib_name MATCHES "wrapper")
+                list(APPEND CEF_WRAPPER_LIBS "${cef_lib}")
+                message(STATUS "✓ CEF Wrapper库: ${cef_lib}")
+            else()
+                list(APPEND CEF_MAIN_LIBS "${cef_lib}")
+                message(STATUS "✓ 其他CEF库: ${cef_lib}")
+            endif()
+        endforeach()
+        
+        # 正确的链接顺序：先链接主库，再链接wrapper库
+        foreach(main_lib ${CEF_MAIN_LIBS})
+            if(EXISTS "${main_lib}")
+                target_link_libraries(${PROJECT_NAME} "${main_lib}")
+                message(STATUS "✅ 已链接CEF主库: ${main_lib}")
+            else()
+                message(WARNING "⚠️ CEF主库文件不存在: ${main_lib}")
+            endif()
+        endforeach()
+        
+        foreach(wrapper_lib ${CEF_WRAPPER_LIBS})
+            if(EXISTS "${wrapper_lib}")
+                target_link_libraries(${PROJECT_NAME} "${wrapper_lib}")
+                message(STATUS "✅ 已链接CEF Wrapper库: ${wrapper_lib}")
+            else()
+                message(STATUS "ℹ️ CEF Wrapper库不存在（将从源码编译）: ${wrapper_lib}")
+            endif()
+        endforeach()
+    else()
+        # 非Windows平台的标准链接
+        foreach(cef_lib ${CEF_LIBRARIES})
+            if(EXISTS "${cef_lib}")
+                target_link_libraries(${PROJECT_NAME} "${cef_lib}")
+                message(STATUS "✅ 已链接CEF库: ${cef_lib}")
+            else()
+                message(WARNING "⚠️ CEF库文件不存在: ${cef_lib}")
+            endif()
+        endforeach()
+    endif()
+else()
+    message(WARNING "⚠️ CEF库列表为空，尝试手动查找和链接...")
+    
+    # 紧急修复：手动查找和链接CEF库
+    if(WIN32 AND CEF_ROOT_DIR)
+        set(EMERGENCY_CEF_PATHS
+            "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release/libcef.lib"
+            "${CEF_ROOT_DIR}/Release/libcef.lib"
+            "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug/libcef.lib"
+            "${CEF_ROOT_DIR}/Debug/libcef.lib"
+        )
+        
+        set(FOUND_EMERGENCY_LIB FALSE)
+        foreach(emergency_path ${EMERGENCY_CEF_PATHS})
+            if(EXISTS "${emergency_path}" AND NOT FOUND_EMERGENCY_LIB)
+                target_link_libraries(${PROJECT_NAME} "${emergency_path}")
+                message(STATUS "🆘 紧急链接CEF库: ${emergency_path}")
+                set(FOUND_EMERGENCY_LIB TRUE)
+            endif()
+        endforeach()
+        
+        if(NOT FOUND_EMERGENCY_LIB)
+            message(FATAL_ERROR "
+❌ 严重错误：无法找到任何可链接的CEF库文件！
+
+这将导致链接时出现LNK2019错误。
+
+🔍 搜索路径:
+${EMERGENCY_CEF_PATHS}
+
+📋 解决方案：
+1. 确保CEF已正确下载和解压
+2. 检查CEF目录结构是否完整
+3. 重新运行CEF下载脚本
+4. 联系技术支持获取帮助
+            ")
         endif()
-    endforeach()
+    endif()
 endif()
 
 # CEF库特殊处理

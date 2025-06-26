@@ -287,53 +287,150 @@ if "!CEF_FOUND!"=="false" (
     )
 )
 
-REM 验证关键库文件 - 这是链接成功的关键
+REM 增强的CEF库文件验证 - 修复链接错误的关键检查
 if "!CEF_FOUND!"=="true" (
-    call :log_info "验证CEF库文件..."
+    call :log_info "=== 执行CEF库文件深度验证 ==="
     set "CEF_LIB_FOUND=false"
     set "CEF_LIB_PATH="
+    set "CEF_LIB_SIZE=0"
     
-    REM 检查libcef.lib的可能路径
+    REM 扩展的libcef.lib搜索路径
     set "LIB_CHECK[1]=%CEF_DIR%\%CEF_BINARY_NAME%\Release\libcef.lib"
     set "LIB_CHECK[2]=%CEF_DIR%\%CEF_BINARY_NAME%\Debug\libcef.lib"
     set "LIB_CHECK[3]=%CEF_DIR%\Release\libcef.lib"
+    set "LIB_CHECK[4]=%CEF_DIR%\Debug\libcef.lib"
+    set "LIB_CHECK[5]=%CEF_DIR%\%CEF_BINARY_NAME%\lib\libcef.lib"
+    set "LIB_CHECK[6]=%CEF_DIR%\lib\libcef.lib"
     
-    for /l %%i in (1,1,3) do (
+    call :log_info "搜索CEF主库文件（libcef.lib）..."
+    for /l %%i in (1,1,6) do (
         if "!CEF_LIB_FOUND!"=="false" (
+            call :log_info "检查路径 %%i: !LIB_CHECK[%%i]!"
             if exist "!LIB_CHECK[%%i]!" (
-                set "CEF_LIB_FOUND=true"
-                set "CEF_LIB_PATH=!LIB_CHECK[%%i]!"
-                call :log_success "找到CEF主库: !LIB_CHECK[%%i]!"
+                REM 验证文件大小（CEF库文件应该比较大）
+                for %%f in ("!LIB_CHECK[%%i]!") do set "CEF_LIB_SIZE=%%~zf"
+                set /a CEF_LIB_SIZE_MB=!CEF_LIB_SIZE!/1024/1024
+                
+                if !CEF_LIB_SIZE! gtr 1000000 (
+                    set "CEF_LIB_FOUND=true"
+                    set "CEF_LIB_PATH=!LIB_CHECK[%%i]!"
+                    call :log_success "✅ 找到有效的CEF主库: !LIB_CHECK[%%i]! (!CEF_LIB_SIZE_MB! MB)"
+                ) else (
+                    call :log_warning "⚠️ 文件太小，可能损坏: !LIB_CHECK[%%i]! (!CEF_LIB_SIZE! bytes)"
+                )
+            ) else (
+                call :log_info "  文件不存在"
             )
         )
     )
     
-    REM 检查libcef_dll_wrapper源码目录（通常需要自己编译）
+    REM 如果标准路径未找到，执行深度搜索
+    if "!CEF_LIB_FOUND!"=="false" (
+        call :log_info "标准路径未找到libcef.lib，执行深度搜索..."
+        
+        REM 递归搜索所有.lib文件
+        for /r "%CEF_DIR%" %%f in (*.lib) do (
+            if "!CEF_LIB_FOUND!"=="false" (
+                for %%g in ("%%f") do (
+                    set "LIB_NAME=%%~ng"
+                    set "LIB_SIZE=%%~zg"
+                )
+                
+                if "!LIB_NAME!"=="libcef" (
+                    if !LIB_SIZE! gtr 1000000 (
+                        set "CEF_LIB_FOUND=true"
+                        set "CEF_LIB_PATH=%%f"
+                        set /a CEF_LIB_SIZE_MB=!LIB_SIZE!/1024/1024
+                        call :log_success "✅ 深度搜索找到CEF主库: %%f (!CEF_LIB_SIZE_MB! MB)"
+                    )
+                )
+            )
+        )
+    )
+    
+    REM 验证CEF Wrapper源码目录
+    call :log_info "验证CEF Wrapper源码目录..."
     set "WRAPPER_FOUND=false"
     set "WRAPPER_CHECK[1]=%CEF_DIR%\%CEF_BINARY_NAME%\libcef_dll"
     set "WRAPPER_CHECK[2]=%CEF_DIR%\libcef_dll"
+    set "WRAPPER_CHECK[3]=%CEF_DIR%\%CEF_BINARY_NAME%\wrapper"
     
-    for /l %%i in (1,1,2) do (
+    for /l %%i in (1,1,3) do (
         if "!WRAPPER_FOUND!"=="false" (
             if exist "!WRAPPER_CHECK[%%i]!" (
-                set "WRAPPER_FOUND=true"
-                call :log_success "找到CEF Wrapper源码: !WRAPPER_CHECK[%%i]!"
+                REM 检查源码目录是否包含必要的文件
+                if exist "!WRAPPER_CHECK[%%i]!\*.cc" (
+                    set "WRAPPER_FOUND=true"
+                    call :log_success "✅ 找到CEF Wrapper源码: !WRAPPER_CHECK[%%i]!"
+                    
+                    REM 统计源码文件数量
+                    set "CC_COUNT=0"
+                    for %%g in ("!WRAPPER_CHECK[%%i]!\*.cc") do set /a CC_COUNT+=1
+                    call :log_info "  包含 !CC_COUNT! 个源码文件"
+                ) else (
+                    call :log_warning "⚠️ 目录存在但缺少源码文件: !WRAPPER_CHECK[%%i]!"
+                )
             )
         )
     )
     
-    REM 综合验证结果
-    if "!CEF_LIB_FOUND!"=="true" (
-        if "!WRAPPER_FOUND!"=="true" (
-            call :log_success "CEF验证完整通过！"
-            call :log_success "头文件: !CEF_VALID_PATH!"
-            call :log_success "主库文件: !CEF_LIB_PATH!"
-        ) else (
-            call :log_warning "CEF Wrapper源码未找到，将尝试从主库目录查找预编译版本"
+    REM 检查关键的CEF二进制文件
+    call :log_info "验证CEF运行时文件..."
+    set "CEF_RUNTIME_FOUND=false"
+    set "RUNTIME_PATHS[1]=%CEF_DIR%\%CEF_BINARY_NAME%\Release"
+    set "RUNTIME_PATHS[2]=%CEF_DIR%\%CEF_BINARY_NAME%\Debug"
+    set "RUNTIME_PATHS[3]=%CEF_DIR%\Release"
+    
+    for /l %%i in (1,1,3) do (
+        if "!CEF_RUNTIME_FOUND!"=="false" (
+            if exist "!RUNTIME_PATHS[%%i]!\libcef.dll" (
+                set "CEF_RUNTIME_FOUND=true"
+                call :log_success "✅ 找到CEF运行时: !RUNTIME_PATHS[%%i]!\libcef.dll"
+            )
         )
+    )
+    
+    REM 综合验证结果和详细诊断
+    call :log_info "=== CEF验证结果汇总 ==="
+    if "!CEF_LIB_FOUND!"=="true" (
+        call :log_success "✅ CEF主库文件: OK (!CEF_LIB_PATH!)"
     ) else (
-        call :log_error "CEF主库文件libcef.lib未找到！"
-        call :log_error "这会导致链接失败。请检查CEF包完整性。"
+        call :log_error "❌ CEF主库文件: 缺失或损坏"
+        call :log_error "这是导致LNK2019链接错误的主要原因！"
+    )
+    
+    if "!WRAPPER_FOUND!"=="true" (
+        call :log_success "✅ CEF Wrapper源码: OK"
+    ) else (
+        call :log_warning "⚠️ CEF Wrapper源码: 缺失（将尝试从源码编译）"
+    )
+    
+    if "!CEF_RUNTIME_FOUND!"=="true" (
+        call :log_success "✅ CEF运行时文件: OK"
+    ) else (
+        call :log_warning "⚠️ CEF运行时文件: 缺失（可能影响应用程序运行）"
+    )
+    
+    REM 最终判断
+    if "!CEF_LIB_FOUND!"=="true" (
+        call :log_success "🎉 CEF库验证基本通过！应该可以成功编译。"
+        call :log_info "主要文件位置:"
+        call :log_info "  头文件: !CEF_VALID_PATH!"
+        call :log_info "  主库: !CEF_LIB_PATH! (!CEF_LIB_SIZE_MB! MB)"
+    ) else (
+        call :log_error "💥 CEF库验证失败！这将导致编译时出现LNK2019错误。"
+        call :log_error ""
+        call :log_error "问题诊断:"
+        call :log_error "1. libcef.lib文件完全缺失"
+        call :log_error "2. 文件下载不完整或损坏"
+        call :log_error "3. CEF包解压失败"
+        call :log_error "4. 版本不匹配或目录结构异常"
+        call :log_error ""
+        call :log_error "建议解决方案:"
+        call :log_error "1. 删除CEF目录: rmdir /s /q %CEF_DIR%"
+        call :log_error "2. 重新运行此脚本下载CEF"
+        call :log_error "3. 检查网络连接和下载完整性"
+        call :log_error "4. 确认有足够的磁盘空间"
         set "CEF_FOUND=false"
     )
 )
