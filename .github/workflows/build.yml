@@ -723,16 +723,19 @@ jobs:
         $commitSha = "${{ github.sha }}"
         $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
         
-        # Create build info content using simple redirection (most compatible)
-        "DesktopTerminal-CEF Build Information" | Out-File "$artifactPath\BUILD_INFO.txt"
-        "====================================" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Architecture: $arch" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Platform: $platform" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "CEF Version: $cefVersion" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Qt Version: $qtVersion" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Build Type: $buildType" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Build Date: $buildDate" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
-        "Commit: $commitSha" | Out-File "$artifactPath\BUILD_INFO.txt" -Append
+        # Create build info using simple file operations to avoid parsing issues
+        $buildInfoContent = "DesktopTerminal-CEF Build Information`r`n"
+        $buildInfoContent += "====================================`r`n"
+        $buildInfoContent += "Architecture: $arch`r`n"
+        $buildInfoContent += "Platform: $platform`r`n"  
+        $buildInfoContent += "CEF Version: $cefVersion`r`n"
+        $buildInfoContent += "Qt Version: $qtVersion`r`n"
+        $buildInfoContent += "Build Type: $buildType`r`n"
+        $buildInfoContent += "Build Date: $buildDate`r`n"
+        $buildInfoContent += "Commit: $commitSha`r`n"
+        
+        # Write content to file using simple redirection
+        $buildInfoContent | Set-Content -Path "$artifactPath\BUILD_INFO.txt"
 
     - name: Create Windows Installer
       shell: cmd
