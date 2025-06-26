@@ -714,16 +714,24 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Create version info using escaped strings to avoid YAML indentation issues
+        # Create version info - store GitHub Actions variables in PowerShell variables first
+        $arch = "${{ matrix.arch }}"
+        $platform = "${{ matrix.name }}"
+        $cefVersion = "${{ matrix.cef_version }}"
+        $qtVersion = "${{ env.QT_VERSION }}"
+        $buildType = "${{ env.BUILD_TYPE }}"
+        $commitSha = "${{ github.sha }}"
+        $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
+        
         $buildInfo = "DesktopTerminal-CEF Build Information`r`n"
         $buildInfo += "====================================`r`n"
-        $buildInfo += "Architecture: ${{ matrix.arch }}`r`n"
-        $buildInfo += "Platform: ${{ matrix.name }}`r`n"
-        $buildInfo += "CEF Version: ${{ matrix.cef_version }}`r`n"
-        $buildInfo += "Qt Version: ${{ env.QT_VERSION }}`r`n"
-        $buildInfo += "Build Type: ${{ env.BUILD_TYPE }}`r`n"
-        $buildInfo += "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')`r`n"
-        $buildInfo += "Commit: ${{ github.sha }}"
+        $buildInfo += "Architecture: $arch`r`n"
+        $buildInfo += "Platform: $platform`r`n"
+        $buildInfo += "CEF Version: $cefVersion`r`n"
+        $buildInfo += "Qt Version: $qtVersion`r`n"
+        $buildInfo += "Build Type: $buildType`r`n"
+        $buildInfo += "Build Date: $buildDate`r`n"
+        $buildInfo += "Commit: $commitSha"
         Set-Content -Path "$artifactPath\BUILD_INFO.txt" -Encoding UTF8 -Value $buildInfo
 
     - name: Create Windows Installer
