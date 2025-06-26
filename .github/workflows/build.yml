@@ -600,22 +600,51 @@ jobs:
         REM 首先检查是否在正确的目录
         echo "当前工作目录: %CD%"
         
-        REM 检查多个可能的位置
+        REM 检查多个可能的位置 - 使用标准批处理语法
         set "FOUND_EXE=false"
-        set "EXE_LOCATIONS[1]=build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
-        set "EXE_LOCATIONS[2]=build\bin\Release\DesktopTerminal-CEF.exe"
-        set "EXE_LOCATIONS[3]=build\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
-        set "EXE_LOCATIONS[4]=bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
         
-        for /l %%i in (1,1,4) do (
-          if exist "!EXE_LOCATIONS[%%i]!" (
-            echo "✓ 找到可执行文件: !EXE_LOCATIONS[%%i]!"
-            for %%f in ("!EXE_LOCATIONS[%%i]!") do echo "  文件大小: %%~zf bytes"
-            set "FOUND_EXE=true"
-            goto :found_exe
-          ) else (
-            echo "✗ 未找到: !EXE_LOCATIONS[%%i]!"
-          )
+        REM 检查第一个位置: build\bin\Release\DesktopTerminal-CEF.exe
+        set "EXE_PATH1=build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        if exist "%EXE_PATH1%" (
+          echo "✓ 找到可执行文件: %EXE_PATH1%"
+          for %%f in ("%EXE_PATH1%") do echo "  文件大小: %%~zf bytes"
+          set "FOUND_EXE=true"
+          goto :found_exe
+        ) else (
+          echo "✗ 未找到: %EXE_PATH1%"
+        )
+        
+        REM 检查第二个位置: build\bin\Release\DesktopTerminal-CEF.exe
+        set "EXE_PATH2=build\bin\Release\DesktopTerminal-CEF.exe"
+        if exist "%EXE_PATH2%" (
+          echo "✓ 找到可执行文件: %EXE_PATH2%"
+          for %%f in ("%EXE_PATH2%") do echo "  文件大小: %%~zf bytes"
+          set "FOUND_EXE=true"
+          goto :found_exe
+        ) else (
+          echo "✗ 未找到: %EXE_PATH2%"
+        )
+        
+        REM 检查第三个位置: build\Release\DesktopTerminal-CEF.exe
+        set "EXE_PATH3=build\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        if exist "%EXE_PATH3%" (
+          echo "✓ 找到可执行文件: %EXE_PATH3%"
+          for %%f in ("%EXE_PATH3%") do echo "  文件大小: %%~zf bytes"
+          set "FOUND_EXE=true"
+          goto :found_exe
+        ) else (
+          echo "✗ 未找到: %EXE_PATH3%"
+        )
+        
+        REM 检查第四个位置: bin\Release\DesktopTerminal-CEF.exe
+        set "EXE_PATH4=bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        if exist "%EXE_PATH4%" (
+          echo "✓ 找到可执行文件: %EXE_PATH4%"
+          for %%f in ("%EXE_PATH4%") do echo "  文件大小: %%~zf bytes"
+          set "FOUND_EXE=true"
+          goto :found_exe
+        ) else (
+          echo "✗ 未找到: %EXE_PATH4%"
         )
         
         :found_exe
