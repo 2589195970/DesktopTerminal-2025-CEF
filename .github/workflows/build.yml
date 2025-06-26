@@ -418,15 +418,47 @@ jobs:
           exit /b 1
         ) else (
           echo "✅ CMake配置成功"
+          echo "CMAKE_CONFIG_SUCCESS=true" >> %GITHUB_ENV%
+          echo "CMAKE_BUILD_DIR=%CD%" >> %GITHUB_ENV%
+          echo "--- 配置验证 ---"
+          echo "解决方案文件:"
+          dir *.sln /b || echo "未找到解决方案文件"
+          echo "项目文件:"
+          dir *.vcxproj /b | head -5 || echo "未找到项目文件"
+          echo "🎯 准备执行构建步骤..."
         )
 
     - name: Build Project  
       shell: cmd
       run: |
         echo "=== 项目编译阶段 ==="
-        cd build
+        echo "CMAKE_CONFIG_SUCCESS: %CMAKE_CONFIG_SUCCESS%"
+        echo "CMAKE_BUILD_DIR: %CMAKE_BUILD_DIR%"
+        
+        REM 验证前置条件
+        if not "%CMAKE_CONFIG_SUCCESS%"=="true" (
+          echo "❌ CMake配置未成功，无法继续构建"
+          echo "请检查CMake配置步骤是否成功完成"
+          exit /b 1
+        )
+        
+        if not exist "%CMAKE_BUILD_DIR%" (
+          echo "❌ 构建目录不存在: %CMAKE_BUILD_DIR%"
+          echo "尝试使用默认构建目录..."
+          if exist "build" (
+            echo "✓ 找到默认构建目录"
+            cd build
+          ) else (
+            echo "❌ 无法找到任何构建目录"
+            exit /b 1
+          )
+        ) else (
+          echo "✓ 使用配置的构建目录: %CMAKE_BUILD_DIR%"
+          cd "%CMAKE_BUILD_DIR%"
+        )
         
         echo "--- 编译前最后检查 ---"
+        echo "当前工作目录: %CD%"
         echo "构建目录内容:"
         dir . /b
         
@@ -435,12 +467,18 @@ jobs:
           for %%f in (*.sln) do echo "✓ 解决方案文件: %%f"
         ) else (
           echo "✗ 未找到解决方案文件"
+          echo "❌ 这表明CMake配置可能未完全成功"
+          exit /b 1
         )
         
         if exist "*.vcxproj" (
           echo "✓ 找到项目文件"
+          echo "项目文件列表:"
+          dir *.vcxproj /b | head -10
         ) else (
           echo "✗ 未找到项目文件"
+          echo "❌ 这表明CMake配置可能未完全成功"
+          exit /b 1
         )
         
         echo "--- 开始编译 ---"
@@ -448,10 +486,14 @@ jobs:
         echo "并行数: %NUMBER_OF_PROCESSORS%"
         echo "目标平台: ${{ matrix.platform }}"
         
+        echo "🔨 执行构建命令..."
+        echo "命令: cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose"
+        
         REM 设置详细输出以便诊断链接错误
         cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose
         
         set "BUILD_RESULT=%errorlevel%"
+        echo "构建命令完成，返回码: %BUILD_RESULT%"
         
         if !BUILD_RESULT! neq 0 (
           echo "❌ 编译失败，错误级别: !BUILD_RESULT!"
@@ -524,26 +566,78 @@ jobs:
           )
           
           echo "🎉 Windows ${{ matrix.arch }}位构建完成！"
+          echo "BUILD_SUCCESS=true" >> %GITHUB_ENV%
+          echo "--- 构建成功总结 ---"
+          echo "✅ 编译成功完成"
+          echo "✅ 可执行文件应已生成"
+          echo "✅ 库文件已编译"
+          echo "🎯 准备进行构建验证..."
         )
 
     - name: Verify Build
       shell: cmd
       run: |
-        echo "Checking build artifacts..."
-        if exist "build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
-          echo "✓ Main executable found"
-          dir "build\bin\${{ env.BUILD_TYPE }}"
+        echo "=== 构建验证阶段 ==="
+        echo "检查构建产物..."
+        
+        REM 首先检查是否在正确的目录
+        echo "当前工作目录: %CD%"
+        
+        REM 检查多个可能的位置
+        set "FOUND_EXE=false"
+        set "EXE_LOCATIONS[1]=build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        set "EXE_LOCATIONS[2]=build\bin\Release\DesktopTerminal-CEF.exe"
+        set "EXE_LOCATIONS[3]=build\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        set "EXE_LOCATIONS[4]=bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
+        
+        for /l %%i in (1,1,4) do (
+          if exist "!EXE_LOCATIONS[%%i]!" (
+            echo "✓ 找到可执行文件: !EXE_LOCATIONS[%%i]!"
+            for %%f in ("!EXE_LOCATIONS[%%i]!") do echo "  文件大小: %%~zf bytes"
+            set "FOUND_EXE=true"
+            goto :found_exe
+          ) else (
+            echo "✗ 未找到: !EXE_LOCATIONS[%%i]!"
+          )
+        )
+        
+        :found_exe
+        if "%FOUND_EXE%"=="true" (
+          echo "🎉 构建验证成功！"
+          echo "BUILD_SUCCESS=true" >> %GITHUB_ENV%
         ) else (
-          echo "✗ Main executable not found"
-          echo "Build directory contents:"
-          dir build /s
+          echo "❌ 构建验证失败 - 未找到可执行文件"
+          echo "--- 详细诊断 ---"
+          echo "构建目录完整结构:"
+          if exist "build" (
+            dir build /s /b | findstr /i "\.exe$" || echo "未找到任何exe文件"
+            echo "--- bin目录内容 ---"
+            if exist "build\bin" (
+              dir "build\bin" /s /b
+            ) else (
+              echo "build\bin目录不存在"
+            )
+          ) else (
+            echo "build目录不存在！"
+          )
+          echo "BUILD_SUCCESS=false" >> %GITHUB_ENV%
           exit 1
         )
 
     - name: Package Windows Build
+      if: env.BUILD_SUCCESS == 'true'
       shell: powershell
       run: |
+        Write-Host "=== Windows构建打包阶段 ==="
+        Write-Host "BUILD_SUCCESS: $env:BUILD_SUCCESS"
+        
+        if ($env:BUILD_SUCCESS -ne 'true') {
+          Write-Host "❌ 构建未成功，跳过打包"
+          exit 1
+        }
+        
         $artifactPath = "artifacts\windows-${{ matrix.arch }}"
+        Write-Host "创建打包目录: $artifactPath"
         New-Item -ItemType Directory -Force -Path $artifactPath
         
         # Copy main executable and dependencies
