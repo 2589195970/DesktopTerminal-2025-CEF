@@ -723,20 +723,16 @@ jobs:
         $commitSha = "${{ github.sha }}"
         $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
         
-        # Create build info content line by line to avoid string terminator issues
-        $buildInfoContent = @()
-        $buildInfoContent += "DesktopTerminal-CEF Build Information"
-        $buildInfoContent += "===================================="
-        $buildInfoContent += "Architecture: $arch"
-        $buildInfoContent += "Platform: $platform"
-        $buildInfoContent += "CEF Version: $cefVersion"
-        $buildInfoContent += "Qt Version: $qtVersion"
-        $buildInfoContent += "Build Type: $buildType"
-        $buildInfoContent += "Build Date: $buildDate"
-        $buildInfoContent += "Commit: $commitSha"
-        
-        # Write each line separately to avoid encoding issues
-        $buildInfoContent | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Encoding utf8
+        # Create build info content using safe string handling
+        Write-Output "DesktopTerminal-CEF Build Information" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Encoding UTF8
+        Write-Output "====================================" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Architecture: $arch" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Platform: $platform" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "CEF Version: $cefVersion" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Qt Version: $qtVersion" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Build Type: $buildType" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Build Date: $buildDate" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
+        Write-Output "Commit: $commitSha" | Out-File -FilePath "$artifactPath\BUILD_INFO.txt" -Append -Encoding UTF8
 
     - name: Create Windows Installer
       shell: cmd
