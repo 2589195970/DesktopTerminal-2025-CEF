@@ -725,21 +725,27 @@ jobs:
           REM 计算构建目录总大小
           echo "📊 计算构建产物大小..."
           if defined BUILD_DIR (
-            for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c 2^>nul ^| find "个文件"') do set "total_size=%%a"
+            REM 使用更兼容的方式计算目录大小，避免中文字符问题
+            for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c 2^>nul ^| findstr /C:" bytes"') do set "total_size=%%a"
             if defined total_size (
               echo "构建产物总大小: %total_size% bytes"
               
               REM 转换为MB（添加安全检查）
+              set "size_mb="
               set /a size_mb=%total_size%/1048576 2>nul
               if defined size_mb (
                 echo "构建产物大小: %size_mb% MB"
                 
-                REM 验证大小是否合理（应该大于50MB）
-                if %size_mb% LSS 50 (
-                  echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
-                  set "CEF_FILES_OK=false"
+                REM 验证大小是否合理（应该大于50MB） - 添加数字验证
+                if "%size_mb%" NEQ "" (
+                  if %size_mb% LSS 50 (
+                    echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
+                    set "CEF_FILES_OK=false"
+                  ) else (
+                    echo "✅ 构建产物大小合理（%size_mb%MB）"
+                  )
                 ) else (
-                  echo "✅ 构建产物大小合理（%size_mb%MB）"
+                  echo "⚠️ 无法验证文件大小（计算结果无效），跳过大小检查"
                 )
               ) else (
                 echo "⚠️ 无法计算文件大小，跳过大小验证"
