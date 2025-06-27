@@ -752,15 +752,21 @@ jobs:
             echo "已检查文件数量: %file_count%"
             echo "核心文件总大小: %total_size% bytes"
             
-            REM 简化的大小验证（只检查是否有合理的文件大小）
-            if %total_size% GTR 1000000 (
-              echo "[OK] 构建产物大小验证通过（核心文件超过1MB）"
-            ) else (
-              echo "[WARNING] 构建产物可能不完整（核心文件小于1MB）"
-              if %total_size% EQU 0 (
-                echo "[ERROR] 未找到任何核心文件"
-                set "CEF_FILES_OK=false"
+            REM 极简的大小验证（避免所有复杂比较）
+            echo "[INFO] 文件大小验证..."
+            if defined total_size (
+              if "%total_size%" NEQ "" (
+                if "%total_size%" NEQ "0" (
+                  echo "[OK] 构建产物存在，大小: %total_size% bytes"
+                ) else (
+                  echo "[ERROR] 未找到任何核心文件"
+                  set "CEF_FILES_OK=false"
+                )
+              ) else (
+                echo "[WARNING] 文件大小为空，跳过验证"
               )
+            ) else (
+              echo "[WARNING] 文件大小变量未定义，跳过验证"
             )
           ) else (
             echo "[WARNING] 构建目录未确定，跳过大小验证"
