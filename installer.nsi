@@ -84,12 +84,8 @@ Function .onInit
         ${EndIf}
     ${EndIf}
     
-    ; 检查操作系统版本
-    ${GetWindowsVersion} $R0 $R1
-    ${If} $R0 == "95"
-    ${OrIf} $R0 == "98"
-    ${OrIf} $R0 == "ME"
-    ${OrIf} $R0 == "NT"
+    ; 检查操作系统版本（要求Windows 7或更高版本）
+    ${IfNot} ${AtLeastWin7}
         MessageBox MB_ICONSTOP "不支持的操作系统版本，需要Windows 7或更高版本。"
         Quit
     ${EndIf}
