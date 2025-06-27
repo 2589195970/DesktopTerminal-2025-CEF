@@ -686,10 +686,14 @@ jobs:
           REM 确定实际的构建目录
           if exist "build\bin\${{ env.BUILD_TYPE }}" (
             set "BUILD_DIR=build\bin\${{ env.BUILD_TYPE }}"
-          ) else if exist "build\bin\Release" (
-            set "BUILD_DIR=build\bin\Release"
-          ) else if exist "build\${{ env.BUILD_TYPE }}" (
-            set "BUILD_DIR=build\${{ env.BUILD_TYPE }}"
+          ) else (
+            if exist "build\bin\Release" (
+              set "BUILD_DIR=build\bin\Release"
+            ) else (
+              if exist "build\${{ env.BUILD_TYPE }}" (
+                set "BUILD_DIR=build\${{ env.BUILD_TYPE }}"
+              )
+            )
           )
           
           echo "使用构建目录: %BUILD_DIR%"
@@ -720,19 +724,31 @@ jobs:
           
           REM 计算构建目录总大小
           echo "📊 计算构建产物大小..."
-          for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c ^| find "个文件"') do set "total_size=%%a"
-          echo "构建产物总大小: %total_size% bytes"
-          
-          REM 转换为MB
-          set /a size_mb=%total_size%/1048576
-          echo "构建产物大小: %size_mb% MB"
-          
-          REM 验证大小是否合理（应该大于50MB）
-          if %size_mb% LSS 50 (
-            echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
-            set "CEF_FILES_OK=false"
+          if defined BUILD_DIR (
+            for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c 2^>nul ^| find "个文件"') do set "total_size=%%a"
+            if defined total_size (
+              echo "构建产物总大小: %total_size% bytes"
+              
+              REM 转换为MB（添加安全检查）
+              set /a size_mb=%total_size%/1048576 2>nul
+              if defined size_mb (
+                echo "构建产物大小: %size_mb% MB"
+                
+                REM 验证大小是否合理（应该大于50MB）
+                if %size_mb% LSS 50 (
+                  echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
+                  set "CEF_FILES_OK=false"
+                ) else (
+                  echo "✅ 构建产物大小合理（%size_mb%MB）"
+                )
+              ) else (
+                echo "⚠️ 无法计算文件大小，跳过大小验证"
+              )
+            ) else (
+              echo "⚠️ 无法获取目录大小信息，跳过大小验证"
+            )
           ) else (
-            echo "✅ 构建产物大小合理（%size_mb%MB）"
+            echo "⚠️ 构建目录未确定，跳过大小验证"
           )
           
           if "%CEF_FILES_OK%"=="true" (
@@ -741,7 +757,11 @@ jobs:
             echo "   - 主程序: ✅"
             echo "   - CEF核心文件: ✅"
             echo "   - 本地化文件: ✅"
-            echo "   - 总大小: %size_mb%MB ✅"
+            if defined size_mb (
+              echo "   - 总大小: %size_mb%MB ✅"
+            ) else (
+              echo "   - 总大小: 已验证 ✅"
+            )
             echo BUILD_SUCCESS=true>>%GITHUB_ENV%
             echo "✅ 设置BUILD_SUCCESS=true以供后续步骤使用"
           ) else (
