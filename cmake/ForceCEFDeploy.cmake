@@ -3,11 +3,11 @@
 
 # 强制部署CEF文件的主函数
 function(force_deploy_cef_files TARGET_NAME)
-    message(STATUS "🔧 开始强制部署CEF文件...")
+    message(STATUS "[DEPLOY] 开始强制部署CEF文件...")
     
     # 确定CEF根目录
     if(NOT CEF_ROOT_DIR)
-        message(FATAL_ERROR "❌ CEF_ROOT_DIR未定义，无法部署CEF文件")
+        message(FATAL_ERROR "[ERROR] CEF_ROOT_DIR未定义，无法部署CEF文件")
     endif()
     
     message(STATUS "CEF根目录: ${CEF_ROOT_DIR}")
@@ -26,7 +26,7 @@ function(force_deploy_cef_files TARGET_NAME)
         foreach(dir ${matched_dirs})
             if(EXISTS "${dir}/libcef.dll" OR EXISTS "${dir}/libcef.lib")
                 set(CEF_BINARY_DIR "${dir}")
-                message(STATUS "✅ 找到CEF二进制目录: ${CEF_BINARY_DIR}")
+                message(STATUS "[OK] 找到CEF二进制目录: ${CEF_BINARY_DIR}")
                 break()
             endif()
         endforeach()
@@ -48,7 +48,7 @@ function(force_deploy_cef_files TARGET_NAME)
         foreach(dir ${matched_dirs})
             if(EXISTS "${dir}/cef.pak")
                 set(CEF_RESOURCE_DIR "${dir}")
-                message(STATUS "✅ 找到CEF资源目录: ${CEF_RESOURCE_DIR}")
+                message(STATUS "[OK] 找到CEF资源目录: ${CEF_RESOURCE_DIR}")
                 break()
             endif()
         endforeach()
@@ -59,7 +59,7 @@ function(force_deploy_cef_files TARGET_NAME)
     
     # 验证找到的目录
     if(NOT CEF_BINARY_DIR)
-        message(WARNING "⚠️ 未找到CEF二进制目录，显示搜索信息...")
+        message(WARNING "[WARNING] 未找到CEF二进制目录，显示搜索信息...")
         foreach(pattern ${SEARCH_PATTERNS})
             message(STATUS "搜索模式: ${pattern}")
             file(GLOB matched_dirs "${pattern}")
@@ -78,7 +78,7 @@ function(force_deploy_cef_files TARGET_NAME)
     endif()
     
     if(NOT CEF_RESOURCE_DIR)
-        message(WARNING "⚠️ 未找到CEF资源目录")
+        message(WARNING "[WARNING] 未找到CEF资源目录")
         return()
     endif()
     
@@ -126,9 +126,9 @@ function(force_deploy_cef_files TARGET_NAME)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${src_file}" "${dst_file}"
                     COMMENT "强制复制CEF核心文件: ${dll}")
-                message(STATUS "📁 将复制: ${dll}")
+                message(STATUS "[COPY] 将复制: ${dll}")
             else()
-                message(WARNING "⚠️ CEF文件不存在: ${src_file}")
+                message(WARNING "[WARNING] CEF文件不存在: ${src_file}")
             endif()
         endforeach()
         
@@ -142,7 +142,7 @@ function(force_deploy_cef_files TARGET_NAME)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${src_file}" "${dst_file}"
                     COMMENT "强制复制CEF数据文件: ${data}")
-                message(STATUS "📁 将复制: ${data}")
+                message(STATUS "[COPY] 将复制: ${data}")
             endif()
         endforeach()
         
@@ -156,7 +156,7 @@ function(force_deploy_cef_files TARGET_NAME)
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${src_file}" "${dst_file}"
                     COMMENT "强制复制CEF可执行文件: ${exe}")
-                message(STATUS "📁 将复制: ${exe}")
+                message(STATUS "[COPY] 将复制: ${exe}")
             endif()
         endforeach()
     endif()
@@ -179,9 +179,9 @@ function(force_deploy_cef_files TARGET_NAME)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${src_file}" "${dst_file}"
                 COMMENT "强制复制CEF资源文件: ${resource}")
-            message(STATUS "📦 将复制: ${resource}")
+            message(STATUS "[COPY] 将复制: ${resource}")
         else()
-            message(WARNING "⚠️ CEF资源文件不存在: ${src_file}")
+            message(WARNING "[WARNING] CEF资源文件不存在: ${src_file}")
         endif()
     endforeach()
     
@@ -194,7 +194,7 @@ function(force_deploy_cef_files TARGET_NAME)
             COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${locales_src}" "${locales_dst}"
             COMMENT "强制复制CEF本地化文件")
-        message(STATUS "🌐 将复制locales目录")
+        message(STATUS "[COPY] 将复制locales目录")
     endif()
     
     # 复制swiftshader目录（如果存在）
@@ -206,15 +206,15 @@ function(force_deploy_cef_files TARGET_NAME)
             COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${swiftshader_src}" "${swiftshader_dst}"
             COMMENT "强制复制SwiftShader文件")
-        message(STATUS "🎮 将复制swiftshader目录")
+        message(STATUS "[COPY] 将复制swiftshader目录")
     endif()
     
     # 创建验证目标
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "🎉 CEF文件强制部署完成"
+        COMMAND ${CMAKE_COMMAND} -E echo "[SUCCESS] CEF文件强制部署完成"
         COMMENT "验证CEF部署")
     
-    message(STATUS "✅ CEF强制部署配置完成")
+    message(STATUS "[OK] CEF强制部署配置完成")
 endfunction()
 
 # 验证CEF部署结果的函数

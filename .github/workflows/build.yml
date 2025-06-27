@@ -634,50 +634,50 @@ jobs:
         REM 检查第一个位置: build\bin\Release\DesktopTerminal-CEF.exe
         set "EXE_PATH1=build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
         if exist "%EXE_PATH1%" (
-          echo "✓ 找到可执行文件: %EXE_PATH1%"
+          echo "[FOUND] 找到可执行文件: %EXE_PATH1%"
           for %%f in ("%EXE_PATH1%") do echo "  文件大小: %%~zf bytes"
           set "FOUND_EXE=true"
           goto :found_exe
         ) else (
-          echo "✗ 未找到: %EXE_PATH1%"
+          echo "[NOT FOUND] 未找到: %EXE_PATH1%"
         )
         
         REM 检查第二个位置: build\bin\Release\DesktopTerminal-CEF.exe
         set "EXE_PATH2=build\bin\Release\DesktopTerminal-CEF.exe"
         if exist "%EXE_PATH2%" (
-          echo "✓ 找到可执行文件: %EXE_PATH2%"
+          echo "[FOUND] 找到可执行文件: %EXE_PATH2%"
           for %%f in ("%EXE_PATH2%") do echo "  文件大小: %%~zf bytes"
           set "FOUND_EXE=true"
           goto :found_exe
         ) else (
-          echo "✗ 未找到: %EXE_PATH2%"
+          echo "[NOT FOUND] 未找到: %EXE_PATH2%"
         )
         
         REM 检查第三个位置: build\Release\DesktopTerminal-CEF.exe
         set "EXE_PATH3=build\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
         if exist "%EXE_PATH3%" (
-          echo "✓ 找到可执行文件: %EXE_PATH3%"
+          echo "[FOUND] 找到可执行文件: %EXE_PATH3%"
           for %%f in ("%EXE_PATH3%") do echo "  文件大小: %%~zf bytes"
           set "FOUND_EXE=true"
           goto :found_exe
         ) else (
-          echo "✗ 未找到: %EXE_PATH3%"
+          echo "[NOT FOUND] 未找到: %EXE_PATH3%"
         )
         
         REM 检查第四个位置: bin\Release\DesktopTerminal-CEF.exe
         set "EXE_PATH4=bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe"
         if exist "%EXE_PATH4%" (
-          echo "✓ 找到可执行文件: %EXE_PATH4%"
+          echo "[FOUND] 找到可执行文件: %EXE_PATH4%"
           for %%f in ("%EXE_PATH4%") do echo "  文件大小: %%~zf bytes"
           set "FOUND_EXE=true"
           goto :found_exe
         ) else (
-          echo "✗ 未找到: %EXE_PATH4%"
+          echo "[NOT FOUND] 未找到: %EXE_PATH4%"
         )
         
         :found_exe
         if "%FOUND_EXE%"=="true" (
-          echo "✅ 主程序文件找到，开始CEF文件完整性检查..."
+          echo "[OK] 主程序文件找到，开始CEF文件完整性检查..."
           
           REM 检查CEF关键文件是否存在
           set "CEF_FILES_OK=true"
@@ -702,28 +702,28 @@ jobs:
           set "CEF_CORE_FILES=libcef.dll cef.pak"
           for %%f in (%CEF_CORE_FILES%) do (
             if exist "%BUILD_DIR%\%%f" (
-              echo "✅ CEF核心文件存在: %%f"
+              echo "[OK] CEF核心文件存在: %%f"
               for %%s in ("%BUILD_DIR%\%%f") do echo "   大小: %%~zs bytes"
             ) else (
-              echo "❌ CEF核心文件缺失: %%f"
+              echo "[ERROR] CEF核心文件缺失: %%f"
               set "CEF_FILES_OK=false"
             )
           )
           
           REM 检查locales目录
           if exist "%BUILD_DIR%\locales" (
-            echo "✅ CEF本地化文件存在"
+            echo "[OK] CEF本地化文件存在"
             dir "%BUILD_DIR%\locales" /b | find /c /v "" > temp_count.txt
             set /p locale_count=<temp_count.txt
             echo "   语言包数量: %locale_count%"
             del temp_count.txt
           ) else (
-            echo "❌ CEF本地化文件缺失"
+            echo "[ERROR] CEF本地化文件缺失"
             set "CEF_FILES_OK=false"
           )
           
           REM 计算构建目录总大小
-          echo "📊 计算构建产物大小..."
+          echo "[INFO] 计算构建产物大小..."
           if defined BUILD_DIR (
             REM 使用更兼容的方式计算目录大小，避免中文字符问题
             for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c 2^>nul ^| findstr /C:" bytes"') do set "total_size=%%a"
@@ -739,53 +739,53 @@ jobs:
                 REM 验证大小是否合理（应该大于50MB） - 添加数字验证
                 if "%size_mb%" NEQ "" (
                   if %size_mb% LSS 50 (
-                    echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
+                    echo "[WARNING] 构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
                     set "CEF_FILES_OK=false"
                   ) else (
-                    echo "✅ 构建产物大小合理（%size_mb%MB）"
+                    echo "[OK] 构建产物大小合理（%size_mb%MB）"
                   )
                 ) else (
-                  echo "⚠️ 无法验证文件大小（计算结果无效），跳过大小检查"
+                  echo "[WARNING] 无法验证文件大小（计算结果无效），跳过大小检查"
                 )
               ) else (
-                echo "⚠️ 无法计算文件大小，跳过大小验证"
+                echo "[WARNING] 无法计算文件大小，跳过大小验证"
               )
             ) else (
-              echo "⚠️ 无法获取目录大小信息，跳过大小验证"
+              echo "[WARNING] 无法获取目录大小信息，跳过大小验证"
             )
           ) else (
-            echo "⚠️ 构建目录未确定，跳过大小验证"
+            echo "[WARNING] 构建目录未确定，跳过大小验证"
           )
           
           if "%CEF_FILES_OK%"=="true" (
-            echo "🎉 构建和CEF文件验证成功！"
-            echo "📊 验证摘要："
-            echo "   - 主程序: ✅"
-            echo "   - CEF核心文件: ✅"
-            echo "   - 本地化文件: ✅"
+            echo "[SUCCESS] 构建和CEF文件验证成功！"
+            echo "[INFO] 验证摘要："
+            echo "   - 主程序: OK"
+            echo "   - CEF核心文件: OK"
+            echo "   - 本地化文件: OK"
             if defined size_mb (
-              echo "   - 总大小: %size_mb%MB ✅"
+              echo "   - 总大小: %size_mb%MB OK"
             ) else (
-              echo "   - 总大小: 已验证 ✅"
+              echo "   - 总大小: 已验证 OK"
             )
             echo BUILD_SUCCESS=true>>%GITHUB_ENV%
-            echo "✅ 设置BUILD_SUCCESS=true以供后续步骤使用"
+            echo "[OK] 设置BUILD_SUCCESS=true以供后续步骤使用"
           ) else (
-            echo "❌ CEF文件验证失败"
+            echo "[ERROR] CEF文件验证失败"
             echo "--- CEF文件诊断信息 ---"
             echo "构建目录: %BUILD_DIR%"
             echo "目录内容："
-            dir "%BUILD_DIR%" /b | head -20
+            dir "%BUILD_DIR%" /b | more
             echo "DLL文件："
             dir "%BUILD_DIR%\*.dll" /b 2>nul || echo "未找到DLL文件"
             echo "PAK文件："
             dir "%BUILD_DIR%\*.pak" /b 2>nul || echo "未找到PAK文件"
             echo BUILD_SUCCESS=false>>%GITHUB_ENV%
-            echo "❌ 设置BUILD_SUCCESS=false"
+            echo "[ERROR] 设置BUILD_SUCCESS=false"
             exit 1
           )
         ) else (
-          echo "❌ 构建验证失败 - 未找到可执行文件"
+          echo "[ERROR] 构建验证失败 - 未找到可执行文件"
           echo "--- 详细诊断 ---"
           echo "构建目录完整结构:"
           if exist "build" (
@@ -800,7 +800,7 @@ jobs:
             echo "build目录不存在！"
           )
           echo BUILD_SUCCESS=false>>%GITHUB_ENV%
-          echo "✅ 设置BUILD_SUCCESS=false"
+          echo "[ERROR] 设置BUILD_SUCCESS=false"
           exit 1
         )
 
