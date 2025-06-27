@@ -723,19 +723,26 @@ jobs:
         $commitSha = "${{ github.sha }}"
         $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
         
-        # Create build info using PowerShell cmdlets (most robust approach)
-        Write-Host "生成构建信息文件..."
-        $buildInfoFile = Join-Path $artifactPath "BUILD_INFO.txt"
+        # 构建信息文件路径
+        $buildInfoPath = Join-Path $artifactPath "BUILD_INFO.txt"
         
-        "DesktopTerminal-CEF Build Information" | Out-File -FilePath $buildInfoFile -Encoding UTF8
-        "====================================" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Architecture: $arch" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Platform: $platform" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "CEF Version: $cefVersion" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Qt Version: $qtVersion" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Build Type: $buildType" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Build Date: $buildDate" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
-        "Commit: $commitSha" | Out-File -FilePath $buildInfoFile -Append -Encoding UTF8
+        # 内容写入（使用数组方式，最可靠）
+        Write-Host "生成构建信息文件..."
+        $buildInfo = @(
+          "DesktopTerminal-CEF Build Information"
+          "===================================="
+          "Architecture: $arch"
+          "Platform: $platform"
+          "CEF Version: $cefVersion"
+          "Qt Version: $qtVersion"
+          "Build Type: $buildType"
+          "Build Date: $buildDate"
+          "Commit: $commitSha"
+        )
+        
+        # 写入文件
+        $buildInfo | Set-Content -Encoding UTF8 -Path $buildInfoPath
+        Write-Host "✅ 构建信息已写入: $buildInfoPath"
 
     - name: Create Windows Installer
       shell: cmd
