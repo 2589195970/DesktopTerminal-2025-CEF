@@ -704,34 +704,34 @@ jobs:
       if: env.BUILD_SUCCESS == 'true'
       shell: powershell
       run: |
-        Write-Host "=== Windows构建打包阶段 ==="
+        Write-Host "=== Windows Build Packaging Stage ==="
         Write-Host "BUILD_SUCCESS: $env:BUILD_SUCCESS"
         
         if ($env:BUILD_SUCCESS -ne 'true') {
-          Write-Host "❌ 构建未成功，跳过打包"
+          Write-Host "Build not successful, skipping packaging"
           exit 1
         }
         
-        # 诊断构建输出目录结构
-        Write-Host "=== 构建输出诊断 ==="
-        Write-Host "检查构建目录结构..."
+        # Diagnose build output directory structure
+        Write-Host "=== Build Output Diagnostics ==="
+        Write-Host "Checking build directory structure..."
         
         if (Test-Path "build") {
-          Write-Host "build目录存在"
-          Write-Host "build目录内容:"
+          Write-Host "build directory exists"
+          Write-Host "build directory contents:"
           Get-ChildItem "build" -Force | Select-Object Name, PSIsContainer | Format-Table -AutoSize
           
-          Write-Host "查找所有可执行文件:"
+          Write-Host "Finding all executable files:"
           $exeFiles = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue
           if ($exeFiles) {
             $exeFiles | ForEach-Object { 
-              Write-Host "  找到: $($_.FullName) (大小: $($_.Length) bytes)"
+              Write-Host "  Found: $($_.FullName) (size: $($_.Length) bytes)"
             }
           } else {
-            Write-Host "未找到任何.exe文件"
+            Write-Host "No .exe files found"
           }
           
-          Write-Host "检查常见构建输出路径:"
+          Write-Host "Checking common build output paths:"
           $checkPaths = @(
             "build\bin\Release",
             "build\Release",
@@ -740,30 +740,30 @@ jobs:
           
           foreach ($path in $checkPaths) {
             if (Test-Path $path) {
-              Write-Host "路径存在: $path"
+              Write-Host "Path exists: $path"
               Get-ChildItem $path -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table -AutoSize
             } else {
-              Write-Host "路径不存在: $path"
+              Write-Host "Path does not exist: $path"
             }
           }
         } else {
-          Write-Host "build目录不存在！"
-          Write-Host "当前目录内容:"
+          Write-Host "build directory does not exist!"
+          Write-Host "Current directory contents:"
           Get-ChildItem . | Select-Object Name, PSIsContainer | Format-Table -AutoSize
         }
         
-        Write-Host "=== 诊断完成 ==="
+        Write-Host "=== Diagnostics Complete ==="
         Write-Host ""
         
-        # 创建打包目录结构
+        # Create packaging directory structure
         $artifactPath = "artifacts\windows-${{ matrix.arch }}"
-        Write-Host "创建打包目录: $artifactPath"
+        Write-Host "Creating package directory: $artifactPath"
         New-Item -ItemType Directory -Force -Path $artifactPath
         
-        # 智能复制核心可执行文件和依赖
-        Write-Host "=== 开始复制主程序文件 ==="
+        # Smart copy of core executable files and dependencies
+        Write-Host "=== Starting main program file copy ==="
         
-        # 定义可能的源路径（按优先级排序）
+        # Define possible source paths (ordered by priority)
         $possiblePaths = @(
           "build\bin\Release",
           "build\Release",
@@ -773,64 +773,64 @@ jobs:
         $sourceFound = $false
         foreach ($sourcePath in $possiblePaths) {
           if (Test-Path $sourcePath) {
-            Write-Host "找到构建输出目录: $sourcePath"
+            Write-Host "Found build output directory: $sourcePath"
             
-            # 检查是否包含exe文件
+            # Check if it contains exe files
             $exeCount = (Get-ChildItem $sourcePath -Include "*.exe" -ErrorAction SilentlyContinue).Count
             if ($exeCount -gt 0) {
-              Write-Host "发现 $exeCount 个可执行文件，开始复制..."
+              Write-Host "Found $exeCount executable files, starting copy..."
               try {
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
-                Write-Host "主程序文件复制成功"
+                Write-Host "Main program files copied successfully"
                 $sourceFound = $true
                 break
               } catch {
-                Write-Host "复制失败: $($_.Exception.Message)"
+                Write-Host "Copy failed: $($_.Exception.Message)"
                 continue
               }
             } else {
-              Write-Host "目录存在但无exe文件: $sourcePath"
+              Write-Host "Directory exists but no exe files: $sourcePath"
             }
           }
         }
         
         if (-not $sourceFound) {
-          Write-Host "未找到有效的构建输出！"
-          Write-Host "尝试全局搜索exe文件..."
+          Write-Host "No valid build output found!"
+          Write-Host "Attempting global search for exe files..."
           $allExes = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue
           if ($allExes) {
-            Write-Host "找到的exe文件:"
+            Write-Host "Found exe files:"
             $allExes | ForEach-Object { Write-Host "  - $($_.FullName)" }
             
-            # 复制找到的第一个exe文件及其目录
+            # Copy the first found exe file and its directory
             $firstExe = $allExes[0]
             $sourceDir = $firstExe.Directory.FullName
-            Write-Host "使用目录: $sourceDir"
+            Write-Host "Using directory: $sourceDir"
             Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force -ErrorAction Continue
-            Write-Host "已复制找到的文件"
+            Write-Host "Copied found files"
           } else {
-            Write-Host "严重错误：完全未找到exe文件！"
+            Write-Host "Critical error: No exe files found at all!"
             exit 1
           }
         }
         
-        # 复制项目文档
-        Write-Host "复制项目文档..."
+        # Copy project documentation
+        Write-Host "Copying project documentation..."
         Copy-Item "README.md" "$artifactPath\"
         Copy-Item "todo.md" "$artifactPath\"
         
-        # 复制安装器资源文件
-        Write-Host "复制资源文件..."
+        # Copy installer resource files
+        Write-Host "Copying resource files..."
         if (Test-Path "resources") {
           New-Item -ItemType Directory -Force -Path "$artifactPath\resources"
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
-          Write-Host "资源文件复制完成"
+          Write-Host "Resource files copied successfully"
         } else {
-          Write-Host "resources目录不存在，跳过资源复制"
+          Write-Host "resources directory does not exist, skipping resource copy"
         }
         
-        # 跳过BUILD_INFO.txt生成避免PowerShell解析问题，专注核心构建功能
-        Write-Host "构建打包完成，跳过BUILD_INFO.txt生成"
+        # Skip BUILD_INFO.txt generation to avoid PowerShell parsing issues, focus on core build functionality
+        Write-Host "Build packaging complete, skipping BUILD_INFO.txt generation"
 
     - name: Create Windows Installer
       shell: cmd
