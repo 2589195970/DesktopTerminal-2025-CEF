@@ -6,6 +6,7 @@ Unicode true
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
+!include "WinVer.nsh"
 
 ; ─────────────────────────────────────────────
 ; 常量定义
