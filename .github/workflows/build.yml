@@ -714,35 +714,19 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Create version info using secure string concatenation
-        $arch = "${{ matrix.arch }}"
-        $platform = "${{ matrix.name }}"
-        $cefVersion = "${{ matrix.cef_version }}"
-        $qtVersion = "${{ env.QT_VERSION }}"
-        $buildType = "${{ env.BUILD_TYPE }}"
-        $commitSha = "${{ github.sha }}"
-        $buildDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC'
-        
-        # 构建信息文件路径
+        # Generate build info using dedicated PowerShell script (避免字符串解析问题)
+        Write-Host "生成构建信息文件..."
         $buildInfoPath = Join-Path $artifactPath "BUILD_INFO.txt"
         
-        # 内容写入（使用数组方式，最可靠）
-        Write-Host "生成构建信息文件..."
-        $buildInfo = @(
-          "DesktopTerminal-CEF Build Information"
-          "===================================="
-          "Architecture: $arch"
-          "Platform: $platform"
-          "CEF Version: $cefVersion"
-          "Qt Version: $qtVersion"
-          "Build Type: $buildType"
-          "Build Date: $buildDate"
-          "Commit: $commitSha"
-        )
-        
-        # 写入文件
-        $buildInfo | Set-Content -Encoding UTF8 -Path $buildInfoPath
-        Write-Host "✅ 构建信息已写入: $buildInfoPath"
+        # 使用独立脚本避免内联PowerShell字符串解析错误
+        & "scripts/generate-build-info.ps1" `
+          -OutputPath $buildInfoPath `
+          -Architecture "${{ matrix.arch }}" `
+          -Platform "${{ matrix.name }}" `
+          -CefVersion "${{ matrix.cef_version }}" `
+          -QtVersion "${{ env.QT_VERSION }}" `
+          -BuildType "${{ env.BUILD_TYPE }}" `
+          -CommitSha "${{ github.sha }}"
 
     - name: Create Windows Installer
       shell: cmd
