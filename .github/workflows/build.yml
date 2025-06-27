@@ -683,20 +683,49 @@ jobs:
           set "CEF_FILES_OK=true"
           set "BUILD_DIR="
           
-          REM 确定实际的构建目录
-          if exist "build\bin\${{ env.BUILD_TYPE }}" (
-            set "BUILD_DIR=build\bin\${{ env.BUILD_TYPE }}"
+          REM 确定实际的构建目录（按优先级检查已知路径）
+          set "BUILD_DIR="
+          if exist "build\bin\Release" (
+            set "BUILD_DIR=build\bin\Release"
+            echo "[INFO] 使用标准Release构建目录"
           ) else (
-            if exist "build\bin\Release" (
-              set "BUILD_DIR=build\bin\Release"
+            if exist "build\Release" (
+              set "BUILD_DIR=build\Release"
+              echo "[INFO] 使用简化Release构建目录"
             ) else (
-              if exist "build\${{ env.BUILD_TYPE }}" (
-                set "BUILD_DIR=build\${{ env.BUILD_TYPE }}"
+              if exist "build\bin\Debug" (
+                set "BUILD_DIR=build\bin\Debug"
+                echo "[INFO] 使用Debug构建目录"
+              ) else (
+                echo "[WARNING] 未找到标准构建目录，尝试动态检测..."
+                for /d %%d in ("build\bin\*") do (
+                  if exist "%%d\DesktopTerminal-CEF.exe" (
+                    set "BUILD_DIR=%%d"
+                    echo "[INFO] 动态检测到构建目录: %%d"
+                    goto :build_dir_found
+                  )
+                )
               )
             )
           )
+          :build_dir_found
           
-          echo "使用构建目录: %BUILD_DIR%"
+          REM 验证BUILD_DIR是否正确设置
+          if "%BUILD_DIR%"=="" (
+            echo "[ERROR] 无法确定构建目录，终止CEF验证"
+            echo "[INFO] 可用的构建目录结构："
+            if exist "build" (
+              dir "build" /b
+              if exist "build\bin" (
+                echo "build\bin目录内容："
+                dir "build\bin" /b
+              )
+            )
+            set "CEF_FILES_OK=false"
+            goto :skip_cef_check
+          ) else (
+            echo "使用构建目录: %BUILD_DIR%"
+          )
           
           REM 检查关键CEF文件
           set "CEF_CORE_FILES=libcef.dll cef.pak"
@@ -772,6 +801,7 @@ jobs:
             echo "[WARNING] 构建目录未确定，跳过大小验证"
           )
           
+          :skip_cef_check
           if "%CEF_FILES_OK%"=="true" (
             echo "[SUCCESS] 构建和CEF文件验证成功！"
             echo "[INFO] 验证摘要："
