@@ -712,131 +712,125 @@ jobs:
           exit 1
         }
         
-        # 🔍 诊断构建输出目录结构
-        Write-Host "🔍 === 构建输出诊断 ==="
-        Write-Host "🔹 检查构建目录结构..."
+        # 诊断构建输出目录结构
+        Write-Host "=== 构建输出诊断 ==="
+        Write-Host "检查构建目录结构..."
         
         if (Test-Path "build") {
-          Write-Host "✅ build目录存在"
-          Write-Host "📂 build目录内容:"
+          Write-Host "build目录存在"
+          Write-Host "build目录内容:"
           Get-ChildItem "build" -Force | Select-Object Name, PSIsContainer | Format-Table -AutoSize
           
-          Write-Host "🔍 查找所有可执行文件:"
+          Write-Host "查找所有可执行文件:"
           $exeFiles = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue
           if ($exeFiles) {
             $exeFiles | ForEach-Object { 
-              Write-Host "  📄 找到: $($_.FullName) (大小: $($_.Length) bytes)"
+              Write-Host "  找到: $($_.FullName) (大小: $($_.Length) bytes)"
             }
           } else {
-            Write-Host "❌ 未找到任何.exe文件"
+            Write-Host "未找到任何.exe文件"
           }
           
-          Write-Host "🔍 检查常见构建输出路径:"
+          Write-Host "检查常见构建输出路径:"
           $checkPaths = @(
-            "build\bin\${{ env.BUILD_TYPE }}",
-            "build\bin\Release", 
-            "build\${{ env.BUILD_TYPE }}",
+            "build\bin\Release",
             "build\Release",
-            "build\src\${{ env.BUILD_TYPE }}",
             "build\src\Release"
           )
           
           foreach ($path in $checkPaths) {
             if (Test-Path $path) {
-              Write-Host "✅ 路径存在: $path"
+              Write-Host "路径存在: $path"
               Get-ChildItem $path -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table -AutoSize
             } else {
-              Write-Host "❌ 路径不存在: $path"
+              Write-Host "路径不存在: $path"
             }
           }
         } else {
-          Write-Host "❌ build目录不存在！"
-          Write-Host "📂 当前目录内容:"
+          Write-Host "build目录不存在！"
+          Write-Host "当前目录内容:"
           Get-ChildItem . | Select-Object Name, PSIsContainer | Format-Table -AutoSize
         }
         
-        Write-Host "✅ === 诊断完成 ==="
+        Write-Host "=== 诊断完成 ==="
         Write-Host ""
         
-        # 📁 创建打包目录结构
+        # 创建打包目录结构
         $artifactPath = "artifacts\windows-${{ matrix.arch }}"
-        Write-Host "📁 创建打包目录: $artifactPath"
+        Write-Host "创建打包目录: $artifactPath"
         New-Item -ItemType Directory -Force -Path $artifactPath
         
-        # 🎯 智能复制核心可执行文件和依赖
-        Write-Host "🎯 === 开始复制主程序文件 ==="
+        # 智能复制核心可执行文件和依赖
+        Write-Host "=== 开始复制主程序文件 ==="
         
         # 定义可能的源路径（按优先级排序）
         $possiblePaths = @(
-          "build\bin\${{ env.BUILD_TYPE }}",
           "build\bin\Release",
-          "build\${{ env.BUILD_TYPE }}",
           "build\Release",
-          "build\src\${{ env.BUILD_TYPE }}",
           "build\src\Release"
         )
         
         $sourceFound = $false
         foreach ($sourcePath in $possiblePaths) {
           if (Test-Path $sourcePath) {
-            Write-Host "✅ 找到构建输出目录: $sourcePath"
+            Write-Host "找到构建输出目录: $sourcePath"
             
             # 检查是否包含exe文件
             $exeCount = (Get-ChildItem $sourcePath -Include "*.exe" -ErrorAction SilentlyContinue).Count
             if ($exeCount -gt 0) {
-              Write-Host "📄 发现 $exeCount 个可执行文件，开始复制..."
+              Write-Host "发现 $exeCount 个可执行文件，开始复制..."
               try {
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
-                Write-Host "✅ 主程序文件复制成功"
+                Write-Host "主程序文件复制成功"
                 $sourceFound = $true
                 break
               } catch {
-                Write-Host "❌ 复制失败: $($_.Exception.Message)"
+                Write-Host "复制失败: $($_.Exception.Message)"
                 continue
               }
             } else {
-              Write-Host "⚠️ 目录存在但无exe文件: $sourcePath"
+              Write-Host "目录存在但无exe文件: $sourcePath"
             }
           }
         }
         
         if (-not $sourceFound) {
-          Write-Host "❌ 未找到有效的构建输出！"
-          Write-Host "🔍 尝试全局搜索exe文件..."
+          Write-Host "未找到有效的构建输出！"
+          Write-Host "尝试全局搜索exe文件..."
           $allExes = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue
           if ($allExes) {
-            Write-Host "📄 找到的exe文件:"
+            Write-Host "找到的exe文件:"
             $allExes | ForEach-Object { Write-Host "  - $($_.FullName)" }
             
             # 复制找到的第一个exe文件及其目录
             $firstExe = $allExes[0]
             $sourceDir = $firstExe.Directory.FullName
-            Write-Host "🎯 使用目录: $sourceDir"
+            Write-Host "使用目录: $sourceDir"
             Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force -ErrorAction Continue
-            Write-Host "✅ 已复制找到的文件"
+            Write-Host "已复制找到的文件"
           } else {
-            Write-Host "💥 严重错误：完全未找到exe文件！"
+            Write-Host "严重错误：完全未找到exe文件！"
             exit 1
           }
         }
         
-        # 📖 复制项目文档
-        Write-Host "📖 复制项目文档..."
+        # 复制项目文档
+        Write-Host "复制项目文档..."
         Copy-Item "README.md" "$artifactPath\"
         Copy-Item "todo.md" "$artifactPath\"
         
-        # 🗂️ 复制安装器资源文件
-        Write-Host "🗂️ 复制资源文件..."
+        # 复制安装器资源文件
+        Write-Host "复制资源文件..."
         if (Test-Path "resources") {
           New-Item -ItemType Directory -Force -Path "$artifactPath\resources"
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
-          Write-Host "✅ 资源文件复制完成"
+          Write-Host "资源文件复制完成"
         } else {
-          Write-Host "⚠️ resources目录不存在，跳过资源复制"
+          Write-Host "resources目录不存在，跳过资源复制"
         }
         
         # 跳过BUILD_INFO.txt生成避免PowerShell解析问题，专注核心构建功能
-        Write-Host "✅ 构建打包完成，跳过BUILD_INFO.txt生成"
+        Write-Host "构建打包完成，跳过BUILD_INFO.txt生成"
 
     - name: Create Windows Installer
       shell: cmd
