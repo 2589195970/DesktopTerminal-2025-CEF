@@ -619,11 +619,11 @@ jobs:
           echo "🎯 准备进行构建验证..."
         )
 
-    - name: Verify Build
+    - name: Verify Build and CEF Files
       shell: cmd
       run: |
-        echo "=== 构建验证阶段 ==="
-        echo "检查构建产物..."
+        echo "=== 构建和CEF文件验证阶段 ==="
+        echo "检查构建产物和CEF文件完整性..."
         
         REM 首先检查是否在正确的目录
         echo "当前工作目录: %CD%"
@@ -677,9 +677,87 @@ jobs:
         
         :found_exe
         if "%FOUND_EXE%"=="true" (
-          echo "🎉 构建验证成功！"
-          echo BUILD_SUCCESS=true>>%GITHUB_ENV%
-          echo "✅ 设置BUILD_SUCCESS=true以供后续步骤使用"
+          echo "✅ 主程序文件找到，开始CEF文件完整性检查..."
+          
+          REM 检查CEF关键文件是否存在
+          set "CEF_FILES_OK=true"
+          set "BUILD_DIR="
+          
+          REM 确定实际的构建目录
+          if exist "build\bin\${{ env.BUILD_TYPE }}" (
+            set "BUILD_DIR=build\bin\${{ env.BUILD_TYPE }}"
+          ) else if exist "build\bin\Release" (
+            set "BUILD_DIR=build\bin\Release"
+          ) else if exist "build\${{ env.BUILD_TYPE }}" (
+            set "BUILD_DIR=build\${{ env.BUILD_TYPE }}"
+          )
+          
+          echo "使用构建目录: %BUILD_DIR%"
+          
+          REM 检查关键CEF文件
+          set "CEF_CORE_FILES=libcef.dll cef.pak"
+          for %%f in (%CEF_CORE_FILES%) do (
+            if exist "%BUILD_DIR%\%%f" (
+              echo "✅ CEF核心文件存在: %%f"
+              for %%s in ("%BUILD_DIR%\%%f") do echo "   大小: %%~zs bytes"
+            ) else (
+              echo "❌ CEF核心文件缺失: %%f"
+              set "CEF_FILES_OK=false"
+            )
+          )
+          
+          REM 检查locales目录
+          if exist "%BUILD_DIR%\locales" (
+            echo "✅ CEF本地化文件存在"
+            dir "%BUILD_DIR%\locales" /b | find /c /v "" > temp_count.txt
+            set /p locale_count=<temp_count.txt
+            echo "   语言包数量: %locale_count%"
+            del temp_count.txt
+          ) else (
+            echo "❌ CEF本地化文件缺失"
+            set "CEF_FILES_OK=false"
+          )
+          
+          REM 计算构建目录总大小
+          echo "📊 计算构建产物大小..."
+          for /f "tokens=3" %%a in ('dir "%BUILD_DIR%" /s /-c ^| find "个文件"') do set "total_size=%%a"
+          echo "构建产物总大小: %total_size% bytes"
+          
+          REM 转换为MB
+          set /a size_mb=%total_size%/1048576
+          echo "构建产物大小: %size_mb% MB"
+          
+          REM 验证大小是否合理（应该大于50MB）
+          if %size_mb% LSS 50 (
+            echo "⚠️ 警告：构建产物大小异常偏小（%size_mb%MB），可能缺少CEF文件"
+            set "CEF_FILES_OK=false"
+          ) else (
+            echo "✅ 构建产物大小合理（%size_mb%MB）"
+          )
+          
+          if "%CEF_FILES_OK%"=="true" (
+            echo "🎉 构建和CEF文件验证成功！"
+            echo "📊 验证摘要："
+            echo "   - 主程序: ✅"
+            echo "   - CEF核心文件: ✅"
+            echo "   - 本地化文件: ✅"
+            echo "   - 总大小: %size_mb%MB ✅"
+            echo BUILD_SUCCESS=true>>%GITHUB_ENV%
+            echo "✅ 设置BUILD_SUCCESS=true以供后续步骤使用"
+          ) else (
+            echo "❌ CEF文件验证失败"
+            echo "--- CEF文件诊断信息 ---"
+            echo "构建目录: %BUILD_DIR%"
+            echo "目录内容："
+            dir "%BUILD_DIR%" /b | head -20
+            echo "DLL文件："
+            dir "%BUILD_DIR%\*.dll" /b 2>nul || echo "未找到DLL文件"
+            echo "PAK文件："
+            dir "%BUILD_DIR%\*.pak" /b 2>nul || echo "未找到PAK文件"
+            echo BUILD_SUCCESS=false>>%GITHUB_ENV%
+            echo "❌ 设置BUILD_SUCCESS=false"
+            exit 1
+          )
         ) else (
           echo "❌ 构建验证失败 - 未找到可执行文件"
           echo "--- 详细诊断 ---"

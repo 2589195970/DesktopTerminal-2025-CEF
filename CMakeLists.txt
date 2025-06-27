@@ -48,6 +48,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # 包含CEF部署模块
 include(DeployCEF)
+# 包含强制CEF部署模块（解决DeployCEF失效问题）
+include(ForceCEFDeploy)
 
 # 查找Qt5
 find_package(Qt5 COMPONENTS Core Widgets REQUIRED)
@@ -622,11 +624,17 @@ if(CEF_FOUND)
             verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
         endif()
     else()
-        message(STATUS "DeployCEF模块不可用，跳过CEF文件部署")
-        message(STATUS "请确保CEF二进制文件和资源在运行时可用")
+        message(STATUS "⚠️ DeployCEF模块不可用，启用强制CEF部署模式")
         message(STATUS "CEF根目录: ${CEF_ROOT}")
-        message(STATUS "CEF二进制目录: ${CEF_BINARY_DIR}")
-        message(STATUS "CEF资源目录: ${CEF_RESOURCE_DIR}")
+        
+        # 使用强制CEF部署作为fallback
+        if(COMMAND force_deploy_cef_files)
+            message(STATUS "🚀 启动强制CEF文件部署...")
+            force_deploy_cef_files(${PROJECT_NAME})
+            verify_forced_cef_deployment(${PROJECT_NAME})
+        else()
+            message(FATAL_ERROR "❌ 强制CEF部署模块也不可用！请检查cmake模块配置")
+        endif()
     endif()
 endif()
 
