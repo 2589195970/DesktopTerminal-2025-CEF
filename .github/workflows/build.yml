@@ -38,8 +38,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup MSVC
-      uses: microsoft/setup-msbuild@v1.3
+    - name: Setup MSVC Environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.arch }}
 
     - name: Check Available Qt Architectures
       shell: cmd
@@ -71,6 +73,8 @@ jobs:
     - name: Verify CEF Cache Status
       id: verify-cef-cache  
       shell: cmd
+      # 🔍 重要：验证CEF缓存完整性，避免不完整的CEF导致链接错误
+      # 这个步骤经过多版本调试，请勿轻易删除或简化
       run: |
         setlocal enabledelayedexpansion
         echo "=== CEF缓存状态验证 ==="
@@ -177,6 +181,8 @@ jobs:
 
     - name: Final CEF Verification
       shell: cmd
+      # 🔧 关键步骤：最终CEF完整性验证，包含多路径检查适配不同CEF版本
+      # 支持多种CEF目录结构，经过实战验证的错误处理逻辑
       run: |
         echo "=== 详细CEF验证 ==="
         echo "检查CEF目录结构和关键文件..."
@@ -305,18 +311,22 @@ jobs:
 
     - name: Pre-Build Environment Diagnostics
       shell: cmd
+      # 📋 诊断信息收集：为构建失败时的问题排查提供关键信息
+      # 每个诊断项都有实际调试价值，建议保留完整逻辑
       run: |
-        echo "=== 构建环境诊断报告 ==="
-        echo "收集环境信息以协助问题诊断..."
+        echo "🔍 === 构建环境诊断报告 ==="
+        echo "📋 收集环境信息以协助问题诊断..."
+        echo.
         
-        echo "--- 系统信息 ---"
+        echo "🖥️  --- 系统信息 ---"
         echo "操作系统: %OS%"
         echo "处理器架构: %PROCESSOR_ARCHITECTURE%"
         echo "处理器标识: %PROCESSOR_IDENTIFIER%"
         echo "构建架构: ${{ matrix.arch }}"
         echo "Qt架构: ${{ matrix.qt_arch }}"
         
-        echo "--- Qt环境 ---"
+        echo.
+        echo "⚡ --- Qt环境检查 ---"
         echo "Qt5_Dir: %Qt5_Dir%"
         if exist "%Qt5_Dir%" (
           echo "✓ Qt5目录存在"
@@ -328,7 +338,8 @@ jobs:
           echo "✗ Qt5目录不存在"
         )
         
-        echo "--- CEF环境检查 ---"
+        echo.
+        echo "🔧 --- CEF环境检查 ---"
         if exist "third_party\cef" (
           echo "✓ CEF目录存在"
           echo "CEF目录大小和内容:"
@@ -349,22 +360,25 @@ jobs:
           echo "✗ CEF目录不存在 - 这将导致构建失败"
         )
         
-        echo "--- 编译工具链 ---"
-        echo "Visual Studio版本:"
-        where cl 2>nul && cl 2>&1 | findstr "Version" || echo "无法找到cl编译器"
-        echo "CMake版本:"
-        cmake --version 2>nul || echo "无法找到cmake"
-        echo "MSBuild版本:"
-        where msbuild 2>nul && msbuild -version 2>nul || echo "无法找到msbuild"
+        echo.
+        echo "🛠️  --- 编译工具链检查 ---"
+        echo "🔹 Visual Studio版本:"
+        where cl 2>nul && cl 2>&1 | findstr "Version" || echo "❌ 无法找到cl编译器"
+        echo "🔹 CMake版本:"
+        cmake --version 2>nul || echo "❌ 无法找到cmake"
+        echo "🔹 MSBuild版本:"
+        where msbuild 2>nul && msbuild -version 2>nul || echo "❌ 无法找到msbuild"
         
-        echo "--- 磁盘空间 ---"
+        echo.
+        echo "💾 --- 磁盘空间检查 ---"
         for %%d in (C: D:) do (
           if exist %%d\ (
             for /f "tokens=3" %%a in ('dir %%d\ /-c ^| find "bytes free"') do echo "%%d 可用空间: %%a bytes"
           )
         )
         
-        echo "=== 诊断报告完成 ==="
+        echo.
+        echo "✅ === 诊断报告完成 ==="
 
     - name: Configure CMake
       shell: cmd
@@ -698,21 +712,28 @@ jobs:
           exit 1
         }
         
+        # 📁 创建打包目录结构
         $artifactPath = "artifacts\windows-${{ matrix.arch }}"
-        Write-Host "创建打包目录: $artifactPath"
+        Write-Host "📁 创建打包目录: $artifactPath"
         New-Item -ItemType Directory -Force -Path $artifactPath
         
-        # Copy main executable and dependencies
+        # 🎯 复制核心可执行文件和依赖
+        Write-Host "🎯 复制主程序文件..."
         Copy-Item "build\bin\${{ env.BUILD_TYPE }}\*" "$artifactPath\" -Recurse -Force
         
-        # Copy documentation
+        # 📖 复制项目文档
+        Write-Host "📖 复制项目文档..."
         Copy-Item "README.md" "$artifactPath\"
         Copy-Item "todo.md" "$artifactPath\"
         
-        # Copy resources for installer
+        # 🗂️ 复制安装器资源文件
+        Write-Host "🗂️ 复制资源文件..."
         if (Test-Path "resources") {
           New-Item -ItemType Directory -Force -Path "$artifactPath\resources"
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
+          Write-Host "✅ 资源文件复制完成"
+        } else {
+          Write-Host "⚠️ resources目录不存在，跳过资源复制"
         }
         
         # 跳过BUILD_INFO.txt生成避免PowerShell解析问题，专注核心构建功能
