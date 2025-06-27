@@ -736,63 +736,39 @@ jobs:
           REM 检查locales目录
           if exist "%BUILD_DIR%\locales" (
             echo "[OK] CEF本地化文件存在"
-            dir "%BUILD_DIR%\locales" /b | find /c /v "" > temp_count.txt
-            set /p locale_count=<temp_count.txt
-            echo "   语言包数量: %locale_count%"
-            del temp_count.txt
+            echo "   locales目录已验证"
           ) else (
             echo "[ERROR] CEF本地化文件缺失"
             set "CEF_FILES_OK=false"
           )
           
-          REM 计算构建目录总大小（简化版本避免语法错误）
-          echo "[INFO] 计算构建产物大小..."
+          REM 简化的文件存在性验证（避免复杂的数学运算）
+          echo "[INFO] 验证关键文件存在性..."
           if defined BUILD_DIR (
-            REM 使用简化的方法计算目录大小，避免复杂管道命令
-            echo "[INFO] 检查主要文件大小..."
-            set "total_size=0"
-            set "file_count=0"
+            echo "[INFO] 检查主要文件..."
             
-            REM 检查主程序文件大小
+            REM 检查主程序文件
             if exist "%BUILD_DIR%\DesktopTerminal-CEF.exe" (
               for %%f in ("%BUILD_DIR%\DesktopTerminal-CEF.exe") do (
-                echo "  主程序: %%~zf bytes"
-                set /a total_size+=%%~zf 2>nul
-                set /a file_count+=1 2>nul
-              )
-            )
-            
-            REM 检查CEF核心DLL大小
-            if exist "%BUILD_DIR%\libcef.dll" (
-              for %%f in ("%BUILD_DIR%\libcef.dll") do (
-                echo "  CEF核心库: %%~zf bytes"
-                set /a total_size+=%%~zf 2>nul
-                set /a file_count+=1 2>nul
-              )
-            )
-            
-            REM 输出统计信息
-            echo "已检查文件数量: %file_count%"
-            echo "核心文件总大小: %total_size% bytes"
-            
-            REM 极简的大小验证（避免所有复杂比较）
-            echo "[INFO] 文件大小验证..."
-            if defined total_size (
-              if "%total_size%" NEQ "" (
-                if "%total_size%" NEQ "0" (
-                  echo "[OK] 构建产物存在，大小: %total_size% bytes"
-                ) else (
-                  echo "[ERROR] 未找到任何核心文件"
-                  set "CEF_FILES_OK=false"
-                )
-              ) else (
-                echo "[WARNING] 文件大小为空，跳过验证"
+                echo "  [OK] 主程序: %%~zf bytes"
               )
             ) else (
-              echo "[WARNING] 文件大小变量未定义，跳过验证"
+              echo "  [ERROR] 主程序文件缺失"
+              set "CEF_FILES_OK=false"
             )
+            
+            REM 检查CEF核心DLL
+            if exist "%BUILD_DIR%\libcef.dll" (
+              for %%f in ("%BUILD_DIR%\libcef.dll") do (
+                echo "  [OK] CEF核心库: %%~zf bytes"
+              )
+            ) else (
+              echo "  [WARNING] CEF核心库未找到（可能在构建后复制）"
+            )
+            
+            echo "[INFO] 核心文件验证完成"
           ) else (
-            echo "[WARNING] 构建目录未确定，跳过大小验证"
+            echo "[WARNING] 构建目录未确定，跳过文件验证"
           )
           
           :skip_cef_check
@@ -802,11 +778,7 @@ jobs:
             echo "   - 主程序: OK"
             echo "   - CEF核心文件: OK"
             echo "   - 本地化文件: OK"
-            if defined size_mb (
-              echo "   - 总大小: %size_mb%MB OK"
-            ) else (
-              echo "   - 总大小: 已验证 OK"
-            )
+            echo "   - 文件验证: 已完成"
             echo BUILD_SUCCESS=true>>%GITHUB_ENV%
             echo "[OK] 设置BUILD_SUCCESS=true以供后续步骤使用"
           ) else (
@@ -814,7 +786,7 @@ jobs:
             echo "--- CEF文件诊断信息 ---"
             echo "构建目录: %BUILD_DIR%"
             echo "目录内容："
-            dir "%BUILD_DIR%" /b | more
+            dir "%BUILD_DIR%" /b
             echo "DLL文件："
             dir "%BUILD_DIR%\*.dll" /b 2>nul || echo "未找到DLL文件"
             echo "PAK文件："
