@@ -109,39 +109,75 @@ Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     
     ; 检查CEF程序文件是否存在（支持多种构建输出路径）
+    ; 增强路径匹配逻辑，支持GitHub Actions和本地构建的多种目录结构
     ${If} ${FileExists} "artifacts\windows-${ARCH}\DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件..."
-        ; 从GitHub Actions artifacts安装
-        File /r "artifacts\windows-${ARCH}\*.*"
+        DetailPrint "正在安装CEF应用程序文件（GitHub Actions构建）..."
+        ; 从GitHub Actions artifacts安装 - 修复路径语法
+        File /r "artifacts\windows-${ARCH}\*"
+        SetOutPath "$INSTDIR\logs"
+        File /nonfatal /oname=build_source.txt "artifacts\windows-${ARCH}\BUILD_INFO.txt"
+        SetOutPath "$INSTDIR"
     ${ElseIf} ${FileExists} "build\bin\Release\DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件..."
-        ; 从构建目录安装
-        File /r "build\bin\Release\*.*"
+        DetailPrint "正在安装CEF应用程序文件（标准Release构建）..."
+        ; 从构建目录安装 - 修复路径语法
+        File /r "build\bin\Release\*"
+    ${ElseIf} ${FileExists} "build\bin\DesktopTerminal-CEF.exe"
+        DetailPrint "正在安装CEF应用程序文件（bin目录构建）..."
+        ; 支持无Release子目录的构建输出
+        File /r "build\bin\*"
     ${ElseIf} ${FileExists} "DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件..."
-        ; 当前目录安装
-        File /r "*.*"
+        DetailPrint "正在安装CEF应用程序文件（当前目录）..."
+        ; 当前目录安装 - 排除NSIS自身文件和构建临时文件
+        File /r /x "*.nsi" /x "*.nsh" /x "Output" /x "build" /x "third_party" "*"
     ${Else}
-        MessageBox MB_ICONSTOP "安装包损坏：找不到DesktopTerminal-CEF.exe文件。请重新下载安装包。"
+        MessageBox MB_ICONSTOP "安装包损坏：找不到DesktopTerminal-CEF.exe文件。请重新下载安装包。$\n$\n查找路径：$\n- artifacts\windows-${ARCH}\$\n- build\bin\Release\$\n- build\bin\$\n- 当前目录"
         Abort
     ${EndIf}
 
-    ; 验证CEF关键文件
-    DetailPrint "正在验证CEF组件..."
+    ; 增强的CEF关键文件验证逻辑
+    DetailPrint "正在验证CEF组件安装完整性..."
     
-    ; 检查主程序
+    ; 检查主程序文件
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
         DetailPrint "✓ 主程序已安装"
+        ; 验证文件大小（应该大于1MB）
+        FileOpen $R0 "$INSTDIR\DesktopTerminal-CEF.exe" r
+        ${If} $R0 != ""
+            FileClose $R0
+            ; 获取文件大小验证
+            ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
+            ${If} $R1 > 1000  ; 大于1MB
+                DetailPrint "✓ 主程序文件大小验证通过"
+            ${Else}
+                DetailPrint "⚠ 主程序文件可能不完整"
+            ${EndIf}
+        ${EndIf}
     ${Else}
-        MessageBox MB_ICONSTOP "主程序文件安装失败"
+        MessageBox MB_ICONSTOP "❌ 安装验证失败：主程序文件未正确安装到 $INSTDIR\DesktopTerminal-CEF.exe$\n$\n这表明安装过程中的文件复制失败。$\n请检查：$\n1. 磁盘空间是否充足$\n2. 目标目录是否有写权限$\n3. 安装包是否完整"
         Abort
     ${EndIf}
     
-    ; 检查CEF核心库（libcef.dll是CEF的关键文件）
+    ; 检查CEF核心库文件
     ${If} ${FileExists} "$INSTDIR\libcef.dll"
         DetailPrint "✓ CEF核心库已安装"
+    ${ElseIf} ${FileExists} "$INSTDIR\cef.dll"
+        DetailPrint "✓ CEF核心库已安装（cef.dll格式）"
     ${Else}
-        DetailPrint "⚠ 未找到libcef.dll，程序可能无法正常运行"
+        DetailPrint "⚠ 未找到CEF核心库文件，程序可能无法正常运行"
+        DetailPrint "  预期位置：$INSTDIR\libcef.dll 或 $INSTDIR\cef.dll"
+    ${EndIf}
+    
+    ; 验证安装目录内容
+    DetailPrint "安装目录内容验证..."
+    ${DirState} "$INSTDIR" $R0
+    ${If} $R0 == 0
+        DetailPrint "❌ 安装目录为空！"
+        MessageBox MB_ICONSTOP "安装目录验证失败：目标目录 $INSTDIR 为空。$\n$\n可能原因：$\n1. 文件复制过程失败$\n2. 权限不足$\n3. 杀毒软件拦截"
+        Abort
+    ${ElseIf} $R0 == 1
+        DetailPrint "✓ 安装目录包含文件"
+    ${Else}
+        DetailPrint "✓ 安装目录包含文件和子目录"
     ${EndIf}
 
     ; 资源目录
@@ -206,11 +242,47 @@ Section "主程序" SecMain
         CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\DesktopTerminal-CEF.exe"
     ${EndIf}
     
-    ; 安装完成后验证（适配CEF）
-    DetailPrint "正在验证安装..."
+    ; 最终安装验证和诊断（适配CEF）
+    DetailPrint "正在进行最终安装验证..."
+    
+    ; 详细的安装完整性检查
+    Var /GLOBAL VerificationErrors
+    StrCpy $VerificationErrors ""
+    
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
-    ${AndIf} ${FileExists} "$INSTDIR\config.json"
-        DetailPrint "安装验证成功"
+        DetailPrint "✓ 主程序文件验证通过"
+    ${Else}
+        DetailPrint "❌ 主程序文件缺失"
+        StrCpy $VerificationErrors "$VerificationErrors• 主程序文件 DesktopTerminal-CEF.exe 缺失$\n"
+    ${EndIf}
+    
+    ${If} ${FileExists} "$INSTDIR\config.json"
+        DetailPrint "✓ 配置文件验证通过"
+    ${Else}
+        DetailPrint "⚠ 配置文件缺失，将影响程序启动"
+        StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
+    ${EndIf}
+    
+    ; 统计安装文件数量进行验证
+    ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
+    DetailPrint "安装统计：$R2 个文件，总大小 $R1 KB"
+    
+    ${If} $R2 < 3
+        DetailPrint "❌ 安装文件数量异常偏少"
+        StrCpy $VerificationErrors "$VerificationErrors• 安装文件数量过少（仅 $R2 个文件）$\n"
+    ${ElseIf} $R1 < 500
+        DetailPrint "❌ 安装文件总大小异常偏小"
+        StrCpy $VerificationErrors "$VerificationErrors• 安装文件总大小异常（仅 $R1 KB）$\n"
+    ${Else}
+        DetailPrint "✓ 文件数量和大小验证通过"
+    ${EndIf}
+    
+    ; 如果发现错误，显示详细诊断信息
+    ${If} $VerificationErrors != ""
+        MessageBox MB_ICONSTOP "❌ 安装验证失败！$\n$\n发现的问题：$\n$VerificationErrors$\n可能原因：$\n1. 安装包文件不完整或损坏$\n2. 磁盘空间不足或写权限受限$\n3. 杀毒软件阻止了文件写入$\n4. 系统环境不兼容$\n$\n建议：$\n- 重新下载安装包$\n- 以管理员身份运行安装程序$\n- 临时关闭杀毒软件后重试"
+        Abort
+    ${Else}
+        DetailPrint "✅ 所有验证检查通过"
         
         ; 检查VC++运行时（CEF需要）
         ClearErrors
@@ -226,9 +298,7 @@ Section "主程序" SecMain
             skip_vc_download:
         ${EndIf}
         
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。$\n$\nCEF版本：${CEF_VERSION}"
-    ${Else}
-        MessageBox MB_ICONSTOP "安装验证失败！某些关键文件可能未正确安装。"
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
     ${EndIf}
 SectionEnd
 
