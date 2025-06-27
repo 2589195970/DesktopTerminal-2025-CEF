@@ -73,7 +73,7 @@ jobs:
     - name: Verify CEF Cache Status
       id: verify-cef-cache  
       shell: cmd
-      # 🔍 重要：验证CEF缓存完整性，避免不完整的CEF导致链接错误
+      # [INFO] 重要：验证CEF缓存完整性，避免不完整的CEF导致链接错误
       # 这个步骤经过多版本调试，请勿轻易删除或简化
       run: |
         setlocal enabledelayedexpansion
@@ -104,16 +104,16 @@ jobs:
           if exist "third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h" (
             if exist "third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib" (
               if exist "third_party\cef\!CEF_BINARY_NAME!\libcef_dll" (
-                echo "✅ CEF缓存验证通过 - 所有关键文件存在"
+                echo "[OK] CEF缓存验证通过 - 所有关键文件存在"
                 set "CEF_VALID=true"
               ) else (
-                echo "✗ CEF Wrapper源码缺失"
+                echo "[ERROR] CEF Wrapper源码缺失"
               )
             ) else (
-              echo "✗ CEF主库文件缺失"
+              echo "[ERROR] CEF主库文件缺失"
             )
           ) else (
-            echo "✗ CEF头文件缺失"
+            echo "[ERROR] CEF头文件缺失"
           )
         ) else (
           echo "未命中缓存，需要下载CEF"
@@ -163,25 +163,25 @@ jobs:
           for /d %%d in ("third_party\cef\cef_binary_*") do (
             echo "=== 检查 %%d ==="
             if exist "%%d\Release\libcef.lib" (
-              echo "✓ 找到主库: %%d\Release\libcef.lib"
+              echo "[OK] 找到主库: %%d\Release\libcef.lib"
               for %%f in ("%%d\Release\libcef.lib") do echo "  大小: %%~zf bytes"
             ) else (
-              echo "✗ 主库缺失: %%d\Release\libcef.lib"
+              echo "[ERROR] 主库缺失: %%d\Release\libcef.lib"
             )
             
             if exist "%%d\libcef_dll" (
-              echo "✓ Wrapper源码存在: %%d\libcef_dll"
+              echo "[OK] Wrapper源码存在: %%d\libcef_dll"
             ) else (
-              echo "✗ Wrapper源码缺失: %%d\libcef_dll"
+              echo "[ERROR] Wrapper源码缺失: %%d\libcef_dll"
             )
           )
         ) else (
-          echo "✗ CEF目录下载失败！"
+          echo "[ERROR] CEF目录下载失败！"
         )
 
     - name: Final CEF Verification
       shell: cmd
-      # 🔧 关键步骤：最终CEF完整性验证，包含多路径检查适配不同CEF版本
+      # [CHECK] 关键步骤：最终CEF完整性验证，包含多路径检查适配不同CEF版本
       # 支持多种CEF目录结构，经过实战验证的错误处理逻辑
       run: |
         echo "=== 详细CEF验证 ==="
@@ -195,32 +195,32 @@ jobs:
           for /d %%d in ("third_party\cef\cef_binary_*") do (
             echo "=== 检查 %%d ==="
             if exist "%%d\include\cef_version.h" (
-              echo "✓ 头文件存在: %%d\include\cef_version.h"
+              echo "[OK] 头文件存在: %%d\include\cef_version.h"
             ) else (
-              echo "✗ 头文件缺失: %%d\include\cef_version.h"
+              echo "[ERROR] 头文件缺失: %%d\include\cef_version.h"
             )
             
             if exist "%%d\Release" (
-              echo "✓ Release目录存在，内容："
+              echo "[OK] Release目录存在，内容："
               dir "%%d\Release" /b | findstr /i "\.lib"
               if exist "%%d\Release\libcef.lib" (
-                echo "✓ 关键库文件存在: libcef.lib"
+                echo "[OK] 关键库文件存在: libcef.lib"
               ) else (
-                echo "✗ 关键库文件缺失: libcef.lib"
+                echo "[ERROR] 关键库文件缺失: libcef.lib"
               )
             ) else (
-              echo "✗ Release目录缺失"
+              echo "[ERROR] Release目录缺失"
             )
             
             if exist "%%d\libcef_dll" (
-              echo "✓ CEF Wrapper源码目录存在"
+              echo "[OK] CEF Wrapper源码目录存在"
               dir "%%d\libcef_dll" /b | findstr /i "\.h \.cc"
             ) else (
-              echo "✗ CEF Wrapper源码目录缺失"
+              echo "[ERROR] CEF Wrapper源码目录缺失"
             )
           )
         ) else (
-          echo "✗ CEF目录完全不存在！"
+          echo "[ERROR] CEF目录完全不存在！"
         )
         setlocal enabledelayedexpansion
         echo "最终CEF验证..."
@@ -255,7 +255,7 @@ jobs:
           for /l %%i in (1,1,3) do (
             if "!HEADER_FOUND!"=="false" (
               if exist "!HEADER_PATHS[%%i]!" (
-                echo "✓ 找到头文件: %%h at !HEADER_PATHS[%%i]!"
+                echo "[OK] 找到头文件: %%h at !HEADER_PATHS[%%i]!"
                 set "HEADER_FOUND=true"
                 set /a HEADERS_FOUND+=1
               )
@@ -263,7 +263,7 @@ jobs:
           )
           
           if "!HEADER_FOUND!"=="false" (
-            echo "✗ 缺失头文件: %%h"
+            echo "[ERROR] 缺失头文件: %%h"
             set "VERIFICATION_FAILED=true"
           )
         )
@@ -277,20 +277,20 @@ jobs:
         for /l %%i in (1,1,3) do (
           if "!LIB_FOUND!"=="false" (
             if exist "!LIB_PATHS[%%i]!" (
-              echo "✓ 找到CEF库文件: !LIB_PATHS[%%i]!"
+              echo "[OK] 找到CEF库文件: !LIB_PATHS[%%i]!"
               set "LIB_FOUND=true"
             )
           )
         )
         
         if "!LIB_FOUND!"=="false" (
-          echo "✗ 缺失CEF库文件(libcef.lib)"
+          echo "[ERROR] 缺失CEF库文件(libcef.lib)"
           set "VERIFICATION_FAILED=true"
         )
         
         REM 最终验证结果
         if "!VERIFICATION_FAILED!"=="true" (
-          echo "❌ CEF验证失败 - 部分关键文件缺失"
+          echo "[ERROR] CEF验证失败 - 部分关键文件缺失"
           echo "找到的头文件数量: !HEADERS_FOUND!/3"
           echo "CEF目录结构（用于诊断）:"
           if exist "third_party\cef" (
@@ -303,22 +303,22 @@ jobs:
           )
           exit /b 1
         ) else (
-          echo "✅ CEF验证成功 - 所有关键文件都存在"
-          echo "✅ 找到头文件: !HEADERS_FOUND!/3"
-          echo "✅ 找到库文件: libcef.lib"
+          echo "[SUCCESS] CEF验证成功 - 所有关键文件都存在"
+          echo "[SUCCESS] 找到头文件: !HEADERS_FOUND!/3"
+          echo "[SUCCESS] 找到库文件: libcef.lib"
           echo "CEF安装路径: third_party\cef\!CEF_BINARY_NAME!"
         )
 
     - name: Pre-Build Environment Diagnostics
       shell: cmd
-      # 📋 诊断信息收集：为构建失败时的问题排查提供关键信息
+      # [REPORT] 诊断信息收集：为构建失败时的问题排查提供关键信息
       # 每个诊断项都有实际调试价值，建议保留完整逻辑
       run: |
-        echo "🔍 === 构建环境诊断报告 ==="
-        echo "📋 收集环境信息以协助问题诊断..."
+        echo "[INFO] === 构建环境诊断报告 ==="
+        echo "[REPORT] 收集环境信息以协助问题诊断..."
         echo.
         
-        echo "🖥️  --- 系统信息 ---"
+        echo "[SYSTEM]  --- 系统信息 ---"
         echo "操作系统: %OS%"
         echo "处理器架构: %PROCESSOR_ARCHITECTURE%"
         echo "处理器标识: %PROCESSOR_IDENTIFIER%"
@@ -326,51 +326,51 @@ jobs:
         echo "Qt架构: ${{ matrix.qt_arch }}"
         
         echo.
-        echo "⚡ --- Qt环境检查 ---"
+        echo "[TOOLS] --- Qt环境检查 ---"
         echo "Qt5_Dir: %Qt5_Dir%"
         if exist "%Qt5_Dir%" (
-          echo "✓ Qt5目录存在"
+          echo "[OK] Qt5目录存在"
           echo "Qt5版本信息:"
           if exist "%Qt5_Dir%\bin\qmake.exe" (
             "%Qt5_Dir%\bin\qmake.exe" -query QT_VERSION 2>nul || echo "无法获取Qt版本"
           )
         ) else (
-          echo "✗ Qt5目录不存在"
+          echo "[ERROR] Qt5目录不存在"
         )
         
         echo.
-        echo "🔧 --- CEF环境检查 ---"
+        echo "[CHECK] --- CEF环境检查 ---"
         if exist "third_party\cef" (
-          echo "✓ CEF目录存在"
+          echo "[OK] CEF目录存在"
           echo "CEF目录大小和内容:"
           for /d %%d in ("third_party\cef\cef_binary_*") do (
             echo "  CEF目录: %%d"
             if exist "%%d\Release\libcef.lib" (
               for %%f in ("%%d\Release\libcef.lib") do echo "    libcef.lib: %%~zf bytes"
             ) else (
-              echo "    ✗ libcef.lib缺失"
+              echo "    [ERROR] libcef.lib缺失"
             )
             if exist "%%d\include\cef_version.h" (
-              echo "    ✓ 头文件存在"
+              echo "    [OK] 头文件存在"
             ) else (
-              echo "    ✗ 头文件缺失"
+              echo "    [ERROR] 头文件缺失"
             )
           )
         ) else (
-          echo "✗ CEF目录不存在 - 这将导致构建失败"
+          echo "[ERROR] CEF目录不存在 - 这将导致构建失败"
         )
         
         echo.
-        echo "🛠️  --- 编译工具链检查 ---"
-        echo "🔹 Visual Studio版本:"
-        where cl 2>nul && cl 2>&1 | findstr "Version" || echo "❌ 无法找到cl编译器"
-        echo "🔹 CMake版本:"
-        cmake --version 2>nul || echo "❌ 无法找到cmake"
-        echo "🔹 MSBuild版本:"
-        where msbuild 2>nul && msbuild -version 2>nul || echo "❌ 无法找到msbuild"
+        echo "[TOOLS]  --- 编译工具链检查 ---"
+        echo "[INFO] Visual Studio版本:"
+        where cl 2>nul && cl 2>&1 | findstr "Version" || echo "[ERROR] 无法找到cl编译器"
+        echo "[INFO] CMake版本:"
+        cmake --version 2>nul || echo "[ERROR] 无法找到cmake"
+        echo "[INFO] MSBuild版本:"
+        where msbuild 2>nul && msbuild -version 2>nul || echo "[ERROR] 无法找到msbuild"
         
         echo.
-        echo "💾 --- 磁盘空间检查 ---"
+        echo "[DISK] --- 磁盘空间检查 ---"
         for %%d in (C: D:) do (
           if exist %%d\ (
             for /f "tokens=3" %%a in ('dir %%d\ /-c ^| find "bytes free"') do echo "%%d 可用空间: %%a bytes"
@@ -378,7 +378,7 @@ jobs:
         )
         
         echo.
-        echo "✅ === 诊断报告完成 ==="
+        echo "[SUCCESS] === 诊断报告完成 ==="
 
     - name: Configure CMake
       shell: cmd
@@ -390,16 +390,16 @@ jobs:
         
         REM 检查关键依赖
         if not exist "%Qt5_Dir%" (
-          echo "❌ Qt5目录不存在: %Qt5_Dir%"
+          echo "[ERROR] Qt5目录不存在: %Qt5_Dir%"
           exit /b 1
         )
         
         if not exist "third_party\cef" (
-          echo "❌ CEF目录不存在 - 这将导致CMake配置失败"
+          echo "[ERROR] CEF目录不存在 - 这将导致CMake配置失败"
           exit /b 1
         )
         
-        echo "✅ 基础依赖检查通过"
+        echo "[SUCCESS] 基础依赖检查通过"
         mkdir build 2>nul
         cd build
         
@@ -428,7 +428,7 @@ jobs:
         )
         
         if %errorlevel% neq 0 (
-          echo "❌ CMake配置失败"
+          echo "[ERROR] CMake配置失败"
           echo "错误级别: %errorlevel%"
           echo "--- CMake错误诊断 ---"
           echo "CMakeCache.txt内容（如果存在）:"
@@ -445,7 +445,7 @@ jobs:
           )
           exit /b 1
         ) else (
-          echo "✅ CMake配置成功"
+          echo "[SUCCESS] CMake配置成功"
           
           REM 正确设置环境变量给后续步骤
           echo CMAKE_CONFIG_SUCCESS=true>>%GITHUB_ENV%
@@ -460,7 +460,7 @@ jobs:
           dir *.sln /b || echo "未找到解决方案文件"
           echo "项目文件:"
           dir *.vcxproj /b | head -5 || echo "未找到项目文件"
-          echo "🎯 准备执行构建步骤..."
+          echo "[TARGET] 准备执行构建步骤..."
         )
 
     - name: Build Project  
@@ -475,27 +475,27 @@ jobs:
         
         REM 验证前置条件
         if not "%CMAKE_CONFIG_SUCCESS%"=="true" (
-          echo "❌ CMake配置未成功，无法继续构建"
+          echo "[ERROR] CMake配置未成功，无法继续构建"
           echo "CMAKE_CONFIG_SUCCESS='%CMAKE_CONFIG_SUCCESS%' (应该是'true')"
           echo "这表明环境变量传递失败或CMake配置步骤未成功"
           echo "请检查前一步骤的环境变量设置"
           exit /b 1
         ) else (
-          echo "✅ 环境变量验证通过：CMAKE_CONFIG_SUCCESS=true"
+          echo "[SUCCESS] 环境变量验证通过：CMAKE_CONFIG_SUCCESS=true"
         )
         
         if not exist "%CMAKE_BUILD_DIR%" (
-          echo "❌ 构建目录不存在: %CMAKE_BUILD_DIR%"
+          echo "[ERROR] 构建目录不存在: %CMAKE_BUILD_DIR%"
           echo "尝试使用默认构建目录..."
           if exist "build" (
-            echo "✓ 找到默认构建目录"
+            echo "[OK] 找到默认构建目录"
             cd build
           ) else (
-            echo "❌ 无法找到任何构建目录"
+            echo "[ERROR] 无法找到任何构建目录"
             exit /b 1
           )
         ) else (
-          echo "✓ 使用配置的构建目录: %CMAKE_BUILD_DIR%"
+          echo "[OK] 使用配置的构建目录: %CMAKE_BUILD_DIR%"
           cd "%CMAKE_BUILD_DIR%"
         )
         
@@ -506,20 +506,20 @@ jobs:
         
         echo "检查生成的项目文件:"
         if exist "*.sln" (
-          for %%f in (*.sln) do echo "✓ 解决方案文件: %%f"
+          for %%f in (*.sln) do echo "[OK] 解决方案文件: %%f"
         ) else (
-          echo "✗ 未找到解决方案文件"
-          echo "❌ 这表明CMake配置可能未完全成功"
+          echo "[ERROR] 未找到解决方案文件"
+          echo "[ERROR] 这表明CMake配置可能未完全成功"
           exit /b 1
         )
         
         if exist "*.vcxproj" (
-          echo "✓ 找到项目文件"
+          echo "[OK] 找到项目文件"
           echo "项目文件列表:"
           dir *.vcxproj /b | head -10
         ) else (
-          echo "✗ 未找到项目文件"
-          echo "❌ 这表明CMake配置可能未完全成功"
+          echo "[ERROR] 未找到项目文件"
+          echo "[ERROR] 这表明CMake配置可能未完全成功"
           exit /b 1
         )
         
@@ -528,7 +528,7 @@ jobs:
         echo "并行数: %NUMBER_OF_PROCESSORS%"
         echo "目标平台: ${{ matrix.platform }}"
         
-        echo "🔨 执行构建命令..."
+        echo "[BUILD] 执行构建命令..."
         echo "命令: cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose"
         
         REM 设置详细输出以便诊断链接错误
@@ -538,7 +538,7 @@ jobs:
         echo "构建命令完成，返回码: %BUILD_RESULT%"
         
         if !BUILD_RESULT! neq 0 (
-          echo "❌ 编译失败，错误级别: !BUILD_RESULT!"
+          echo "[ERROR] 编译失败，错误级别: !BUILD_RESULT!"
           echo "--- 编译错误诊断 ---"
           
           REM 检查是否是链接错误（LNK2019等）
@@ -580,17 +580,17 @@ jobs:
           
           exit /b !BUILD_RESULT!
         ) else (
-          echo "✅ 编译成功！"
+          echo "[SUCCESS] 编译成功！"
           echo "--- 编译结果验证 ---"
           
           REM 验证生成的可执行文件
           if exist "bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
-            echo "✅ 主程序文件生成成功"
+            echo "[SUCCESS] 主程序文件生成成功"
             for %%f in ("bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe") do (
               echo "  文件大小: %%~zf bytes"
             )
           ) else (
-            echo "⚠️ 主程序文件未找到，但编译报告成功"
+            echo "[WARNING] 主程序文件未找到，但编译报告成功"
             echo "检查bin目录结构:"
             if exist "bin" (
               dir bin /s /b
@@ -601,22 +601,22 @@ jobs:
           
           REM 验证生成的库文件
           if exist "lib\${{ env.BUILD_TYPE }}\*.lib" (
-            echo "✅ 库文件生成:"
+            echo "[SUCCESS] 库文件生成:"
             dir "lib\${{ env.BUILD_TYPE }}\*.lib" /b
           ) else (
-            echo "ℹ️ 未找到生成的库文件（可能正常）"
+            echo "[INFO] 未找到生成的库文件（可能正常）"
           )
           
-          echo "🎉 Windows ${{ matrix.arch }}位构建完成！"
+          echo "[SUCCESS] Windows ${{ matrix.arch }}位构建完成！"
           
           REM 正确设置构建成功环境变量
           echo BUILD_SUCCESS=true>>%GITHUB_ENV%
           echo "--- 构建成功总结 ---"
-          echo "✅ 编译成功完成"
-          echo "✅ 可执行文件应已生成"
-          echo "✅ 库文件已编译"
-          echo "✅ 设置BUILD_SUCCESS=true"
-          echo "🎯 准备进行构建验证..."
+          echo "[SUCCESS] 编译成功完成"
+          echo "[SUCCESS] 可执行文件应已生成"
+          echo "[SUCCESS] 库文件已编译"
+          echo "[SUCCESS] 设置BUILD_SUCCESS=true"
+          echo "[TARGET] 准备进行构建验证..."
         )
 
     - name: Verify Build and CEF Files
@@ -954,10 +954,10 @@ jobs:
         
         echo "检查构建产物..."
         if exist "build\bin\${{ env.BUILD_TYPE }}\DesktopTerminal-CEF.exe" (
-          echo "✓ 找到主程序文件"
+          echo "[OK] 找到主程序文件"
           dir "build\bin\${{ env.BUILD_TYPE }}"
         ) else (
-          echo "✗ 未找到主程序文件"
+          echo "[ERROR] 未找到主程序文件"
           echo "构建目录内容："
           dir build /s
           exit /b 1
@@ -1072,14 +1072,14 @@ jobs:
         for CHECK_PATH in "${CEF_CHECK_PATHS[@]}"; do
           echo "检查路径: $CHECK_PATH"
           if [[ -f "$CHECK_PATH" ]]; then
-            echo "✓ CEF头文件验证成功: $CHECK_PATH"
+            echo "[OK] CEF头文件验证成功: $CHECK_PATH"
             CEF_VALID=true
             break
           fi
         done
         
         if [[ "$CEF_VALID" == "false" ]]; then
-          echo "✗ CEF头文件在所有预期路径中都不存在，需要重新下载"
+          echo "[ERROR] CEF头文件在所有预期路径中都不存在，需要重新下载"
           if [[ -d "third_party/cef" ]]; then
             echo "显示当前CEF目录结构用于诊断:"
             find third_party/cef -name "cef_version.h" -type f 2>/dev/null || echo "未找到任何cef_version.h文件"
@@ -1114,11 +1114,11 @@ jobs:
     - name: Verify Build
       run: |
         if [ -f "build/bin/DesktopTerminal-CEF" ]; then
-          echo "✓ Main executable found"
+          echo "[OK] Main executable found"
           ls -la build/bin/
           file build/bin/DesktopTerminal-CEF
         else
-          echo "✗ Main executable not found"
+          echo "[ERROR] Main executable not found"
           find build -name "*DesktopTerminal*" -type f
           exit 1
         fi
@@ -1196,11 +1196,11 @@ jobs:
     - name: Verify Build
       run: |
         if [ -f "build/bin/DesktopTerminal-CEF" ]; then
-          echo "✓ Main executable found"
+          echo "[OK] Main executable found"
           ls -la build/bin/
           file build/bin/DesktopTerminal-CEF
         else
-          echo "✗ Main executable not found"
+          echo "[ERROR] Main executable not found"
           find build -name "*DesktopTerminal*" -type f
           exit 1
         fi
@@ -1242,7 +1242,7 @@ jobs:
 
     - name: Verify Project Structure
       run: |
-        echo "🔍 Checking project structure..."
+        echo "[INFO] Checking project structure..."
         
         required_files=(
           "CMakeLists.txt"
@@ -1256,9 +1256,9 @@ jobs:
         
         for file in "${required_files[@]}"; do
           if [ -f "$file" ]; then
-            echo "✓ $file found"
+            echo "[OK] $file found"
           else
-            echo "✗ $file missing"
+            echo "[ERROR] $file missing"
             exit 1
           fi
         done
@@ -1275,29 +1275,29 @@ jobs:
         
         for dir in "${required_dirs[@]}"; do
           if [ -d "$dir" ]; then
-            echo "✓ $dir/ found"
+            echo "[OK] $dir/ found"
           else
-            echo "✗ $dir/ missing"
+            echo "[ERROR] $dir/ missing"
             exit 1
           fi
         done
 
     - name: Check Build Scripts
       run: |
-        echo "🔍 Verifying build scripts..."
+        echo "[INFO] Verifying build scripts..."
         
         # Check if scripts are executable
         if [ -x "scripts/build.sh" ]; then
-          echo "✓ build.sh is executable"
+          echo "[OK] build.sh is executable"
         else
-          echo "✗ build.sh is not executable"
+          echo "[ERROR] build.sh is not executable"
           chmod +x scripts/build.sh
         fi
         
         if [ -x "scripts/download-cef.sh" ]; then
-          echo "✓ download-cef.sh is executable"
+          echo "[OK] download-cef.sh is executable"
         else
-          echo "✗ download-cef.sh is not executable"  
+          echo "[ERROR] download-cef.sh is not executable"  
           chmod +x scripts/download-cef.sh
         fi
 
@@ -1309,18 +1309,18 @@ jobs:
 
     - name: Download CEF for CMake test
       run: |
-        echo "🔽 Downloading CEF for CMake configuration test..."
+        echo "[DOWNLOAD] Downloading CEF for CMake configuration test..."
         chmod +x scripts/download-cef.sh
         scripts/download-cef.sh --platform=linux64
 
     - name: Validate CMake Configuration
       run: |
-        echo "🔍 Checking CMake configuration..."
+        echo "[INFO] Checking CMake configuration..."
         cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug || {
-          echo "❌ CMake configuration failed"
+          echo "[ERROR] CMake configuration failed"
           exit 1
         }
-        echo "✓ CMake configuration successful"
+        echo "[OK] CMake configuration successful"
 
     - name: Security Scan with Trivy
       uses: aquasecurity/trivy-action@master
@@ -1346,7 +1346,7 @@ jobs:
 
     - name: Create release packages
       run: |
-        echo "📦 Creating release packages..."
+        echo "[PACKAGE] Creating release packages..."
         
         # Windows 32-bit package
         cd DesktopTerminal-CEF-windows-x86
@@ -1382,24 +1382,24 @@ jobs:
         body: |
           ## DesktopTerminal-CEF Release ${{ github.ref_name }}
           
-          ### 📦 包含的平台
+          ### [PACKAGE] 包含的平台
           - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
           - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)  
           - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 75 - 最大兼容性)
           - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 75 - 最大兼容性)
           
-          ### 🔧 主要特性
+          ### [CHECK] 主要特性
           - Qt5 + CEF集成的安全桌面终端
           - 完整的安全控制功能（键盘拦截、URL过滤、全屏锁定）
           - 跨平台兼容性
           - 针对Windows 7 SP1 32位系统的特别优化
           
-          ### 📋 系统要求
+          ### [REPORT] 系统要求
           - **Windows**: Windows 7 SP1 或更高版本
           - **macOS**: macOS 10.12 或更高版本  
           - **Linux**: Ubuntu 18.04 或等效发行版
           
-          ### 🚀 快速开始
+          ### [LAUNCH] 快速开始
           1. 下载对应平台的包
           2. 解压到目标目录
           3. 运行主程序即可开始使用

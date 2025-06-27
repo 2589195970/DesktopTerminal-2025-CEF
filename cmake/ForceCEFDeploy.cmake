@@ -222,7 +222,7 @@ function(verify_forced_cef_deployment TARGET_NAME)
     set(OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "🔍 验证CEF文件部署..."
+        COMMAND ${CMAKE_COMMAND} -E echo "[INFO] 验证CEF文件部署..."
         COMMAND ${CMAKE_COMMAND} -E echo "输出目录: ${OUTPUT_DIR}"
         COMMENT "验证CEF文件部署")
     
