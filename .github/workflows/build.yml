@@ -714,19 +714,35 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Generate build info using dedicated PowerShell script (避免字符串解析问题)
+        # Generate build info using environment variables (避免命令行参数解析问题)
         Write-Host "生成构建信息文件..."
         $buildInfoPath = Join-Path $artifactPath "BUILD_INFO.txt"
         
-        # 使用独立脚本避免内联PowerShell字符串解析错误
-        & "scripts/generate-build-info.ps1" `
-          -OutputPath $buildInfoPath `
-          -Architecture "${{ matrix.arch }}" `
-          -Platform "${{ matrix.name }}" `
-          -CefVersion "${{ matrix.cef_version }}" `
-          -QtVersion "${{ env.QT_VERSION }}" `
-          -BuildType "${{ env.BUILD_TYPE }}" `
-          -CommitSha "${{ github.sha }}"
+        try {
+          # 设置环境变量避免PowerShell命令行参数解析错误
+          $env:BUILD_ARCH = "${{ matrix.arch }}"
+          $env:BUILD_PLATFORM = "${{ matrix.name }}"
+          $env:BUILD_CEF_VERSION = "${{ matrix.cef_version }}"
+          $env:BUILD_QT_VERSION = "${{ env.QT_VERSION }}"
+          $env:BUILD_TYPE_INFO = "${{ env.BUILD_TYPE }}"
+          $env:BUILD_COMMIT_SHA = "${{ github.sha }}"
+          $env:BUILD_OUTPUT_PATH = $buildInfoPath
+          
+          # 调用脚本（使用环境变量）
+          & "scripts/generate-build-info.ps1"
+          Write-Host "✅ 构建信息文件生成成功"
+        }
+        catch {
+          Write-Host "⚠️ 构建信息文件生成失败，但不影响打包: $($_.Exception.Message)"
+          # 创建简化版本信息文件
+          @(
+            "DesktopTerminal-CEF Build Information"
+            "===================================="
+            "Architecture: ${{ matrix.arch }}"
+            "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+            "Build Status: SUCCESS"
+          ) | Set-Content -Encoding UTF8 -Path $buildInfoPath
+        }
 
     - name: Create Windows Installer
       shell: cmd
