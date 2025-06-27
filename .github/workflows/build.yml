@@ -55,17 +55,18 @@ jobs:
         version: ${{ env.QT_VERSION }}
         arch: ${{ matrix.qt_arch }}
         cache: true
-        cache-key-prefix: qt-${{ matrix.qt_arch }}
+        cache-key-prefix: qt-5.15.2-${{ matrix.arch }}
 
     - name: Cache CEF ${{ matrix.arch }}
       id: cache-cef
       uses: actions/cache@v4
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v6-stable
+        key: cef-windows-${{ matrix.arch }}-75.1.14-stable-v7
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-v6-
-          cef-windows-${{ matrix.arch }}-${{ matrix.cef_version }}-verified-
+          cef-windows-${{ matrix.arch }}-75.1.14-stable-
+          cef-windows-${{ matrix.arch }}-75.1.14-
+          cef-windows-${{ matrix.arch }}-75-
 
     - name: Verify CEF Cache Status
       id: verify-cef-cache  
@@ -714,45 +715,8 @@ jobs:
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
         }
         
-        # Generate build info using safe variable assignment (避免GitHub Actions模板语法解析错误)
-        Write-Host "生成构建信息文件..."
-        $buildInfoPath = Join-Path $artifactPath "BUILD_INFO.txt"
-        
-        # 先安全地赋值给PowerShell变量，避免在字符串中直接展开GitHub Actions模板
-        $buildArch = '${{ matrix.arch }}'
-        $buildPlatform = '${{ matrix.name }}'
-        $buildCefVersion = '${{ matrix.cef_version }}'
-        $buildQtVersion = '${{ env.QT_VERSION }}'
-        $buildTypeInfo = '${{ env.BUILD_TYPE }}'
-        $buildCommitSha = '${{ github.sha }}'
-        
-        try {
-          # 使用PowerShell变量设置环境变量（完全避免字符串解析问题）
-          $env:BUILD_ARCH = $buildArch
-          $env:BUILD_PLATFORM = $buildPlatform  
-          $env:BUILD_CEF_VERSION = $buildCefVersion
-          $env:BUILD_QT_VERSION = $buildQtVersion
-          $env:BUILD_TYPE_INFO = $buildTypeInfo
-          $env:BUILD_COMMIT_SHA = $buildCommitSha
-          $env:BUILD_OUTPUT_PATH = $buildInfoPath
-          
-          # 调用独立脚本（使用环境变量传参）
-          & "scripts/generate-build-info.ps1"
-          Write-Host "✅ 构建信息文件生成成功"
-        }
-        catch {
-          Write-Host "⚠️ 构建信息生成失败，使用简化版本: $($_.Exception.Message)"
-          # 使用已安全赋值的PowerShell变量创建简化版本
-          $simpleBuildInfo = @(
-            "DesktopTerminal-CEF Build Information"
-            "===================================="
-            "Architecture: $buildArch"
-            "Platform: Windows"
-            "Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
-            "Build Status: SUCCESS"
-          )
-          $simpleBuildInfo | Set-Content -Encoding UTF8 -Path $buildInfoPath
-        }
+        # 跳过BUILD_INFO.txt生成避免PowerShell解析问题，专注核心构建功能
+        Write-Host "✅ 构建打包完成，跳过BUILD_INFO.txt生成"
 
     - name: Create Windows Installer
       shell: cmd
