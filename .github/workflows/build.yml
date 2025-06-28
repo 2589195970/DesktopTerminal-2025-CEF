@@ -947,10 +947,17 @@ jobs:
           }
         }
         
-        # Copy project documentation
+        # Copy project documentation with existence checks
         Write-Host "Copying project documentation..."
-        Copy-Item "README.md" "$artifactPath\"
-        Copy-Item "todo.md" "$artifactPath\"
+        $docFiles = @("README.md", "todo.md")
+        foreach ($doc in $docFiles) {
+            if (Test-Path $doc) {
+                Copy-Item $doc "$artifactPath\"
+                Write-Host "Copied documentation: $doc"
+            } else {
+                Write-Host "Documentation file not found, skipping: $doc"
+            }
+        }
         
         # Copy installer resource files
         Write-Host "Copying resource files..."
