@@ -157,45 +157,71 @@ function(force_deploy_cef_files TARGET_NAME)
             endif()
         endforeach()
         
-        # 复制可执行文件 - 增强错误检查确保CEF子进程文件存在
+        # 复制可执行文件 - 强化搜索逻辑确保文件被找到和复制
         foreach(exe ${CEF_EXECUTABLES})
-            set(src_file "${CEF_BINARY_DIR}/${exe}")
             set(dst_file "${OUTPUT_DIR}/${exe}")
+            set(file_found FALSE)
+            set(actual_src_file "")
             
-            if(EXISTS "${src_file}")
+            # 多路径搜索策略 - 确保无论CEF包结构如何都能找到文件
+            set(SEARCH_PATHS
+                "${CEF_BINARY_DIR}/${exe}"
+                "${CEF_ROOT_DIR}/${exe}"
+                "${CEF_ROOT_DIR}/Release/${exe}"
+                "${CEF_ROOT_DIR}/Debug/${exe}"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/${exe}"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Release/${exe}"
+                "${CEF_ROOT_DIR}/${CEF_BINARY_NAME}/Debug/${exe}"
+            )
+            
+            foreach(search_path ${SEARCH_PATHS})
+                if(EXISTS "${search_path}" AND NOT file_found)
+                    set(actual_src_file "${search_path}")
+                    set(file_found TRUE)
+                    message(STATUS "[FOUND] CEF可执行文件: ${exe} 位于 ${search_path}")
+                    break()
+                endif()
+            endforeach()
+            
+            if(file_found)
                 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${src_file}" "${dst_file}"
+                    "${actual_src_file}" "${dst_file}"
                     COMMENT "强制复制CEF可执行文件: ${exe}")
-                message(STATUS "[COPY] 将复制: ${exe}")
+                message(STATUS "[COPY] 将复制: ${exe} 从 ${actual_src_file}")
             else()
-                # 对于关键的CEF子进程文件，缺失时必须报错
+                # 对于关键的CEF子进程文件，启用全局搜索作为最后手段
                 if(exe STREQUAL "chrome_crashpad_handler.exe" OR 
                    exe STREQUAL "cef_subprocess_win32.exe" OR 
                    exe STREQUAL "cef_subprocess_win64.exe")
-                    message(FATAL_ERROR "[CRITICAL ERROR] 关键CEF子进程文件缺失: ${exe}
+                   
+                    message(STATUS "[SEARCH] 在CEF根目录中全局搜索关键文件: ${exe}")
+                    file(GLOB_RECURSE GLOBAL_SEARCH_RESULTS "${CEF_ROOT_DIR}/**/${exe}")
                     
-文件路径: ${src_file}
-这将导致CEF初始化失败，程序无法运行！
+                    if(GLOBAL_SEARCH_RESULTS)
+                        list(GET GLOBAL_SEARCH_RESULTS 0 global_found_file)
+                        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${global_found_file}" "${dst_file}"
+                            COMMENT "全局搜索复制CEF关键文件: ${exe}")
+                        message(STATUS "[GLOBAL_FOUND] ${exe} 位于 ${global_found_file}")
+                    else()
+                        message(FATAL_ERROR "[CRITICAL ERROR] 全局搜索后仍未找到关键CEF文件: ${exe}
 
-可能的原因：
-1. CEF下载不完整 - 请重新运行CEF下载脚本
-2. CEF版本不匹配 - 请检查CEF版本配置
-3. CEF目录结构异常 - 请检查third_party/cef目录
+这是一个严重错误，将导致CEF无法正常工作！
+
+已搜索的路径包括：
+- ${CEF_BINARY_DIR}
+- ${CEF_ROOT_DIR}
+- 以及所有子目录
 
 解决方案：
-1. 删除 third_party/cef 目录
-2. 重新运行: scripts/download-cef.bat x86 75 (Windows)
-3. 确保下载完整后重新构建
-
-CEF目录应包含以下结构：
-${CEF_BINARY_DIR}/
-  ├── chrome_crashpad_handler.exe
-  ├── cef_subprocess_win32.exe (32位)
-  ├── libcef.dll
-  └── 其他CEF文件")
+1. 重新下载CEF: scripts/download-cef.bat x86 75
+2. 检查CEF包完整性
+3. 确保CEF版本正确")
+                    endif()
                 else()
-                    message(WARNING "[WARNING] CEF可选文件不存在: ${src_file}")
+                    message(WARNING "[WARNING] CEF可选文件未找到: ${exe}")
                 endif()
             endif()
         endforeach()
