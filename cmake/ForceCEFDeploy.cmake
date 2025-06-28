@@ -154,7 +154,7 @@ function(force_deploy_cef_files TARGET_NAME)
             endif()
         endforeach()
         
-        # 复制可执行文件
+        # 复制可执行文件 - 增强错误检查确保CEF子进程文件存在
         foreach(exe ${CEF_EXECUTABLES})
             set(src_file "${CEF_BINARY_DIR}/${exe}")
             set(dst_file "${OUTPUT_DIR}/${exe}")
@@ -165,6 +165,35 @@ function(force_deploy_cef_files TARGET_NAME)
                     "${src_file}" "${dst_file}"
                     COMMENT "强制复制CEF可执行文件: ${exe}")
                 message(STATUS "[COPY] 将复制: ${exe}")
+            else()
+                # 对于关键的CEF子进程文件，缺失时必须报错
+                if(exe STREQUAL "chrome_crashpad_handler.exe" OR 
+                   exe STREQUAL "cef_subprocess_win32.exe" OR 
+                   exe STREQUAL "cef_subprocess_win64.exe")
+                    message(FATAL_ERROR "[CRITICAL ERROR] 关键CEF子进程文件缺失: ${exe}
+                    
+文件路径: ${src_file}
+这将导致CEF初始化失败，程序无法运行！
+
+可能的原因：
+1. CEF下载不完整 - 请重新运行CEF下载脚本
+2. CEF版本不匹配 - 请检查CEF版本配置
+3. CEF目录结构异常 - 请检查third_party/cef目录
+
+解决方案：
+1. 删除 third_party/cef 目录
+2. 重新运行: scripts/download-cef.bat x86 75 (Windows)
+3. 确保下载完整后重新构建
+
+CEF目录应包含以下结构：
+${CEF_BINARY_DIR}/
+  ├── chrome_crashpad_handler.exe
+  ├── cef_subprocess_win32.exe (32位)
+  ├── libcef.dll
+  └── 其他CEF文件")
+                else()
+                    message(WARNING "[WARNING] CEF可选文件不存在: ${src_file}")
+                endif()
             endif()
         endforeach()
     endif()
