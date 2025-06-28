@@ -132,6 +132,15 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
     DetailPrint "✓ Qt5运行时库已安装"
     
+    ; 安装CEF子进程文件（必需）
+    ${If} "${ARCH}" == "x86"
+        File /nonfatal "artifacts\windows-${ARCH}\cef_subprocess_win32.exe"
+        DetailPrint "✓ CEF 32位子进程已安装"
+    ${Else}
+        File /nonfatal "artifacts\windows-${ARCH}\cef_subprocess_win64.exe"
+        DetailPrint "✓ CEF 64位子进程已安装"
+    ${EndIf}
+    
     ; 安装CEF数据文件（根据实际构建输出调整）
     File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
     File /nonfatal "artifacts\windows-${ARCH}\v8_context_snapshot.bin"
@@ -184,11 +193,21 @@ Section "主程序" SecMain
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 检查CEF子进程文件是否安装（可选功能）
-    ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
-        DetailPrint "✓ CEF崩溃处理程序安装成功"
+    ; 检查CEF子进程文件是否安装（必需功能）
+    ${If} "${ARCH}" == "x86"
+        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win32.exe"
+            DetailPrint "✓ CEF 32位子进程安装成功"
+        ${Else}
+            DetailPrint "❌ CEF 32位子进程缺失，程序无法运行"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win32.exe 缺失$\\n"
+        ${EndIf}
     ${Else}
-        DetailPrint "ℹ CEF崩溃处理程序未安装（可选功能，不影响核心功能）"
+        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
+            DetailPrint "✓ CEF 64位子进程安装成功"
+        ${Else}
+            DetailPrint "❌ CEF 64位子进程缺失，程序无法运行"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win64.exe 缺失$\\n"
+        ${EndIf}
     ${EndIf}
     
     ; 检查Qt5运行时库是否安装
@@ -308,13 +327,28 @@ Section "主程序" SecMain
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
     ${EndIf}
     
-    ; 验证关键CEF子进程文件（可选功能）
-    ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
-        DetailPrint "✓ CEF崩溃处理程序验证通过"
+    ; 验证关键CEF子进程文件（必需功能）
+    ${If} "${ARCH}" == "x86"
+        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win32.exe"
+            DetailPrint "✓ CEF 32位子进程验证通过"
+        ${Else}
+            DetailPrint "❌ CEF 32位子进程验证失败"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win32.exe 缺失$\n"
+        ${EndIf}
     ${Else}
-        DetailPrint "ℹ CEF崩溃处理程序未安装（可选功能，不影响核心功能）"
-        ; 注释掉错误记录，因为这是可选功能
-        ; StrCpy $VerificationErrors "$VerificationErrors• CEF崩溃处理程序 crashpad_handler.exe 缺失$\n"
+        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
+            DetailPrint "✓ CEF 64位子进程验证通过"
+        ${Else}
+            DetailPrint "❌ CEF 64位子进程验证失败"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win64.exe 缺失$\n"
+        ${EndIf}
+    ${EndIf}
+    
+    ; 可选：检查crashpad处理程序（仅信息记录）
+    ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
+        DetailPrint "ℹ 检测到crashpad崩溃处理程序（可选功能）"
+    ${Else}
+        DetailPrint "ℹ 未安装crashpad处理程序，使用CEF内嵌崩溃处理（推荐）"
     ${EndIf}
     
     ; 统计安装文件数量进行验证
