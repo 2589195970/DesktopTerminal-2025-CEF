@@ -1169,6 +1169,31 @@ jobs:
           exit /b 1
         )
         
+        echo "验证artifacts目录..."
+        if exist "artifacts\windows-${{ matrix.arch }}\DesktopTerminal-CEF.exe" (
+          echo "[OK] 找到打包文件在artifacts目录"
+          echo "artifacts目录内容："
+          dir "artifacts\windows-${{ matrix.arch }}" /s
+          echo "关键文件大小："
+          if exist "artifacts\windows-${{ matrix.arch }}\DesktopTerminal-CEF.exe" (
+            for %%f in ("artifacts\windows-${{ matrix.arch }}\DesktopTerminal-CEF.exe") do echo "  DesktopTerminal-CEF.exe: %%~zf bytes"
+          )
+          if exist "artifacts\windows-${{ matrix.arch }}\libcef.dll" (
+            for %%f in ("artifacts\windows-${{ matrix.arch }}\libcef.dll") do echo "  libcef.dll: %%~zf bytes"
+          )
+        ) else (
+          echo "[ERROR] artifacts目录中未找到主程序文件"
+          echo "当前目录内容："
+          dir . /s | findstr /i "DesktopTerminal-CEF.exe"
+          echo "artifacts目录结构："
+          if exist "artifacts" (
+            dir artifacts /s
+          ) else (
+            echo "artifacts目录不存在"
+          )
+          exit /b 1
+        )
+        
         REM 提取CEF主版本号
         set "cef_version_full=${{ matrix.cef_version }}"
         for /f "tokens=1 delims=." %%a in ("!cef_version_full!") do set "cef_major=%%a"
