@@ -947,11 +947,17 @@ jobs:
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
                 
                 # Ensure exe file is in root directory (fixes NSIS path issue)
-                $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
-                if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
-                    Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
-                    Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
-                    Write-Host "Exe file moved to: $artifactPath\DesktopTerminal-CEF.exe"
+                $expectedExePath = Join-Path (Resolve-Path $artifactPath) "DesktopTerminal-CEF.exe"
+                if (-not (Test-Path $expectedExePath)) {
+                    Write-Host "Exe file not in root directory, searching for it..."
+                    $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                    if ($exeInSubdir) {
+                        Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
+                        Copy-Item $exeInSubdir.FullName $expectedExePath -Force
+                        Write-Host "Exe file moved to: $expectedExePath"
+                    }
+                } else {
+                    Write-Host "Exe file already in correct location: $expectedExePath"
                 }
                 
                 # Post-copy verification
@@ -1024,11 +1030,17 @@ jobs:
                 Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force
                 
                 # Ensure exe file is in root directory (fixes NSIS path issue)
-                $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
-                if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
-                    Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
-                    Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
-                    Write-Host "Exe file moved to: $artifactPath\DesktopTerminal-CEF.exe"
+                $expectedExePath = Join-Path (Resolve-Path $artifactPath) "DesktopTerminal-CEF.exe"
+                if (-not (Test-Path $expectedExePath)) {
+                    Write-Host "Exe file not in root directory, searching for it..."
+                    $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                    if ($exeInSubdir) {
+                        Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
+                        Copy-Item $exeInSubdir.FullName $expectedExePath -Force
+                        Write-Host "Exe file moved to: $expectedExePath"
+                    }
+                } else {
+                    Write-Host "Exe file already in correct location: $expectedExePath"
                 }
                 
                 Write-Host "File copy completed successfully"
