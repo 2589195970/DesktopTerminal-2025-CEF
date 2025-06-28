@@ -139,16 +139,12 @@ Section "主程序" SecMain
     DetailPrint "✓ CEF资源文件已安装"
     
     ; 安装本地化文件目录
-    File /r /nonfatal "artifacts\windows-${ARCH}\locales"
+    File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
     
     ; 安装resources目录
-    File /r /nonfatal "artifacts\windows-${ARCH}\resources"
+    File /r "artifacts\windows-${ARCH}\resources"
     DetailPrint "✓ 应用资源已安装"
-    
-    ; 安装SwiftShader目录（如果存在）
-    File /r /nonfatal "artifacts\windows-${ARCH}\swiftshader"
-    DetailPrint "✓ SwiftShader已安装"
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     DetailPrint "正在验证安装结果..."
