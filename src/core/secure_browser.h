@@ -72,6 +72,11 @@ private slots:
     void onMaintenanceTimer();
 
     /**
+     * @brief CEF消息循环处理
+     */
+    void onCEFMessageLoop();
+
+    /**
      * @brief CEF浏览器创建完成回调
      */
     void onBrowserCreated();
@@ -82,6 +87,7 @@ private:
     void initializeCEF();
     void initializeHotkeys();
     void initializeMaintenanceTimer();
+    void initializeCEFMessageLoopTimer();
     void setupSecuritySettings();
 
     // 安全控制方法
@@ -117,6 +123,7 @@ private:
 
     // 定时器
     QTimer* m_maintenanceTimer;
+    QTimer* m_cefMessageLoopTimer;
 
     // 状态管理
     bool m_needFocusCheck;
@@ -133,6 +140,9 @@ private:
 
     // 窗口句柄（用于CEF集成）
     void* m_windowHandle;
+    
+    // CEF消息循环日志计数器（避免日志过多）
+    int m_cefMessageLoopLogCounter;
 };
 
 #endif // SECURE_BROWSER_H

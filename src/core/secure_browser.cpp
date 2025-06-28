@@ -30,6 +30,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_exitHotkeyF10(nullptr)
     , m_exitHotkeyBackslash(nullptr)
     , m_maintenanceTimer(nullptr)
+    , m_cefMessageLoopTimer(nullptr)
     , m_needFocusCheck(true)
     , m_needFullscreenCheck(true)
     , m_cefBrowserCreated(false)
@@ -38,6 +39,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_keyboardFilterEnabled(true)
     , m_contextMenuEnabled(false)
     , m_windowHandle(nullptr)
+    , m_cefMessageLoopLogCounter(0)
 {
     m_logger->appEvent("SecureBrowser创建开始");
 
@@ -54,6 +56,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     initializeCEF();
     initializeHotkeys();
     initializeMaintenanceTimer();
+    initializeCEFMessageLoopTimer();
     setupSecuritySettings();
 
     m_logger->appEvent("SecureBrowser创建完成");
@@ -68,6 +71,12 @@ SecureBrowser::~SecureBrowser()
         m_maintenanceTimer->stop();
         delete m_maintenanceTimer;
         m_maintenanceTimer = nullptr;
+    }
+    
+    if (m_cefMessageLoopTimer) {
+        m_cefMessageLoopTimer->stop();
+        delete m_cefMessageLoopTimer;
+        m_cefMessageLoopTimer = nullptr;
     }
 
     // 销毁CEF浏览器
@@ -285,10 +294,48 @@ void SecureBrowser::onMaintenanceTimer()
     }
 }
 
+void SecureBrowser::onCEFMessageLoop()
+{
+    // 处理CEF消息循环（单进程模式必需）
+    m_cefMessageLoopLogCounter++;
+    
+    if (!m_cefManager) {
+        if (m_cefMessageLoopLogCounter % 1000 == 1) { // 每10秒记录一次错误
+            m_logger->errorEvent("CEF消息循环错误: CEF管理器未初始化");
+        }
+        return;
+    }
+    
+    if (!m_cefBrowserCreated) {
+        if (m_cefMessageLoopLogCounter % 500 == 1) { // 每5秒记录一次状态
+            m_logger->appEvent("CEF消息循环等待: 浏览器尚未创建完成");
+        }
+        return;
+    }
+    
+    // 调用CEF消息循环处理
+    try {
+        m_cefManager->doMessageLoopWork();
+        
+        // 定期记录成功状态（每30秒一次）
+        if (m_cefMessageLoopLogCounter % 3000 == 1) {
+            m_logger->appEvent("CEF消息循环正常运行 - 白屏问题应已解决");
+        }
+    } catch (...) {
+        if (m_cefMessageLoopLogCounter % 100 == 1) { // 每1秒记录一次异常
+            m_logger->errorEvent("CEF消息循环处理异常");
+        }
+    }
+}
+
 void SecureBrowser::onBrowserCreated()
 {
     m_cefBrowserCreated = true;
     m_logger->appEvent("CEF浏览器创建完成");
+    m_logger->appEvent("CEF消息循环现在应该开始处理页面内容 - 白屏问题修复关键点");
+    
+    // 重置计数器，开始新的日志周期
+    m_cefMessageLoopLogCounter = 0;
     
     // 如果有待加载的URL，现在加载它
     if (!m_currentUrl.isEmpty()) {
@@ -344,6 +391,19 @@ void SecureBrowser::initializeMaintenanceTimer()
     m_maintenanceTimer->start(1500); // 每1.5秒检查一次
     
     m_logger->appEvent("维护定时器启动");
+}
+
+void SecureBrowser::initializeCEFMessageLoopTimer()
+{
+    // 创建CEF消息循环定时器（单进程模式必需）
+    m_cefMessageLoopTimer = new QTimer(this);
+    connect(m_cefMessageLoopTimer, &QTimer::timeout, this, &SecureBrowser::onCEFMessageLoop, Qt::QueuedConnection);
+    m_cefMessageLoopTimer->start(10); // 每10ms调用一次CEF消息循环（约100FPS）
+    
+    m_logger->appEvent("CEF消息循环定时器启动 - 间隔10ms，这对解决白屏问题至关重要");
+    m_logger->appEvent(QString("CEF管理器状态: %1, 浏览器创建状态: %2")
+        .arg(m_cefManager ? "已初始化" : "未初始化")
+        .arg(m_cefBrowserCreated ? "已创建" : "未创建"));
 }
 
 void SecureBrowser::setupSecuritySettings()
