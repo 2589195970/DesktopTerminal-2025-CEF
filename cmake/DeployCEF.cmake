@@ -309,17 +309,17 @@ endfunction()
 
 # 验证CEF文件完整性
 function(verify_cef_deployment TARGET_NAME BINARY_DIR)
-    message(STATUS "验证CEF部署完整性")
+    message(STATUS "Verifying CEF deployment integrity")
     
-    # 创建验证脚本
+    # Create verification script
     set(VERIFY_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/verify_cef.cmake")
     
     file(WRITE "${VERIFY_SCRIPT}" "
-        # CEF部署验证脚本
+        # CEF deployment verification script
         set(BINARY_DIR \"${BINARY_DIR}\")
         set(MISSING_FILES \"\")
         
-        # 检查关键文件
+        # Check required files
         if(WIN32)
             set(REQUIRED_FILES \"libcef.dll\" \"cef.pak\")
         elseif(APPLE)
@@ -335,15 +335,15 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
         endforeach()
         
         if(MISSING_FILES)
-            message(FATAL_ERROR \"CEF关键文件缺失: \${MISSING_FILES}\")
+            message(FATAL_ERROR \"CEF required files missing: \${MISSING_FILES}\")
         else()
-            message(STATUS \"CEF文件验证通过\")
+            message(STATUS \"CEF files verification passed\")
         endif()
     ")
     
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -P "${VERIFY_SCRIPT}"
-        COMMENT "验证CEF文件部署")
+        COMMENT "Verifying CEF file deployment")
 endfunction()
 
 # 创建CEF环境配置
