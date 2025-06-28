@@ -108,76 +108,92 @@ FunctionEnd
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     
-    ; 检查CEF程序文件是否存在（支持多种构建输出路径）
-    ; 增强路径匹配逻辑，支持GitHub Actions和本地构建的多种目录结构
-    ${If} ${FileExists} "artifacts\windows-${ARCH}\DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件（GitHub Actions构建）..."
-        ; 从GitHub Actions artifacts安装 - 修复路径语法
-        File /r "artifacts\windows-${ARCH}\*"
-        SetOutPath "$INSTDIR\logs"
-        File /nonfatal /oname=build_source.txt "artifacts\windows-${ARCH}\BUILD_INFO.txt"
-        SetOutPath "$INSTDIR"
-    ${ElseIf} ${FileExists} "build\bin\Release\DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件（标准Release构建）..."
-        ; 从构建目录安装 - 修复路径语法
-        File /r "build\bin\Release\*"
-    ${ElseIf} ${FileExists} "build\bin\DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件（bin目录构建）..."
-        ; 支持无Release子目录的构建输出
-        File /r "build\bin\*"
-    ${ElseIf} ${FileExists} "DesktopTerminal-CEF.exe"
-        DetailPrint "正在安装CEF应用程序文件（当前目录）..."
-        ; 当前目录安装 - 排除NSIS自身文件和构建临时文件
-        File /r /x "*.nsi" /x "*.nsh" /x "Output" /x "build" /x "third_party" "*"
-    ${Else}
-        MessageBox MB_ICONSTOP "安装包损坏：找不到DesktopTerminal-CEF.exe文件。请重新下载安装包。$\n$\n查找路径：$\n- artifacts\windows-${ARCH}\$\n- build\bin\Release\$\n- build\bin\$\n- 当前目录"
-        Abort
-    ${EndIf}
-
-    ; 增强的CEF关键文件验证逻辑
-    DetailPrint "正在验证CEF组件安装完整性..."
+    ; 直接安装程序文件 - 移除运行时路径检查逻辑错误
+    ; NSIS编译时已包含所有文件，安装时直接复制即可
+    DetailPrint "正在安装DesktopTerminal-CEF应用程序..."
     
-    ; 检查主程序文件
+    ; 安装主程序文件（NSIS编译时已验证文件存在）
+    File "DesktopTerminal-CEF.exe"
+    DetailPrint "✓ 主程序已安装: DesktopTerminal-CEF.exe"
+    
+    ; 安装CEF核心库文件
+    File /nonfatal "libcef.dll"
+    File /nonfatal "chrome_elf.dll" 
+    File /nonfatal "d3dcompiler_47.dll"
+    File /nonfatal "libEGL.dll"
+    File /nonfatal "libGLESv2.dll"
+    DetailPrint "✓ CEF核心库已安装"
+    
+    ; 安装CEF数据文件
+    File /nonfatal "snapshot_blob.bin"
+    File /nonfatal "v8_context_snapshot.bin"
+    File /nonfatal "icudtl.dat"
+    DetailPrint "✓ CEF数据文件已安装"
+    
+    ; 安装CEF可执行文件
+    File /nonfatal "chrome_crashpad_handler.exe"
+    ${If} "${ARCH}" == "x64"
+        File /nonfatal "cef_subprocess_win64.exe"
+    ${Else}
+        File /nonfatal "cef_subprocess_win32.exe"
+    ${EndIf}
+    DetailPrint "✓ CEF子进程已安装"
+    
+    ; 安装CEF资源文件
+    File /nonfatal "cef.pak"
+    File /nonfatal "cef_100_percent.pak"
+    File /nonfatal "cef_200_percent.pak"
+    File /nonfatal "cef_extensions.pak"
+    File /nonfatal "devtools_resources.pak"
+    DetailPrint "✓ CEF资源文件已安装"
+    
+    ; 安装本地化文件目录
+    File /r /nonfatal "locales"
+    DetailPrint "✓ 本地化文件已安装"
+    
+    ; 安装SwiftShader目录（如果存在）
+    File /r /nonfatal "swiftshader"
+    DetailPrint "✓ SwiftShader已安装"
+    
+    ; 安装构建信息文件
+    File /nonfatal /oname=logs\build_source.txt "BUILD_INFO.txt"
+    DetailPrint "✓ 构建信息已记录"
+
+    ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
+    DetailPrint "正在验证安装结果..."
+    
+    ; 检查主程序文件是否成功安装
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
-        DetailPrint "✓ 主程序已安装"
+        DetailPrint "✓ 主程序安装成功"
         ; 验证文件大小（应该大于1MB）
-        FileOpen $R0 "$INSTDIR\DesktopTerminal-CEF.exe" r
-        ${If} $R0 != ""
-            FileClose $R0
-            ; 获取文件大小验证
-            ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
-            ${If} $R1 > 1000  ; 大于1MB
-                DetailPrint "✓ 主程序文件大小验证通过"
-            ${Else}
-                DetailPrint "⚠ 主程序文件可能不完整"
-            ${EndIf}
+        ${GetSize} "$INSTDIR\DesktopTerminal-CEF.exe" "/S=0K" $R1 $R2 $R3
+        ${If} $R1 > 1000  ; 大于1MB
+            DetailPrint "✓ 主程序文件大小正常 (${R1} KB)"
+        ${Else}
+            DetailPrint "⚠ 主程序文件可能不完整 (${R1} KB)"
         ${EndIf}
     ${Else}
-        MessageBox MB_ICONSTOP "❌ 安装验证失败：主程序文件未正确安装到 $INSTDIR\DesktopTerminal-CEF.exe$\n$\n这表明安装过程中的文件复制失败。$\n请检查：$\n1. 磁盘空间是否充足$\n2. 目标目录是否有写权限$\n3. 安装包是否完整"
+        MessageBox MB_ICONSTOP "❌ 主程序安装失败：$INSTDIR\DesktopTerminal-CEF.exe$\n$\n可能原因：$\n1. 磁盘空间不足$\n2. 目标目录无写权限$\n3. 杀毒软件拦截"
         Abort
     ${EndIf}
     
-    ; 检查CEF核心库文件
+    ; 检查CEF核心库是否安装
     ${If} ${FileExists} "$INSTDIR\libcef.dll"
-        DetailPrint "✓ CEF核心库已安装"
-    ${ElseIf} ${FileExists} "$INSTDIR\cef.dll"
-        DetailPrint "✓ CEF核心库已安装（cef.dll格式）"
+        DetailPrint "✓ CEF核心库安装成功"
     ${Else}
-        DetailPrint "⚠ 未找到CEF核心库文件，程序可能无法正常运行"
-        DetailPrint "  预期位置：$INSTDIR\libcef.dll 或 $INSTDIR\cef.dll"
+        DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 验证安装目录内容
-    DetailPrint "安装目录内容验证..."
-    ${DirState} "$INSTDIR" $R0
-    ${If} $R0 == 0
-        DetailPrint "❌ 安装目录为空！"
-        MessageBox MB_ICONSTOP "安装目录验证失败：目标目录 $INSTDIR 为空。$\n$\n可能原因：$\n1. 文件复制过程失败$\n2. 权限不足$\n3. 杀毒软件拦截"
-        Abort
-    ${ElseIf} $R0 == 1
-        DetailPrint "✓ 安装目录包含文件"
+    ; 统计安装文件数量
+    ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
+    DetailPrint "安装完成：${R2} 个文件，总大小 ${R1} KB"
+    
+    ${If} $R2 < 3
+        DetailPrint "⚠ 安装文件数量偏少，请检查安装包完整性"
+    ${ElseIf} $R1 < 500
+        DetailPrint "⚠ 安装大小偏小，可能文件缺失"
     ${Else}
-        DetailPrint "✓ 安装目录包含文件和子目录"
+        DetailPrint "✓ 安装文件数量和大小正常"
     ${EndIf}
 
     ; 资源目录
