@@ -124,10 +124,7 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\libGLESv2.dll"
     DetailPrint "✓ CEF核心库已安装"
     
-    ; 安装CEF库文件(运行时需要)
-    File /nonfatal "artifacts\windows-${ARCH}\cef_sandbox.lib"
-    File /nonfatal "artifacts\windows-${ARCH}\libcef.lib"
-    DetailPrint "✓ CEF库文件已安装"
+    ; 注意：移除cef_sandbox.lib安装，因为它是静态链接库，运行时不需要
     
     ; 安装Qt5运行时库文件
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Core.dll"
@@ -187,11 +184,11 @@ Section "主程序" SecMain
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 检查CEF库文件是否安装
-    ${If} ${FileExists} "$INSTDIR\cef_sandbox.lib"
-        DetailPrint "✓ CEF沙盒库安装成功"
+    ; 检查CEF子进程文件是否安装
+    ${If} ${FileExists} "$INSTDIR\chrome_crashpad_handler.exe"
+        DetailPrint "✓ CEF崩溃处理程序安装成功"
     ${Else}
-        DetailPrint "⚠ CEF沙盒库未安装，可能导致CEF初始化失败"
+        DetailPrint "⚠ CEF崩溃处理程序未安装，可能导致CEF初始化失败"
     ${EndIf}
     
     ; 检查Qt5运行时库是否安装
@@ -304,12 +301,12 @@ Section "主程序" SecMain
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
     ${EndIf}
     
-    ; 验证关键CEF库文件
-    ${If} ${FileExists} "$INSTDIR\cef_sandbox.lib"
-        DetailPrint "✓ CEF沙盒库验证通过"
+    ; 验证关键CEF子进程文件
+    ${If} ${FileExists} "$INSTDIR\chrome_crashpad_handler.exe"
+        DetailPrint "✓ CEF崩溃处理程序验证通过"
     ${Else}
-        DetailPrint "❌ CEF沙盒库缺失，将导致CEF初始化失败"
-        StrCpy $VerificationErrors "$VerificationErrors• CEF沙盒库 cef_sandbox.lib 缺失$\n"
+        DetailPrint "❌ CEF崩溃处理程序缺失，将导致CEF初始化失败"
+        StrCpy $VerificationErrors "$VerificationErrors• CEF崩溃处理程序 chrome_crashpad_handler.exe 缺失$\n"
     ${EndIf}
     
     ; 统计安装文件数量进行验证

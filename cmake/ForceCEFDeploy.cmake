@@ -112,11 +112,8 @@ function(force_deploy_cef_files TARGET_NAME)
             "icudtl.dat"
         )
         
-        # 库文件 - CEF运行时需要的库文件
-        set(CEF_LIBRARY_FILES
-            "cef_sandbox.lib"
-            "libcef.lib"
-        )
+        # 注意：cef_sandbox.lib是静态链接库，只在编译时使用，运行时不需要
+        # 只有当确实需要时才部署libcef.lib（大多数情况下运行时不需要）
         
         # 可执行文件
         set(CEF_EXECUTABLES
@@ -199,43 +196,6 @@ ${CEF_BINARY_DIR}/
   └── 其他CEF文件")
                 else()
                     message(WARNING "[WARNING] CEF可选文件不存在: ${src_file}")
-                endif()
-            endif()
-        endforeach()
-        
-        # 复制库文件 - CEF运行时需要的库文件
-        foreach(lib ${CEF_LIBRARY_FILES})
-            set(src_file "${CEF_BINARY_DIR}/${lib}")
-            set(dst_file "${OUTPUT_DIR}/${lib}")
-            
-            if(EXISTS "${src_file}")
-                add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${src_file}" "${dst_file}"
-                    COMMENT "强制复制CEF库文件: ${lib}")
-                message(STATUS "[COPY] 将复制CEF库文件: ${lib}")
-            else()
-                # 对于关键的CEF库文件，缺失时必须报错
-                if(lib STREQUAL "cef_sandbox.lib")
-                    message(FATAL_ERROR "[CRITICAL ERROR] 关键CEF库文件缺失: ${lib}
-                    
-文件路径: ${src_file}
-这将导致CEF初始化失败，程序运行时找不到所需的库文件！
-
-可能的原因：
-1. CEF下载不完整 - cef_sandbox.lib未下载
-2. CEF版本问题 - 某些版本可能没有此文件
-3. CEF目录结构异常 - 文件位置不正确
-
-解决方案：
-1. 检查 ${CEF_BINARY_DIR} 目录中是否存在 cef_sandbox.lib
-2. 重新下载CEF包: scripts/download-cef.bat x86 75
-3. 确认CEF 75版本包含沙盒库文件
-
-CEF库文件位置应为：
-${CEF_BINARY_DIR}/cef_sandbox.lib")
-                else()
-                    message(WARNING "[WARNING] CEF可选库文件不存在: ${src_file}")
                 endif()
             endif()
         endforeach()

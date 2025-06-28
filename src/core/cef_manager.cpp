@@ -486,12 +486,20 @@ bool CEFManager::verifyCEFInstallation()
     QStringList requiredFiles;
 
 #ifdef Q_OS_WIN
-    requiredFiles << "libcef.dll" << "cef_sandbox.lib";
+    // CEF核心库文件
+    requiredFiles << "libcef.dll";
+    requiredFiles << "cef.pak";
     
+    // CEF子进程文件（这些才是运行时必需的）
     if (Application::is32BitSystem()) {
-        // 32位特定文件
+        requiredFiles << "cef_subprocess_win32.exe";
         requiredFiles << "d3dcompiler_47.dll";
+    } else {
+        requiredFiles << "cef_subprocess_win64.exe";
     }
+    
+    // CEF崩溃处理程序
+    requiredFiles << "chrome_crashpad_handler.exe";
 #elif defined(Q_OS_MAC)
     requiredFiles << "Chromium Embedded Framework.framework";
 #else
