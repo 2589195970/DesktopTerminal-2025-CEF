@@ -896,11 +896,12 @@ jobs:
         # Smart copy of core executable files and dependencies
         Write-Host "=== Starting main program file copy ==="
         
-        # Define possible source paths (ordered by priority)
+        # Define possible source paths (ordered by priority, CMake-consistent)
         $possiblePaths = @(
+          "build\bin\${{ env.BUILD_TYPE }}",
           "build\bin\Release",
-          "build\Release",
-          "build\src\Release"
+          "build\${{ env.BUILD_TYPE }}",
+          "build\Release"
         )
         
         $sourceFound = $false
@@ -942,7 +943,16 @@ jobs:
               }
               
               try {
+                # 扁平化复制 - 确保exe文件在artifacts根目录
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
+                
+                # 确保关键exe文件在根目录（修复NSIS路径问题）
+                $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
+                    Write-Host "发现exe文件在子目录，移动到根目录: $($exeInSubdir.FullName)"
+                    Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
+                    Write-Host "exe文件已移动到: $artifactPath\DesktopTerminal-CEF.exe"
+                }
                 
                 # Post-copy verification
                 $targetFiles = Get-ChildItem $artifactPath -Recurse -File -ErrorAction SilentlyContinue
@@ -1007,10 +1017,40 @@ jobs:
                 }
             }
             
+            # 最终验证exe文件在正确位置（artifacts根目录）
+            Write-Host "=== NSIS路径兼容性最终验证 ==="
+            $finalExePath = Join-Path $artifactPath "DesktopTerminal-CEF.exe"
+            if (Test-Path $finalExePath) {
+                $exeSize = (Get-Item $finalExePath).Length
+                Write-Host "✓ exe文件在NSIS期望位置: $finalExePath"
+                Write-Host "  文件大小: $([math]::Round($exeSize/1MB, 2)) MB"
+            } else {
+                Write-Host "✗ exe文件不在NSIS期望位置: $finalExePath"
+                Write-Host "正在搜索exe文件实际位置..."
+                $actualExe = Get-ChildItem $artifactPath -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                if ($actualExe) {
+                    Write-Host "发现exe文件在: $($actualExe.FullName)"
+                    Write-Host "ERROR: exe文件位置与NSIS脚本期望不符"
+                    exit 1
+                } else {
+                    Write-Host "ERROR: 完全找不到exe文件"
+                    exit 1
+                }
+            }
+            
             # Strict copy without ignoring errors
             Write-Host "Starting file copy operation..."
             try {
                 Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force
+                
+                # 确保关键exe文件在根目录（修复NSIS路径问题）
+                $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
+                    Write-Host "发现exe文件在子目录，移动到根目录: $($exeInSubdir.FullName)"
+                    Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
+                    Write-Host "exe文件已移动到: $artifactPath\DesktopTerminal-CEF.exe"
+                }
+                
                 Write-Host "File copy completed successfully"
             } catch {
                 Write-Host "ERROR: File copy failed: $($_.Exception.Message)"
