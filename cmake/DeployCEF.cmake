@@ -74,14 +74,14 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
         "d3dcompiler_47.dll"
         "libEGL.dll"
         "libGLESv2.dll"
+        "icudtl.dat"
+        "natives_blob.bin"
         "snapshot_blob.bin"
         "v8_context_snapshot.bin"
     )
     
     # 可选的CEF DLL（根据版本可能不存在）
     set(CEF_OPTIONAL_DLLS
-        "icudtl.dat"
-        "natives_blob.bin"
         "widevinecdmadapter.dll"
     )
     

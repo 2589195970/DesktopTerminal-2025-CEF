@@ -143,6 +143,7 @@ Section "主程序" SecMain
     ${EndIf}
     
     ; 安装CEF数据文件（根据实际构建输出调整）
+    File /nonfatal "artifacts\windows-${ARCH}\icudtl.dat"
     File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
     File /nonfatal "artifacts\windows-${ARCH}\v8_context_snapshot.bin"
     File /nonfatal "artifacts\windows-${ARCH}\natives_blob.bin"
@@ -329,6 +330,14 @@ Section "主程序" SecMain
     ${Else}
         DetailPrint "⚠ 配置文件缺失，将影响程序启动"
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
+    ${EndIf}
+    
+    ; 验证关键CEF数据文件
+    ${If} ${FileExists} "$INSTDIR\icudtl.dat"
+        DetailPrint "✓ CEF ICU数据文件验证通过"
+    ${Else}
+        DetailPrint "❌ CEF ICU数据文件缺失，程序无法启动"
+        StrCpy $VerificationErrors "$VerificationErrors• CEF ICU数据文件 icudtl.dat 缺失$\n"
     ${EndIf}
     
     ; 验证关键CEF子进程文件（架构特定处理）
