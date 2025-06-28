@@ -1117,6 +1117,60 @@ jobs:
           }
         }
         
+        # Deploy Qt5 dependencies for runtime execution
+        Write-Host "=== Deploying Qt5 Dependencies ==="
+        $qtBinPath = "$env:Qt5_Dir\bin"
+        Write-Host "Qt5 bin directory: $qtBinPath"
+        
+        if (Test-Path $qtBinPath) {
+            $qtDlls = @(
+                "Qt5Core.dll",
+                "Qt5Gui.dll", 
+                "Qt5Widgets.dll"
+            )
+            
+            Write-Host "Copying Qt5 runtime DLLs..."
+            foreach ($dll in $qtDlls) {
+                $qtDllPath = Join-Path $qtBinPath $dll
+                if (Test-Path $qtDllPath) {
+                    Copy-Item $qtDllPath "$artifactPath\" -Force
+                    $dllSize = (Get-Item $qtDllPath).Length
+                    Write-Host "  Copied $dll : $([math]::Round($dllSize/1MB, 2)) MB"
+                } else {
+                    Write-Host "  Missing Qt5 DLL: $dll"
+                    Write-Host "ERROR: Required Qt5 DLL not found: $qtDllPath"
+                    exit 1
+                }
+            }
+            
+            # Copy Qt5 platforms plugin (required for Qt GUI applications)
+            $qtPlatformsPath = "$env:Qt5_Dir\plugins\platforms"
+            if (Test-Path $qtPlatformsPath) {
+                Write-Host "Copying Qt5 platforms plugin..."
+                New-Item -ItemType Directory -Force -Path "$artifactPath\platforms"
+                Copy-Item "$qtPlatformsPath\qwindows.dll" "$artifactPath\platforms\" -Force
+                $platformsSize = (Get-Item "$qtPlatformsPath\qwindows.dll").Length
+                Write-Host "  Copied qwindows.dll : $([math]::Round($platformsSize/1MB, 2)) MB"
+            } else {
+                Write-Host "WARNING: Qt5 platforms plugin not found: $qtPlatformsPath"
+            }
+            
+            # Verify Qt5 deployment
+            Write-Host "=== Qt5 Deployment Verification ==="
+            $qtDeployedFiles = Get-ChildItem "$artifactPath" -Include "Qt5*.dll" -ErrorAction SilentlyContinue
+            if ($qtDeployedFiles.Count -eq 3) {
+                $qtTotalSize = ($qtDeployedFiles | Measure-Object -Property Length -Sum).Sum
+                Write-Host "SUCCESS: All Qt5 DLLs deployed ($($qtDeployedFiles.Count) files, $([math]::Round($qtTotalSize/1MB, 2)) MB)"
+            } else {
+                Write-Host "ERROR: Qt5 deployment incomplete ($($qtDeployedFiles.Count)/3 DLLs found)"
+                exit 1
+            }
+        } else {
+            Write-Host "ERROR: Qt5 bin directory not found: $qtBinPath"
+            Write-Host "Available Qt5_Dir environment: $env:Qt5_Dir"
+            exit 1
+        }
+        
         # Copy project documentation with existence checks
         Write-Host "Copying project documentation..."
         $docFiles = @("README.md", "todo.md")

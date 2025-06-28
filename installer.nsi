@@ -124,6 +124,12 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\libGLESv2.dll"
     DetailPrint "✓ CEF核心库已安装"
     
+    ; 安装Qt5运行时库文件
+    File /nonfatal "artifacts\windows-${ARCH}\Qt5Core.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\Qt5Gui.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
+    DetailPrint "✓ Qt5运行时库已安装"
+    
     ; 安装CEF数据文件（根据实际构建输出调整）
     File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
     File /nonfatal "artifacts\windows-${ARCH}\v8_context_snapshot.bin"
@@ -145,6 +151,11 @@ Section "主程序" SecMain
     ; 安装resources目录
     File /r "artifacts\windows-${ARCH}\resources"
     DetailPrint "✓ 应用资源已安装"
+    
+    ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
+    CreateDirectory "$INSTDIR\platforms"
+    File /nonfatal /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
+    DetailPrint "✓ Qt5平台插件已安装"
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     DetailPrint "正在验证安装结果..."
@@ -169,6 +180,21 @@ Section "主程序" SecMain
         DetailPrint "✓ CEF核心库安装成功"
     ${Else}
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
+    ${EndIf}
+    
+    ; 检查Qt5运行时库是否安装
+    ${If} ${FileExists} "$INSTDIR\Qt5Core.dll"
+        ${If} ${FileExists} "$INSTDIR\Qt5Gui.dll"
+            ${If} ${FileExists} "$INSTDIR\Qt5Widgets.dll"
+                DetailPrint "✓ Qt5运行时库安装完整"
+            ${Else}
+                DetailPrint "⚠ Qt5Widgets.dll缺失"
+            ${EndIf}
+        ${Else}
+            DetailPrint "⚠ Qt5Gui.dll缺失"
+        ${EndIf}
+    ${Else}
+        DetailPrint "⚠ Qt5Core.dll缺失，程序无法启动"
     ${EndIf}
     
     ; 统计安装文件数量
