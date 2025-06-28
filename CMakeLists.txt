@@ -621,7 +621,14 @@ if(CEF_FOUND)
         
         # 验证CEF部署
         if(COMMAND verify_cef_deployment)
-            verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
+            # 修复生成器表达式路径问题 - 使用配置特定的路径
+            if(CMAKE_BUILD_TYPE)
+                # Single-config generators (Unix Makefiles, Ninja)
+                verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE}")
+            else()
+                # Multi-config generators (Visual Studio, Xcode) - 默认使用Release
+                verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release")
+            endif()
         endif()
     else()
         message(STATUS "[WARNING] DeployCEF模块不可用，启用强制CEF部署模式")

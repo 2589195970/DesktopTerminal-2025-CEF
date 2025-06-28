@@ -309,32 +309,54 @@ endfunction()
 
 # 验证CEF文件完整性
 function(verify_cef_deployment TARGET_NAME BINARY_DIR)
-    message(STATUS "Verifying CEF deployment integrity")
+    message(STATUS "Setting up CEF deployment verification")
     
-    # Create verification script
-    set(VERIFY_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/verify_cef.cmake")
+    # 在配置时确定平台和文件列表
+    if(WIN32)
+        set(REQUIRED_FILES "libcef.dll" "cef.pak")
+        set(PLATFORM_NAME "Windows")
+    elseif(APPLE)
+        set(REQUIRED_FILES "Chromium Embedded Framework.framework" "cef.pak")
+        set(PLATFORM_NAME "macOS")
+    else()
+        set(REQUIRED_FILES "libcef.so" "cef.pak")
+        set(PLATFORM_NAME "Linux")
+    endif()
     
+    # Create verification script with platform-specific content
+    set(VERIFY_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/verify_cef_${TARGET_NAME}.cmake")
+    
+    # 生成平台特定的验证脚本
     file(WRITE "${VERIFY_SCRIPT}" "
-        # CEF deployment verification script
+        # CEF deployment verification script for ${PLATFORM_NAME}
         set(BINARY_DIR \"${BINARY_DIR}\")
+        set(REQUIRED_FILES \"${REQUIRED_FILES}\")
         set(MISSING_FILES \"\")
         
-        # Check required files
-        if(WIN32)
-            set(REQUIRED_FILES \"libcef.dll\" \"cef.pak\")
-        elseif(APPLE)
-            set(REQUIRED_FILES \"Chromium Embedded Framework.framework\" \"cef.pak\")
-        else()
-            set(REQUIRED_FILES \"libcef.so\" \"cef.pak\")
-        endif()
+        message(STATUS \"Verifying CEF deployment for ${PLATFORM_NAME}\")
+        message(STATUS \"Binary directory: \${BINARY_DIR}\")
+        message(STATUS \"Required files: \${REQUIRED_FILES}\")
         
         foreach(file \${REQUIRED_FILES})
-            if(NOT EXISTS \"\${BINARY_DIR}/\${file}\")
+            set(file_path \"\${BINARY_DIR}/\${file}\")
+            message(STATUS \"Checking: \${file_path}\")
+            if(NOT EXISTS \"\${file_path}\")
                 list(APPEND MISSING_FILES \"\${file}\")
+                message(WARNING \"Missing: \${file_path}\")
+            else()
+                message(STATUS \"Found: \${file_path}\")
             endif()
         endforeach()
         
         if(MISSING_FILES)
+            message(STATUS \"=== CEF Verification Failed ===\")
+            message(STATUS \"Missing files: \${MISSING_FILES}\")
+            message(STATUS \"Binary directory contents:\")
+            file(GLOB files \"\${BINARY_DIR}/*\")
+            foreach(file \${files})
+                get_filename_component(filename \"\${file}\" NAME)
+                message(STATUS \"  Found: \${filename}\")
+            endforeach()
             message(FATAL_ERROR \"CEF required files missing: \${MISSING_FILES}\")
         else()
             message(STATUS \"CEF files verification passed\")
@@ -343,7 +365,7 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
     
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -P "${VERIFY_SCRIPT}"
-        COMMENT "Verifying CEF file deployment")
+        COMMENT "Verifying CEF file deployment for ${PLATFORM_NAME}")
 endfunction()
 
 # 创建CEF环境配置
