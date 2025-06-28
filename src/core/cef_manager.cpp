@@ -121,6 +121,10 @@ bool CEFManager::initialize()
     m_logger->appEvent(QString("内存配置: %1").arg(
         m_memoryProfile == MemoryProfile::Minimal ? "最小" : 
         m_memoryProfile == MemoryProfile::Balanced ? "平衡" : "性能"));
+    
+    // 记录crashpad状态信息
+    QString crashpadStatus = checkCrashpadStatus();
+    m_logger->appEvent(QString("Crashpad状态: %1").arg(crashpadStatus));
 
     return true;
 }
@@ -498,8 +502,11 @@ bool CEFManager::verifyCEFInstallation()
         requiredFiles << "cef_subprocess_win64.exe";
     }
     
-    // CEF崩溃处理程序
-    requiredFiles << "chrome_crashpad_handler.exe";
+    // CEF可选文件列表（缺失时不影响核心功能）
+    QStringList optionalFiles;
+    
+    // CEF崩溃处理程序（可选功能）
+    optionalFiles << "crashpad_handler.exe";
 #elif defined(Q_OS_MAC)
     requiredFiles << "Chromium Embedded Framework.framework";
 #else
@@ -508,13 +515,19 @@ bool CEFManager::verifyCEFInstallation()
 
     QString cefDir = QCoreApplication::applicationDirPath();
     
+    // 检查必需文件
     for (const QString& file : requiredFiles) {
         QString filePath = QDir(cefDir).filePath(file);
         if (!QFileInfo::exists(filePath)) {
-            m_logger->errorEvent(QString("缺少CEF文件: %1").arg(filePath));
+            m_logger->errorEvent(QString("缺少CEF关键文件: %1").arg(filePath));
             return false;
         }
     }
+
+#ifdef Q_OS_WIN
+    // 检查可选文件（不影响核心功能）
+    checkOptionalFiles(optionalFiles, cefDir);
+#endif
 
     return true;
 }
@@ -533,6 +546,58 @@ bool CEFManager::checkCEFDependencies()
 #endif
 
     return true;
+}
+
+void CEFManager::checkOptionalFiles(const QStringList& optionalFiles, const QString& cefDir)
+{
+    // 检查可选文件，缺失时记录信息但不影响程序运行
+    for (const QString& file : optionalFiles) {
+        QString filePath = QDir(cefDir).filePath(file);
+        if (QFileInfo::exists(filePath)) {
+            m_logger->infoEvent(QString("可选CEF文件可用: %1").arg(file));
+        } else {
+            if (file == "crashpad_handler.exe") {
+                m_logger->infoEvent("crashpad_handler.exe未找到，崩溃报告功能将不可用（这是正常的，不影响核心功能）");
+            } else {
+                m_logger->infoEvent(QString("可选CEF文件未找到: %1").arg(file));
+            }
+        }
+    }
+}
+
+QString CEFManager::checkCrashpadStatus()
+{
+    // 检查crashpad_handler.exe是否存在
+    QString cefDir = QCoreApplication::applicationDirPath();
+    QString crashpadHandlerPath = QDir(cefDir).filePath("crashpad_handler.exe");
+    
+    // 检查crash_reporter.cfg是否存在（如果存在则启用crashpad）
+    QString crashReporterConfig = QDir(cefDir).filePath("crash_reporter.cfg");
+    
+    QStringList statusInfo;
+    
+    if (QFileInfo::exists(crashpadHandlerPath)) {
+        statusInfo << "crashpad_handler.exe已安装";
+        
+        if (QFileInfo::exists(crashReporterConfig)) {
+            statusInfo << "crash_reporter.cfg已配置";
+            statusInfo << "崩溃报告功能已启用";
+        } else {
+            statusInfo << "crash_reporter.cfg未配置";
+            statusInfo << "崩溃报告功能已禁用";
+        }
+    } else {
+        statusInfo << "crashpad_handler.exe缺失";
+        statusInfo << "使用CEF内嵌崩溃处理机制";
+        
+        if (QFileInfo::exists(crashReporterConfig)) {
+            statusInfo << "警告：发现crash_reporter.cfg但缺少处理程序";
+        } else {
+            statusInfo << "崩溃报告功能完全禁用（推荐配置）";
+        }
+    }
+    
+    return statusInfo.join("，");
 }
 
 void CEFManager::onApplicationShutdown()

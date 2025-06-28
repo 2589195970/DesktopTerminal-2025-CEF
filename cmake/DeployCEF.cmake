@@ -87,7 +87,13 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     
     # CEF子进程可执行文件
     set(CEF_EXECUTABLES
+        # "chrome_crashpad_handler.exe"  # 可选功能，移至可选文件列表
+    )
+    
+    # CEF可选文件（崩溃报告功能）
+    set(CEF_OPTIONAL_EXECUTABLES
         "chrome_crashpad_handler.exe"
+        "crashpad_handler.exe"
     )
     
     # 根据架构选择子进程文件
@@ -129,6 +135,20 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
                 "${CEF_BINARY_PATH}/${exe}"
                 "${BINARY_DIR}/${exe}"
                 COMMENT "复制CEF可执行文件: ${exe}")
+        endif()
+    endforeach()
+    
+    # 复制可选的crashpad文件（如果存在）
+    foreach(exe ${CEF_OPTIONAL_EXECUTABLES})
+        if(EXISTS "${CEF_BINARY_PATH}/${exe}")
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CEF_BINARY_PATH}/${exe}"
+                "${BINARY_DIR}/${exe}"
+                COMMENT "复制CEF可选崩溃报告文件: ${exe}")
+            message(STATUS "找到可选的crashpad文件: ${exe}")
+        else()
+            message(STATUS "可选crashpad文件不存在: ${exe}（这是正常的）")
         endif()
     endforeach()
     
@@ -205,7 +225,13 @@ function(deploy_cef_linux TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     set(CEF_EXECUTABLES
         "chrome-sandbox"
         "cef_subprocess"
+        # "chrome_crashpad_handler"  # 移至可选文件列表
+    )
+    
+    # CEF可选文件（崩溃报告功能）
+    set(CEF_OPTIONAL_EXECUTABLES
         "chrome_crashpad_handler"
+        "crashpad_handler"
     )
     
     # CEF数据文件
@@ -246,6 +272,20 @@ function(deploy_cef_linux TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
                     COMMAND chmod 4755 "${BINARY_DIR}/${exe}"
                     COMMENT "设置chrome-sandbox权限")
             endif()
+        endif()
+    endforeach()
+    
+    # 复制可选的crashpad文件（如果存在）
+    foreach(exe ${CEF_OPTIONAL_EXECUTABLES})
+        if(EXISTS "${CEF_BINARY_PATH}/${exe}")
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CEF_BINARY_PATH}/${exe}"
+                "${BINARY_DIR}/${exe}"
+                COMMENT "复制CEF可选崩溃报告文件: ${exe}")
+            message(STATUS "找到可选的crashpad文件: ${exe}")
+        else()
+            message(STATUS "可选crashpad文件不存在: ${exe}（这是正常的）")
         endif()
     endforeach()
     

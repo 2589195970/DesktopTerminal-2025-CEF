@@ -115,9 +115,10 @@ function(force_deploy_cef_files TARGET_NAME)
         # 注意：cef_sandbox.lib是静态链接库，只在编译时使用，运行时不需要
         # 只有当确实需要时才部署libcef.lib（大多数情况下运行时不需要）
         
-        # 可执行文件
+        # 可执行文件 - 使用实际的CEF文件名
+        # 注意：crashpad_handler.exe是可选文件，在某些CEF版本中可能不存在
         set(CEF_EXECUTABLES
-            "chrome_crashpad_handler.exe"
+            # "crashpad_handler.exe"  # 移至可选文件列表
         )
         
         # 根据架构添加子进程可执行文件
@@ -126,6 +127,11 @@ function(force_deploy_cef_files TARGET_NAME)
         else()
             list(APPEND CEF_EXECUTABLES "cef_subprocess_win32.exe")
         endif()
+        
+        # 可选文件列表（缺失时不影响核心功能）
+        set(CEF_OPTIONAL_EXECUTABLES
+            "crashpad_handler.exe"
+        )
         
         # 复制核心DLL文件
         foreach(dll ${CEF_CORE_DLLS})
@@ -191,7 +197,7 @@ function(force_deploy_cef_files TARGET_NAME)
                 message(STATUS "[COPY] 将复制: ${exe} 从 ${actual_src_file}")
             else()
                 # 对于关键的CEF子进程文件，启用全局搜索作为最后手段
-                if(exe STREQUAL "chrome_crashpad_handler.exe" OR 
+                if(exe STREQUAL "crashpad_handler.exe" OR 
                    exe STREQUAL "cef_subprocess_win32.exe" OR 
                    exe STREQUAL "cef_subprocess_win64.exe")
                    
@@ -222,6 +228,46 @@ function(force_deploy_cef_files TARGET_NAME)
                     endif()
                 else()
                     message(WARNING "[WARNING] CEF可选文件未找到: ${exe}")
+                endif()
+            endif()
+        endforeach()
+        
+        # 处理可选文件（不影响核心功能）
+        message(STATUS "[INFO] 检查可选CEF文件...")
+        foreach(optional_exe ${CEF_OPTIONAL_EXECUTABLES})
+            set(dst_file "${OUTPUT_DIR}/${optional_exe}")
+            set(file_found FALSE)
+            set(actual_src_file "")
+            
+            # 搜索可选文件
+            set(SEARCH_PATHS
+                "${CEF_BINARY_DIR}/${optional_exe}"
+                "${CEF_ROOT_DIR}/${optional_exe}"
+                "${CEF_ROOT_DIR}/Release/${optional_exe}"
+                "${CEF_ROOT_DIR}/Debug/${optional_exe}"
+            )
+            
+            foreach(search_path ${SEARCH_PATHS})
+                if(EXISTS "${search_path}" AND NOT file_found)
+                    set(actual_src_file "${search_path}")
+                    set(file_found TRUE)
+                    message(STATUS "[OPTIONAL_FOUND] CEF可选文件: ${optional_exe} 位于 ${search_path}")
+                    break()
+                endif()
+            endforeach()
+            
+            if(file_found)
+                add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${actual_src_file}" "${dst_file}"
+                    COMMENT "复制CEF可选文件: ${optional_exe}")
+                message(STATUS "[COPY] 将复制可选文件: ${optional_exe}")
+            else()
+                if(optional_exe STREQUAL "crashpad_handler.exe")
+                    message(STATUS "[INFO] crashpad_handler.exe未找到（这是正常的，CEF 75可能使用嵌入式crashpad）")
+                    message(STATUS "[INFO] 崩溃报告功能将不可用，但不影响核心浏览器功能")
+                else()
+                    message(WARNING "[WARNING] 可选CEF文件未找到: ${optional_exe}")
                 endif()
             endif()
         endforeach()

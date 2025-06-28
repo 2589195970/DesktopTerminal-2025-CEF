@@ -290,6 +290,66 @@ set(HEADERS
 # QHotkey子项目
 add_subdirectory(third_party/QHotkey)
 
+# Windows清单文件嵌入支持（用于管理员权限）
+if(WIN32)
+    # 检查是否存在清单文件
+    set(MANIFEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.manifest")
+    if(EXISTS "${MANIFEST_FILE}")
+        message(STATUS "找到Windows清单文件: ${MANIFEST_FILE}")
+        
+        # 根据编译器类型选择嵌入方式
+        if(MSVC)
+            # MSVC编译器：使用资源编译器直接嵌入
+            message(STATUS "使用MSVC资源编译器嵌入清单文件")
+            
+            # 创建资源文件
+            set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+            file(WRITE "${RC_FILE}" 
+                "1 24 \"${MANIFEST_FILE}\"\n"
+            )
+            
+            # 将资源文件添加到源文件列表
+            list(APPEND SOURCES "${RC_FILE}")
+            
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            # MinGW编译器：使用windres进行清单嵌入
+            message(STATUS "使用MinGW windres嵌入清单文件")
+            
+            # 查找windres工具
+            find_program(WINDRES_EXECUTABLE windres)
+            if(WINDRES_EXECUTABLE)
+                # 创建资源文件
+                set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+                file(WRITE "${RC_FILE}" 
+                    "1 24 \"${MANIFEST_FILE}\"\n"
+                )
+                
+                # 编译资源文件为对象文件
+                set(RC_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/app.rc.o")
+                add_custom_command(
+                    OUTPUT "${RC_OBJECT}"
+                    COMMAND ${WINDRES_EXECUTABLE} -i "${RC_FILE}" -o "${RC_OBJECT}"
+                    DEPENDS "${RC_FILE}" "${MANIFEST_FILE}"
+                    COMMENT "编译Windows资源文件和清单"
+                )
+                
+                # 将对象文件添加到源文件列表
+                list(APPEND SOURCES "${RC_OBJECT}")
+                
+                message(STATUS "MinGW清单嵌入配置完成")
+            else()
+                message(WARNING "未找到windres工具，将跳过清单文件嵌入")
+            endif()
+            
+        else()
+            message(WARNING "未知的Windows编译器，将跳过清单文件嵌入")
+        endif()
+        
+    else()
+        message(WARNING "Windows清单文件不存在: ${MANIFEST_FILE}")
+    endif()
+endif()
+
 # 创建可执行文件
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 

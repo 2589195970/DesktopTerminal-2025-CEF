@@ -12,6 +12,152 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+#include <shellapi.h>
+#endif
+
+#ifdef Q_OS_WIN
+/**
+ * @brief 检查当前进程是否具有管理员权限
+ * @return true：具有管理员权限，false：没有管理员权限
+ */
+bool isRunningAsAdministrator()
+{
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = nullptr;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    
+    // 创建管理员组的SID
+    if (AllocateAndInitializeSid(
+        &ntAuthority,
+        2,
+        SECURITY_BUILTIN_DOMAIN_RID,
+        DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0,
+        &adminGroup)) {
+        
+        // 检查当前用户是否属于管理员组
+        if (!CheckTokenMembership(nullptr, adminGroup, &isAdmin)) {
+            isAdmin = FALSE;
+        }
+        
+        FreeSid(adminGroup);
+    }
+    
+    return isAdmin == TRUE;
+}
+
+/**
+ * @brief 请求管理员权限重新启动应用程序
+ * @param argc 命令行参数个数
+ * @param argv 命令行参数数组
+ * @return true：成功请求重新启动，false：用户拒绝或失败
+ */
+bool requestAdminPrivileges(int argc, char* argv[])
+{
+    // 获取当前可执行文件路径
+    wchar_t szPath[MAX_PATH];
+    if (GetModuleFileNameW(nullptr, szPath, ARRAYSIZE(szPath)) == 0) {
+        return false;
+    }
+    
+    // 构建命令行参数
+    QString parameters;
+    for (int i = 1; i < argc; ++i) {
+        if (i > 1) parameters += " ";
+        parameters += QString("\"%1\"").arg(argv[i]);
+    }
+    
+    // 使用ShellExecute请求管理员权限
+    HINSTANCE result = ShellExecuteW(
+        nullptr,
+        L"runas",           // 请求管理员权限
+        szPath,             // 可执行文件路径
+        parameters.toStdWString().c_str(),  // 命令行参数
+        nullptr,            // 工作目录
+        SW_NORMAL           // 显示方式
+    );
+    
+    // 检查结果
+    return reinterpret_cast<intptr_t>(result) > 32;
+}
+
+/**
+ * @brief 检查并处理管理员权限
+ * @param argc 命令行参数个数
+ * @param argv 命令行参数数组
+ * @param logger 日志器引用
+ * @return true：继续执行，false：需要退出程序
+ */
+bool checkAndHandleAdminPrivileges(int argc, char* argv[], Logger& logger)
+{
+    if (isRunningAsAdministrator()) {
+        logger.appEvent("应用程序正在以管理员权限运行");
+        return true;
+    }
+    
+    logger.appEvent("应用程序未以管理员权限运行");
+    
+    // 检查是否为静默模式（避免在自动化环境中弹出UAC对话框）
+    bool silentMode = false;
+    for (int i = 1; i < argc; ++i) {
+        if (QString(argv[i]).toLower().contains("silent") ||
+            QString(argv[i]).toLower().contains("batch")) {
+            silentMode = true;
+            break;
+        }
+    }
+    
+    if (silentMode) {
+        logger.appEvent("静默模式下跳过管理员权限检查");
+        return true;
+    }
+    
+    // 询问用户是否需要管理员权限
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        nullptr,
+        "管理员权限",
+        "检测到应用程序未以管理员权限运行。\n\n"
+        "为确保所有安全功能正常工作，建议以管理员权限运行。\n\n"
+        "是否现在重新以管理员权限启动？\n\n"
+        "注意：选择\"否\"可能导致部分安全功能无法正常工作。",
+        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+        QMessageBox::Yes
+    );
+    
+    switch (reply) {
+        case QMessageBox::Yes:
+            logger.appEvent("用户选择重新以管理员权限启动");
+            if (requestAdminPrivileges(argc, argv)) {
+                logger.appEvent("已请求管理员权限重新启动，当前进程将退出");
+                return false;  // 退出当前进程
+            } else {
+                logger.errorEvent("请求管理员权限失败");
+                QMessageBox::warning(
+                    nullptr,
+                    "权限请求失败",
+                    "无法请求管理员权限。\n\n"
+                    "您可以手动右键点击程序图标选择\"以管理员身份运行\"。\n\n"
+                    "程序将以当前权限继续运行，但部分功能可能受限。"
+                );
+                return true;
+            }
+            
+        case QMessageBox::No:
+            logger.appEvent("用户选择以当前权限继续运行");
+            QMessageBox::information(
+                nullptr,
+                "权限提示",
+                "程序将以当前权限运行。\n\n"
+                "注意：部分安全功能可能无法正常工作。"
+            );
+            return true;
+            
+        case QMessageBox::Cancel:
+        default:
+            logger.appEvent("用户取消启动");
+            return false;
+    }
+}
 #endif
 
 int main(int argc, char *argv[])
@@ -41,6 +187,15 @@ int main(int argc, char *argv[])
     
     // 记录系统信息
     logger.logSystemInfo();
+    
+#ifdef Q_OS_WIN
+    // Windows平台：检查管理员权限（作为清单文件的备用方案）
+    if (!checkAndHandleAdminPrivileges(argc, argv, logger)) {
+        // 用户选择退出或权限请求成功（将重新启动），当前进程退出
+        logger.appEvent("由于权限检查结果，应用程序即将退出");
+        return 0;
+    }
+#endif
     
     // 初始化配置管理器
     ConfigManager& configManager = ConfigManager::instance();

@@ -119,6 +119,8 @@ private:
     void handleInitializationError(const QString& error);
     bool verifyCEFInstallation();
     bool checkCEFDependencies();
+    void checkOptionalFiles(const QStringList& optionalFiles, const QString& cefDir);
+    QString checkCrashpadStatus();
 
 private slots:
     void onApplicationShutdown();

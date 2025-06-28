@@ -11,9 +11,9 @@ Unicode true
 ; ─────────────────────────────────────────────
 ; 常量定义
 ; ─────────────────────────────────────────────
-!define APPNAME        "智多分机考桌面端-CEF"
-!define COMPANYNAME    "智多分"
-!define DESCRIPTION    "基于CEF的教育考试场景专用安全浏览器"
+!define APPNAME        "智多分机考桌面端"
+!define COMPANYNAME    "山东智多分"
+!define DESCRIPTION    "教育考试场景专用安全浏览器"
 !define VERSIONMAJOR   1
 !define VERSIONMINOR   0
 !define VERSIONPATCH   0
@@ -184,11 +184,11 @@ Section "主程序" SecMain
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 检查CEF子进程文件是否安装
-    ${If} ${FileExists} "$INSTDIR\chrome_crashpad_handler.exe"
+    ; 检查CEF子进程文件是否安装（可选功能）
+    ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
         DetailPrint "✓ CEF崩溃处理程序安装成功"
     ${Else}
-        DetailPrint "⚠ CEF崩溃处理程序未安装，可能导致CEF初始化失败"
+        DetailPrint "ℹ CEF崩溃处理程序未安装（可选功能，不影响核心功能）"
     ${EndIf}
     
     ; 检查Qt5运行时库是否安装
@@ -273,12 +273,19 @@ Section "主程序" SecMain
     CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\DesktopTerminal-CEF.exe" "" "$INSTDIR\resources\logo.ico" 0
     CreateShortcut "$SMPROGRAMS\${APPNAME}\卸载.lnk"      "$INSTDIR\uninstall.exe"        "" "$INSTDIR\resources\logo.ico" 0
 
-    ; 桌面快捷方式
+    ; 桌面快捷方式（带管理员权限提示）
     ${If} ${FileExists} "$INSTDIR\resources\logo.ico"
         CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\DesktopTerminal-CEF.exe" "" "$INSTDIR\resources\logo.ico" 0
     ${Else}
         CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\DesktopTerminal-CEF.exe"
     ${EndIf}
+    
+    ; 创建带明确管理员权限提示的开始菜单快捷方式
+    CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}（管理员模式）.lnk" "$INSTDIR\DesktopTerminal-CEF.exe" "" "$INSTDIR\resources\logo.ico" 0
+    
+    ; 提供权限说明信息
+    DetailPrint "已创建桌面和开始菜单快捷方式"
+    DetailPrint "注意：程序已配置为自动请求管理员权限"
     
     ; 最终安装验证和诊断（适配CEF）
     DetailPrint "正在进行最终安装验证..."
@@ -301,12 +308,13 @@ Section "主程序" SecMain
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
     ${EndIf}
     
-    ; 验证关键CEF子进程文件
-    ${If} ${FileExists} "$INSTDIR\chrome_crashpad_handler.exe"
+    ; 验证关键CEF子进程文件（可选功能）
+    ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
         DetailPrint "✓ CEF崩溃处理程序验证通过"
     ${Else}
-        DetailPrint "❌ CEF崩溃处理程序缺失，将导致CEF初始化失败"
-        StrCpy $VerificationErrors "$VerificationErrors• CEF崩溃处理程序 chrome_crashpad_handler.exe 缺失$\n"
+        DetailPrint "ℹ CEF崩溃处理程序未安装（可选功能，不影响核心功能）"
+        ; 注释掉错误记录，因为这是可选功能
+        ; StrCpy $VerificationErrors "$VerificationErrors• CEF崩溃处理程序 crashpad_handler.exe 缺失$\n"
     ${EndIf}
     
     ; 统计安装文件数量进行验证
@@ -344,7 +352,7 @@ Section "主程序" SecMain
             skip_vc_download:
         ${EndIf}
         
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择\"是\"$\n- 如有权限问题，可使用开始菜单中的\"管理员模式\"快捷方式$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
     ${EndIf}
 SectionEnd
 
