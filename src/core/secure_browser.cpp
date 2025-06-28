@@ -22,9 +22,9 @@
 #include <X11/Xlib.h>
 #endif
 
-SecureBrowser::SecureBrowser(QWidget *parent)
+SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     : QWidget(parent)
-    , m_cefManager(nullptr)
+    , m_cefManager(cefManager)
     , m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
     , m_exitHotkeyF10(nullptr)
@@ -477,8 +477,13 @@ void SecureBrowser::createCEFBrowser()
     QString initialUrl = m_currentUrl.isEmpty() ? m_configManager->getUrl() : m_currentUrl.toString();
     
     try {
-        // 这里需要调用CEF管理器创建浏览器
-        // m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
+        if (!m_cefManager) {
+            handleBrowserError("CEF管理器未初始化");
+            return;
+        }
+        
+        // 调用CEF管理器创建浏览器
+        m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
         
         if (m_cefBrowserId > 0) {
             onBrowserCreated();

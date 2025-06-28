@@ -364,7 +364,7 @@ bool Application::initializeCEF()
 bool Application::createMainWindow()
 {
     try {
-        m_mainWindow = new SecureBrowser();
+        m_mainWindow = new SecureBrowser(m_cefManager);
         m_mainWindow->show();
         return true;
     } catch (...) {

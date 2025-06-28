@@ -24,7 +24,7 @@ class SecureBrowser : public QWidget
     Q_OBJECT
 
 public:
-    explicit SecureBrowser(QWidget *parent = nullptr);
+    explicit SecureBrowser(CEFManager* cefManager, QWidget *parent = nullptr);
     ~SecureBrowser();
 
     /**
