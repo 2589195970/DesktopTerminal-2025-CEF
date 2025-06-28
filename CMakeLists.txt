@@ -311,6 +311,10 @@ if(WIN32)
             # 将资源文件添加到源文件列表
             list(APPEND SOURCES "${RC_FILE}")
             
+            # 禁用MSVC默认的manifest处理以避免冲突
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
+            message(STATUS "已禁用MSVC默认manifest以避免冲突")
+            
         elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             # MinGW编译器：使用windres进行清单嵌入
             message(STATUS "使用MinGW windres嵌入清单文件")
