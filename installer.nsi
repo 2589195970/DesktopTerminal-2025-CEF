@@ -108,56 +108,47 @@ FunctionEnd
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     
-    ; 直接安装程序文件 - 移除运行时路径检查逻辑错误
-    ; NSIS编译时已包含所有文件，安装时直接复制即可
+    ; 直接安装程序文件 - 使用正确的编译时源路径
+    ; GitHub Actions构建文件位于artifacts\windows-${ARCH}\目录
     DetailPrint "正在安装DesktopTerminal-CEF应用程序..."
     
-    ; 安装主程序文件（NSIS编译时已验证文件存在）
-    File "DesktopTerminal-CEF.exe"
+    ; 安装主程序文件（从artifacts目录）
+    File "artifacts\windows-${ARCH}\DesktopTerminal-CEF.exe"
     DetailPrint "✓ 主程序已安装: DesktopTerminal-CEF.exe"
     
     ; 安装CEF核心库文件
-    File /nonfatal "libcef.dll"
-    File /nonfatal "chrome_elf.dll" 
-    File /nonfatal "d3dcompiler_47.dll"
-    File /nonfatal "libEGL.dll"
-    File /nonfatal "libGLESv2.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libcef.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\chrome_elf.dll" 
+    File /nonfatal "artifacts\windows-${ARCH}\d3dcompiler_47.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libEGL.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libGLESv2.dll"
     DetailPrint "✓ CEF核心库已安装"
     
-    ; 安装CEF数据文件
-    File /nonfatal "snapshot_blob.bin"
-    File /nonfatal "v8_context_snapshot.bin"
-    File /nonfatal "icudtl.dat"
+    ; 安装CEF数据文件（根据实际构建输出调整）
+    File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
+    File /nonfatal "artifacts\windows-${ARCH}\v8_context_snapshot.bin"
+    File /nonfatal "artifacts\windows-${ARCH}\natives_blob.bin"
     DetailPrint "✓ CEF数据文件已安装"
     
-    ; 安装CEF可执行文件
-    File /nonfatal "chrome_crashpad_handler.exe"
-    ${If} "${ARCH}" == "x64"
-        File /nonfatal "cef_subprocess_win64.exe"
-    ${Else}
-        File /nonfatal "cef_subprocess_win32.exe"
-    ${EndIf}
-    DetailPrint "✓ CEF子进程已安装"
-    
     ; 安装CEF资源文件
-    File /nonfatal "cef.pak"
-    File /nonfatal "cef_100_percent.pak"
-    File /nonfatal "cef_200_percent.pak"
-    File /nonfatal "cef_extensions.pak"
-    File /nonfatal "devtools_resources.pak"
+    File /nonfatal "artifacts\windows-${ARCH}\cef.pak"
+    File /nonfatal "artifacts\windows-${ARCH}\cef_100_percent.pak"
+    File /nonfatal "artifacts\windows-${ARCH}\cef_200_percent.pak"
+    File /nonfatal "artifacts\windows-${ARCH}\cef_extensions.pak"
+    File /nonfatal "artifacts\windows-${ARCH}\devtools_resources.pak"
     DetailPrint "✓ CEF资源文件已安装"
     
     ; 安装本地化文件目录
-    File /r /nonfatal "locales"
+    File /r /nonfatal "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
     
-    ; 安装SwiftShader目录（如果存在）
-    File /r /nonfatal "swiftshader"
-    DetailPrint "✓ SwiftShader已安装"
+    ; 安装resources目录
+    File /r /nonfatal "artifacts\windows-${ARCH}\resources"
+    DetailPrint "✓ 应用资源已安装"
     
-    ; 安装构建信息文件
-    File /nonfatal /oname=logs\build_source.txt "BUILD_INFO.txt"
-    DetailPrint "✓ 构建信息已记录"
+    ; 安装SwiftShader目录（如果存在）
+    File /r /nonfatal "artifacts\windows-${ARCH}\swiftshader"
+    DetailPrint "✓ SwiftShader已安装"
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     DetailPrint "正在验证安装结果..."
