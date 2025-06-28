@@ -1157,13 +1157,33 @@ jobs:
             
             # Verify Qt5 deployment
             Write-Host "=== Qt5 Deployment Verification ==="
-            $qtDeployedFiles = Get-ChildItem "$artifactPath" -Include "Qt5*.dll" -ErrorAction SilentlyContinue
+            $qtDeployedFiles = Get-ChildItem "$artifactPath\Qt5*.dll" -ErrorAction SilentlyContinue
             if ($qtDeployedFiles.Count -eq 3) {
                 $qtTotalSize = ($qtDeployedFiles | Measure-Object -Property Length -Sum).Sum
                 Write-Host "SUCCESS: All Qt5 DLLs deployed ($($qtDeployedFiles.Count) files, $([math]::Round($qtTotalSize/1MB, 2)) MB)"
             } else {
-                Write-Host "ERROR: Qt5 deployment incomplete ($($qtDeployedFiles.Count)/3 DLLs found)"
-                exit 1
+                Write-Host "WARNING: Qt5 deployment verification failed ($($qtDeployedFiles.Count)/3 DLLs found)"
+                Write-Host "Checking individual Qt5 DLL files..."
+                
+                $qtDllsCheck = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll")
+                $foundDlls = 0
+                foreach ($dll in $qtDllsCheck) {
+                    $dllPath = Join-Path $artifactPath $dll
+                    if (Test-Path $dllPath) {
+                        $dllSize = (Get-Item $dllPath).Length
+                        Write-Host "  Found $dll : $([math]::Round($dllSize/1MB, 2)) MB"
+                        $foundDlls++
+                    } else {
+                        Write-Host "  Missing $dll"
+                    }
+                }
+                
+                if ($foundDlls -eq 3) {
+                    Write-Host "SUCCESS: All Qt5 DLLs verified individually"
+                } else {
+                    Write-Host "ERROR: Qt5 deployment incomplete ($foundDlls/3 DLLs found)"
+                    exit 1
+                }
             }
         } else {
             Write-Host "ERROR: Qt5 bin directory not found: $qtBinPath"
