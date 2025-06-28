@@ -554,12 +554,12 @@ void CEFManager::checkOptionalFiles(const QStringList& optionalFiles, const QStr
     for (const QString& file : optionalFiles) {
         QString filePath = QDir(cefDir).filePath(file);
         if (QFileInfo::exists(filePath)) {
-            m_logger->infoEvent(QString("可选CEF文件可用: %1").arg(file));
+            m_logger->appEvent(QString("可选CEF文件可用: %1").arg(file));
         } else {
             if (file == "crashpad_handler.exe") {
-                m_logger->infoEvent("crashpad_handler.exe未找到，崩溃报告功能将不可用（这是正常的，不影响核心功能）");
+                m_logger->appEvent("crashpad_handler.exe未找到，崩溃报告功能将不可用（这是正常的，不影响核心功能）");
             } else {
-                m_logger->infoEvent(QString("可选CEF文件未找到: %1").arg(file));
+                m_logger->appEvent(QString("可选CEF文件未找到: %1").arg(file));
             }
         }
     }
