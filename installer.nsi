@@ -168,9 +168,9 @@ Section "主程序" SecMain
         ; 验证文件大小（应该大于1MB）
         ${GetSize} "$INSTDIR\DesktopTerminal-CEF.exe" "/S=0K" $R1 $R2 $R3
         ${If} $R1 > 1000  ; 大于1MB
-            DetailPrint "✓ 主程序文件大小正常 (${R1} KB)"
+            DetailPrint "✓ 主程序文件大小正常 ($R1 KB)"
         ${Else}
-            DetailPrint "⚠ 主程序文件可能不完整 (${R1} KB)"
+            DetailPrint "⚠ 主程序文件可能不完整 ($R1 KB)"
         ${EndIf}
     ${Else}
         MessageBox MB_ICONSTOP "❌ 主程序安装失败：$INSTDIR\DesktopTerminal-CEF.exe$\n$\n可能原因：$\n1. 磁盘空间不足$\n2. 目标目录无写权限$\n3. 杀毒软件拦截"
@@ -208,7 +208,7 @@ Section "主程序" SecMain
     
     ; 统计安装文件数量
     ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
-    DetailPrint "安装完成：${R2} 个文件，总大小 ${R1} KB"
+    DetailPrint "安装完成：$R2 个文件，总大小 $R1 KB"
     
     ${If} $R2 < 3
         DetailPrint "⚠ 安装文件数量偏少，请检查安装包完整性"
@@ -352,7 +352,7 @@ Section "主程序" SecMain
             skip_vc_download:
         ${EndIf}
         
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择\"是\"$\n- 如有权限问题，可使用开始菜单中的\"管理员模式\"快捷方式$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
     ${EndIf}
 SectionEnd
 
