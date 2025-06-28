@@ -946,12 +946,12 @@ jobs:
                 # 扁平化复制 - 确保exe文件在artifacts根目录
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
                 
-                # 确保关键exe文件在根目录（修复NSIS路径问题）
+                # Ensure exe file is in root directory (fixes NSIS path issue)
                 $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
                 if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
-                    Write-Host "发现exe文件在子目录，移动到根目录: $($exeInSubdir.FullName)"
+                    Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
                     Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
-                    Write-Host "exe文件已移动到: $artifactPath\DesktopTerminal-CEF.exe"
+                    Write-Host "Exe file moved to: $artifactPath\DesktopTerminal-CEF.exe"
                 }
                 
                 # Post-copy verification
@@ -1017,38 +1017,18 @@ jobs:
                 }
             }
             
-            # 最终验证exe文件在正确位置（artifacts根目录）
-            Write-Host "=== NSIS路径兼容性最终验证 ==="
-            $finalExePath = Join-Path $artifactPath "DesktopTerminal-CEF.exe"
-            if (Test-Path $finalExePath) {
-                $exeSize = (Get-Item $finalExePath).Length
-                Write-Host "✓ exe文件在NSIS期望位置: $finalExePath"
-                Write-Host "  文件大小: $([math]::Round($exeSize/1MB, 2)) MB"
-            } else {
-                Write-Host "✗ exe文件不在NSIS期望位置: $finalExePath"
-                Write-Host "正在搜索exe文件实际位置..."
-                $actualExe = Get-ChildItem $artifactPath -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
-                if ($actualExe) {
-                    Write-Host "发现exe文件在: $($actualExe.FullName)"
-                    Write-Host "ERROR: exe文件位置与NSIS脚本期望不符"
-                    exit 1
-                } else {
-                    Write-Host "ERROR: 完全找不到exe文件"
-                    exit 1
-                }
-            }
             
             # Strict copy without ignoring errors
             Write-Host "Starting file copy operation..."
             try {
                 Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force
                 
-                # 确保关键exe文件在根目录（修复NSIS路径问题）
+                # Ensure exe file is in root directory (fixes NSIS path issue)
                 $exeInSubdir = Get-ChildItem "$artifactPath" -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
                 if ($exeInSubdir -and $exeInSubdir.DirectoryName -ne $artifactPath) {
-                    Write-Host "发现exe文件在子目录，移动到根目录: $($exeInSubdir.FullName)"
+                    Write-Host "Found exe in subdirectory, moving to root: $($exeInSubdir.FullName)"
                     Copy-Item $exeInSubdir.FullName "$artifactPath\DesktopTerminal-CEF.exe" -Force
-                    Write-Host "exe文件已移动到: $artifactPath\DesktopTerminal-CEF.exe"
+                    Write-Host "Exe file moved to: $artifactPath\DesktopTerminal-CEF.exe"
                 }
                 
                 Write-Host "File copy completed successfully"
@@ -1085,6 +1065,29 @@ jobs:
                     Write-Host "  Verified $file in target: $([math]::Round($fileSize/1MB, 2)) MB"
                 } else {
                     Write-Host "ERROR: Critical file missing in target: $file"
+                    exit 1
+                }
+            }
+            
+            # Final NSIS compatibility verification
+            Write-Host "=== NSIS Path Compatibility Final Verification ==="
+            $finalExePath = Join-Path $artifactPath "DesktopTerminal-CEF.exe"
+            if (Test-Path $finalExePath) {
+                $exeSize = (Get-Item $finalExePath).Length
+                Write-Host "SUCCESS: exe file in expected NSIS location: $finalExePath"
+                Write-Host "  File size: $([math]::Round($exeSize/1MB, 2)) MB"
+            } else {
+                Write-Host "ERROR: exe file not in expected NSIS location: $finalExePath"
+                Write-Host "Searching for actual exe file location..."
+                $actualExe = Get-ChildItem $artifactPath -Recurse -Include "DesktopTerminal-CEF.exe" -ErrorAction SilentlyContinue
+                if ($actualExe) {
+                    Write-Host "Found exe file at: $($actualExe.FullName)"
+                    Write-Host "ERROR: exe file location does not match NSIS expectations"
+                    Write-Host "Moving exe file to expected location..."
+                    Copy-Item $actualExe.FullName "$finalExePath" -Force
+                    Write-Host "exe file moved successfully"
+                } else {
+                    Write-Host "ERROR: exe file not found at all"
                     exit 1
                 }
             }
