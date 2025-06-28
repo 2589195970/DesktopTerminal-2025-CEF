@@ -138,8 +138,8 @@ Section "主程序" SecMain
         DetailPrint "ℹ 32位系统：CEF单进程模式，无需子进程文件"
     ${Else}
         ; 64位系统使用多进程模式，需要subprocess文件
-        File /nonfatal "artifacts\windows-${ARCH}\cef_subprocess_win64.exe"
-        DetailPrint "✓ CEF 64位子进程已安装"
+        ; 注意：CEF 75 x86构建不包含子进程文件，使用单进程模式
+        DetailPrint "ℹ CEF 75：使用单进程模式，无需子进程文件"
     ${EndIf}
     
     ; 安装CEF数据文件（根据实际构建输出调整）
@@ -171,6 +171,10 @@ Section "主程序" SecMain
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     DetailPrint "正在验证安装结果..."
+    
+    ; 初始化验证错误变量
+    Var /GLOBAL VerificationErrors
+    StrCpy $VerificationErrors ""
     
     ; 检查主程序文件是否成功安装
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
@@ -313,10 +317,6 @@ Section "主程序" SecMain
     ; 最终安装验证和诊断（适配CEF）
     DetailPrint "正在进行最终安装验证..."
     
-    ; 详细的安装完整性检查
-    Var /GLOBAL VerificationErrors
-    StrCpy $VerificationErrors ""
-    
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
         DetailPrint "✓ 主程序文件验证通过"
     ${Else}
@@ -341,12 +341,13 @@ Section "主程序" SecMain
             DetailPrint "⚠ DirectX编译器库验证失败，可能影响渲染"
         ${EndIf}
     ${Else}
-        ; 64位系统：多进程模式验证
-        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
-            DetailPrint "✓ CEF 64位子进程验证通过"
+        ; 64位系统：CEF 75同样使用单进程模式
+        DetailPrint "ℹ CEF 75配置：使用单进程模式，无需子进程文件验证"
+        ${If} ${FileExists} "$INSTDIR\libcef.dll"
+            DetailPrint "✓ CEF核心库验证通过"
         ${Else}
-            DetailPrint "❌ CEF 64位子进程验证失败"
-            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win64.exe 缺失$\n"
+            DetailPrint "❌ CEF核心库验证失败"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF核心库 libcef.dll 缺失$\n"
         ${EndIf}
     ${EndIf}
     
