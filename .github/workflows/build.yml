@@ -810,26 +810,26 @@ jobs:
             echo "CEF目录中的PAK文件："
             dir "!CEF_BUILD_DIR!\*.pak" /b 2>nul || echo "在!CEF_BUILD_DIR!未找到PAK文件"
             echo BUILD_SUCCESS=false>>%GITHUB_ENV%
-            echo "[ERROR] 设置BUILD_SUCCESS=false"
+            echo "[ERROR] Setting BUILD_SUCCESS=false"
             exit 1
           )
         ) else (
-          echo "[ERROR] 构建验证失败 - 未找到可执行文件"
-          echo "--- 详细诊断 ---"
-          echo "构建目录完整结构:"
+          echo "[ERROR] Build verification failed - executable file not found"
+          echo "--- Detailed diagnostics ---"
+          echo "Complete build directory structure:"
           if exist "build" (
-            dir build /s /b | findstr /i "\.exe$" || echo "未找到任何exe文件"
-            echo "--- bin目录内容 ---"
+            dir build /s /b | findstr /i "\.exe$" || echo "No exe files found in build directory"
+            echo "--- bin directory contents ---"
             if exist "build\bin" (
               dir "build\bin" /s /b
             ) else (
-              echo "build\bin目录不存在"
+              echo "build\bin directory does not exist"
             )
           ) else (
-            echo "build目录不存在！"
+            echo "build directory does not exist!"
           )
           echo BUILD_SUCCESS=false>>%GITHUB_ENV%
-          echo "[ERROR] 设置BUILD_SUCCESS=false"
+          echo "[ERROR] Setting BUILD_SUCCESS=false"
           exit 1
         )
 
@@ -943,7 +943,7 @@ jobs:
               }
               
               try {
-                # 扁平化复制 - 确保exe文件在artifacts根目录
+                # Flatten copy - ensure exe file is in artifacts root directory
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
                 
                 # Ensure exe file is in root directory (fixes NSIS path issue)
