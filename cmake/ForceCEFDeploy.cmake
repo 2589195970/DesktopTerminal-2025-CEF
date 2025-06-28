@@ -82,9 +82,10 @@ function(force_deploy_cef_files TARGET_NAME)
         return()
     endif()
     
-    # 定义目标输出目录
-    set(OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-    message(STATUS "CEF文件将复制到: ${OUTPUT_DIR}")
+    # 定义目标输出目录 - 修复：使用配置特定的目录
+    # 确保CEF文件与主程序在同一目录（Release/Debug）
+    set(OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
+    message(STATUS "CEF文件将复制到: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
     
     # Windows平台的CEF文件列表
     if(WIN32)

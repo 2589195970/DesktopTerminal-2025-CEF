@@ -610,8 +610,8 @@ if(CEF_FOUND)
     if(COMMAND deploy_cef_files)
         deploy_cef_files(${PROJECT_NAME}
             CEF_ROOT "${CEF_ROOT}"
-            BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-            RESOURCES_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
+            RESOURCES_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
         )
         
         # 配置CEF运行环境
@@ -621,7 +621,7 @@ if(CEF_FOUND)
         
         # 验证CEF部署
         if(COMMAND verify_cef_deployment)
-            verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+            verify_cef_deployment(${PROJECT_NAME} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
         endif()
     else()
         message(STATUS "[WARNING] DeployCEF模块不可用，启用强制CEF部署模式")

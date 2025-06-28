@@ -683,24 +683,40 @@ jobs:
           set "CEF_FILES_OK=true"
           set "BUILD_DIR="
           
-          REM 简化的构建目录确定（基于已找到的可执行文件）
+          REM 智能构建目录确定 - 支持多种CEF部署模式
           echo "[INFO] 根据可执行文件位置确定构建目录..."
+          set "BUILD_DIR="
+          set "CEF_BUILD_DIR="
           
-          REM 既然找到了可执行文件，直接基于其位置设置BUILD_DIR
+          REM 1. 首先确定主程序目录
           if exist "build\bin\Release\DesktopTerminal-CEF.exe" (
             set "BUILD_DIR=build\bin\Release"
-            echo "[INFO] 使用Release构建目录"
+            echo "[INFO] 主程序目录: build\bin\Release"
           ) else (
             if exist "build\Release\DesktopTerminal-CEF.exe" (
               set "BUILD_DIR=build\Release"
-              echo "[INFO] 使用简化Release构建目录"
+              echo "[INFO] 主程序目录: build\Release"
             ) else (
               if exist "build\bin\Debug\DesktopTerminal-CEF.exe" (
                 set "BUILD_DIR=build\bin\Debug"
-                echo "[INFO] 使用Debug构建目录"
+                echo "[INFO] 主程序目录: build\bin\Debug"
               ) else (
-                echo "[WARNING] 无法确定构建目录位置"
+                echo "[WARNING] 无法确定主程序目录"
               )
+            )
+          )
+          
+          REM 2. 然后确定CEF文件目录（可能与主程序不同）
+          if exist "%BUILD_DIR%\libcef.dll" (
+            set "CEF_BUILD_DIR=%BUILD_DIR%"
+            echo "[INFO] CEF文件在主程序同目录: %BUILD_DIR%"
+          ) else (
+            if exist "build\bin\libcef.dll" (
+              set "CEF_BUILD_DIR=build\bin"
+              echo "[INFO] CEF文件在上级目录: build\bin （需要修复部署配置）"
+            ) else (
+              echo "[WARNING] 未找到CEF文件，将使用主程序目录"
+              set "CEF_BUILD_DIR=%BUILD_DIR%"
             )
           )
           
@@ -721,24 +737,24 @@ jobs:
             echo "使用构建目录: %BUILD_DIR%"
           )
           
-          REM 检查关键CEF文件
+          REM 检查关键CEF文件 - 使用正确的CEF目录
           set "CEF_CORE_FILES=libcef.dll cef.pak"
           for %%f in (%CEF_CORE_FILES%) do (
-            if exist "%BUILD_DIR%\%%f" (
+            if exist "%CEF_BUILD_DIR%\%%f" (
               echo "[OK] CEF核心文件存在: %%f"
-              for %%s in ("%BUILD_DIR%\%%f") do echo "   大小: %%~zs bytes"
+              for %%s in ("%CEF_BUILD_DIR%\%%f") do echo "   大小: %%~zs bytes"
             ) else (
-              echo "[ERROR] CEF核心文件缺失: %%f"
+              echo "[ERROR] CEF核心文件缺失: %%f (在%CEF_BUILD_DIR%)"
               set "CEF_FILES_OK=false"
             )
           )
           
-          REM 检查locales目录
-          if exist "%BUILD_DIR%\locales" (
+          REM 检查locales目录 - 使用正确的CEF目录
+          if exist "%CEF_BUILD_DIR%\locales" (
             echo "[OK] CEF本地化文件存在"
-            echo "   locales目录已验证"
+            echo "   locales目录已验证: %CEF_BUILD_DIR%\locales"
           ) else (
-            echo "[ERROR] CEF本地化文件缺失"
+            echo "[ERROR] CEF本地化文件缺失 (在%CEF_BUILD_DIR%)"
             set "CEF_FILES_OK=false"
           )
           
@@ -757,13 +773,13 @@ jobs:
               set "CEF_FILES_OK=false"
             )
             
-            REM 检查CEF核心DLL
-            if exist "%BUILD_DIR%\libcef.dll" (
-              for %%f in ("%BUILD_DIR%\libcef.dll") do (
-                echo "  [OK] CEF核心库: %%~zf bytes"
+            REM 检查CEF核心DLL - 使用正确的CEF目录
+            if exist "%CEF_BUILD_DIR%\libcef.dll" (
+              for %%f in ("%CEF_BUILD_DIR%\libcef.dll") do (
+                echo "  [OK] CEF核心库: %%~zf bytes (在%CEF_BUILD_DIR%)"
               )
             ) else (
-              echo "  [WARNING] CEF核心库未找到（可能在构建后复制）"
+              echo "  [WARNING] CEF核心库未找到（在%CEF_BUILD_DIR%）"
             )
             
             echo "[INFO] 核心文件验证完成"
@@ -784,13 +800,14 @@ jobs:
           ) else (
             echo "[ERROR] CEF文件验证失败"
             echo "--- CEF文件诊断信息 ---"
-            echo "构建目录: %BUILD_DIR%"
-            echo "目录内容："
+            echo "主程序目录: %BUILD_DIR%"
+            echo "CEF文件目录: %CEF_BUILD_DIR%"
+            echo "主程序目录内容："
             dir "%BUILD_DIR%" /b
-            echo "DLL文件："
-            dir "%BUILD_DIR%\*.dll" /b 2>nul || echo "未找到DLL文件"
-            echo "PAK文件："
-            dir "%BUILD_DIR%\*.pak" /b 2>nul || echo "未找到PAK文件"
+            echo "CEF目录中的DLL文件："
+            dir "%CEF_BUILD_DIR%\*.dll" /b 2>nul || echo "在%CEF_BUILD_DIR%未找到DLL文件"
+            echo "CEF目录中的PAK文件："
+            dir "%CEF_BUILD_DIR%\*.pak" /b 2>nul || echo "在%CEF_BUILD_DIR%未找到PAK文件"
             echo BUILD_SUCCESS=false>>%GITHUB_ENV%
             echo "[ERROR] 设置BUILD_SUCCESS=false"
             exit 1
