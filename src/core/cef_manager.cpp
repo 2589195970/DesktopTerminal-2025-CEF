@@ -494,12 +494,14 @@ bool CEFManager::verifyCEFInstallation()
     requiredFiles << "libcef.dll";
     requiredFiles << "cef.pak";
     
-    // CEF子进程文件（这些才是运行时必需的）
-    if (Application::is32BitSystem()) {
-        requiredFiles << "cef_subprocess_win32.exe";
-        requiredFiles << "d3dcompiler_47.dll";
-    } else {
+    // CEF子进程文件（仅在多进程模式下需要）
+    // 注意：32位系统使用单进程模式，不需要subprocess文件
+    if (!Application::is32BitSystem()) {
+        // 64位系统使用多进程模式，需要子进程文件
         requiredFiles << "cef_subprocess_win64.exe";
+    } else {
+        // 32位系统使用单进程模式，添加额外的DLL依赖
+        requiredFiles << "d3dcompiler_47.dll";
     }
     
     // CEF可选文件列表（缺失时不影响核心功能）

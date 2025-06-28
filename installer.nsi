@@ -132,11 +132,12 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
     DetailPrint "✓ Qt5运行时库已安装"
     
-    ; 安装CEF子进程文件（必需）
+    ; 安装CEF子进程文件（架构特定处理）
     ${If} "${ARCH}" == "x86"
-        File /nonfatal "artifacts\windows-${ARCH}\cef_subprocess_win32.exe"
-        DetailPrint "✓ CEF 32位子进程已安装"
+        ; 32位系统使用单进程模式，不需要subprocess文件
+        DetailPrint "ℹ 32位系统：CEF单进程模式，无需子进程文件"
     ${Else}
+        ; 64位系统使用多进程模式，需要subprocess文件
         File /nonfatal "artifacts\windows-${ARCH}\cef_subprocess_win64.exe"
         DetailPrint "✓ CEF 64位子进程已安装"
     ${EndIf}
@@ -193,15 +194,18 @@ Section "主程序" SecMain
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 检查CEF子进程文件是否安装（必需功能）
+    ; 检查CEF子进程文件（仅在多进程模式下需要）
     ${If} "${ARCH}" == "x86"
-        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win32.exe"
-            DetailPrint "✓ CEF 32位子进程安装成功"
+        ; 32位系统使用单进程模式，不需要subprocess文件
+        DetailPrint "ℹ 32位系统：使用CEF单进程模式，无需子进程文件"
+        ; 检查32位特有的DLL依赖
+        ${If} ${FileExists} "$INSTDIR\d3dcompiler_47.dll"
+            DetailPrint "✓ DirectX编译器库安装成功"
         ${Else}
-            DetailPrint "❌ CEF 32位子进程缺失，程序无法运行"
-            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win32.exe 缺失$\\n"
+            DetailPrint "⚠ DirectX编译器库缺失，可能影响渲染效果"
         ${EndIf}
     ${Else}
+        ; 64位系统使用多进程模式，需要子进程文件
         ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
             DetailPrint "✓ CEF 64位子进程安装成功"
         ${Else}
@@ -327,15 +331,17 @@ Section "主程序" SecMain
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
     ${EndIf}
     
-    ; 验证关键CEF子进程文件（必需功能）
+    ; 验证关键CEF子进程文件（架构特定处理）
     ${If} "${ARCH}" == "x86"
-        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win32.exe"
-            DetailPrint "✓ CEF 32位子进程验证通过"
+        ; 32位系统：单进程模式验证
+        DetailPrint "ℹ 32位系统验证：CEF单进程模式配置"
+        ${If} ${FileExists} "$INSTDIR\d3dcompiler_47.dll"
+            DetailPrint "✓ DirectX编译器库验证通过"
         ${Else}
-            DetailPrint "❌ CEF 32位子进程验证失败"
-            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win32.exe 缺失$\n"
+            DetailPrint "⚠ DirectX编译器库验证失败，可能影响渲染"
         ${EndIf}
     ${Else}
+        ; 64位系统：多进程模式验证
         ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
             DetailPrint "✓ CEF 64位子进程验证通过"
         ${Else}
