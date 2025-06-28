@@ -124,6 +124,11 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\libGLESv2.dll"
     DetailPrint "✓ CEF核心库已安装"
     
+    ; 安装CEF库文件(运行时需要)
+    File /nonfatal "artifacts\windows-${ARCH}\cef_sandbox.lib"
+    File /nonfatal "artifacts\windows-${ARCH}\libcef.lib"
+    DetailPrint "✓ CEF库文件已安装"
+    
     ; 安装Qt5运行时库文件
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Core.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Gui.dll"
@@ -180,6 +185,13 @@ Section "主程序" SecMain
         DetailPrint "✓ CEF核心库安装成功"
     ${Else}
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
+    ${EndIf}
+    
+    ; 检查CEF库文件是否安装
+    ${If} ${FileExists} "$INSTDIR\cef_sandbox.lib"
+        DetailPrint "✓ CEF沙盒库安装成功"
+    ${Else}
+        DetailPrint "⚠ CEF沙盒库未安装，可能导致CEF初始化失败"
     ${EndIf}
     
     ; 检查Qt5运行时库是否安装
@@ -290,6 +302,14 @@ Section "主程序" SecMain
     ${Else}
         DetailPrint "⚠ 配置文件缺失，将影响程序启动"
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
+    ${EndIf}
+    
+    ; 验证关键CEF库文件
+    ${If} ${FileExists} "$INSTDIR\cef_sandbox.lib"
+        DetailPrint "✓ CEF沙盒库验证通过"
+    ${Else}
+        DetailPrint "❌ CEF沙盒库缺失，将导致CEF初始化失败"
+        StrCpy $VerificationErrors "$VerificationErrors• CEF沙盒库 cef_sandbox.lib 缺失$\n"
     ${EndIf}
     
     ; 统计安装文件数量进行验证
