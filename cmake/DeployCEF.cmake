@@ -67,17 +67,21 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     message(STATUS "CEF二进制路径: ${CEF_BINARY_PATH}")
     message(STATUS "CEF资源路径: ${CEF_RESOURCE_PATH}")
     
-    # 核心CEF DLL文件
+    # 核心CEF DLL文件（从Release目录复制）
     set(CEF_DLLS
         "libcef.dll"
         "chrome_elf.dll"
         "d3dcompiler_47.dll"
         "libEGL.dll"
         "libGLESv2.dll"
-        "icudtl.dat"
         "natives_blob.bin"
         "snapshot_blob.bin"
         "v8_context_snapshot.bin"
+    )
+    
+    # CEF资源文件（从Resources目录复制）
+    set(CEF_RESOURCE_DLLS
+        "icudtl.dat"
     )
     
     # 可选的CEF DLL（根据版本可能不存在）
@@ -127,6 +131,40 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
         endif()
     endforeach()
     
+    # 复制CEF资源文件（从Resources目录，fallback到Release目录）
+    foreach(dll ${CEF_RESOURCE_DLLS})
+        set(resource_copied FALSE)
+        
+        # 首先尝试从Resources目录复制
+        if(EXISTS "${CEF_RESOURCE_PATH}/${dll}")
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CEF_RESOURCE_PATH}/${dll}"
+                "${BINARY_DIR}/${dll}"
+                COMMENT "复制CEF资源文件(Resources): ${dll}")
+            set(resource_copied TRUE)
+            message(STATUS "资源文件找到: ${CEF_RESOURCE_PATH}/${dll}")
+        endif()
+        
+        # 如果Resources目录没有，尝试从Release目录复制
+        if(NOT resource_copied AND EXISTS "${CEF_BINARY_PATH}/${dll}")
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CEF_BINARY_PATH}/${dll}"
+                "${BINARY_DIR}/${dll}"
+                COMMENT "复制CEF资源文件(Release): ${dll}")
+            set(resource_copied TRUE)
+            message(STATUS "资源文件找到(fallback): ${CEF_BINARY_PATH}/${dll}")
+        endif()
+        
+        # 如果两个目录都没有，报错
+        if(NOT resource_copied)
+            message(WARNING "CEF资源文件在两个位置都未找到: ${dll}")
+            message(WARNING "  检查路径1: ${CEF_RESOURCE_PATH}/${dll}")
+            message(WARNING "  检查路径2: ${CEF_BINARY_PATH}/${dll}")
+        endif()
+    endforeach()
+    
     # 复制可执行文件
     foreach(exe ${CEF_EXECUTABLES})
         if(EXISTS "${CEF_BINARY_PATH}/${exe}")
@@ -156,7 +194,7 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     deploy_cef_resources(${TARGET_NAME} "${CEF_RESOURCE_PATH}" "${RESOURCES_DIR}")
     
     # 安装规则
-    install(FILES ${CEF_DLLS} ${CEF_OPTIONAL_DLLS}
+    install(FILES ${CEF_DLLS} ${CEF_OPTIONAL_DLLS} ${CEF_RESOURCE_DLLS}
         DESTINATION bin
         OPTIONAL)
     
