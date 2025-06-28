@@ -911,10 +911,54 @@ jobs:
             # Check if it contains exe files
             $exeCount = (Get-ChildItem $sourcePath -Include "*.exe" -ErrorAction SilentlyContinue).Count
             if ($exeCount -gt 0) {
-              Write-Host "Found $exeCount executable files, starting copy..."
+              Write-Host "Found $exeCount executable files, starting enhanced copy..."
+              
+              # Enhanced verification for standard path copy
+              Write-Host "=== Standard Path File Copy Verification ==="
+              $sourceFiles = Get-ChildItem $sourcePath -Recurse -File -ErrorAction SilentlyContinue
+              $sourceSize = ($sourceFiles | Measure-Object -Property Length -Sum).Sum
+              $sourceCount = $sourceFiles.Count
+              Write-Host "Source ($sourcePath) analysis:"
+              Write-Host "  Files: $sourceCount"
+              Write-Host "  Total size: $([math]::Round($sourceSize/1MB, 2)) MB"
+              
+              # Check for critical CEF files
+              $criticalFiles = @("DesktopTerminal-CEF.exe", "libcef.dll", "cef.pak")
+              $criticalFilesFound = 0
+              foreach ($file in $criticalFiles) {
+                  $filePath = Join-Path $sourcePath $file
+                  if (Test-Path $filePath) {
+                      $fileSize = (Get-Item $filePath).Length
+                      Write-Host "  Found $file : $([math]::Round($fileSize/1MB, 2)) MB"
+                      $criticalFilesFound++
+                  } else {
+                      Write-Host "  Missing $file in $sourcePath"
+                  }
+              }
+              
+              if ($criticalFilesFound -lt 2) {
+                  Write-Host "WARNING: Too few critical files found in $sourcePath, trying next path..."
+                  continue
+              }
+              
               try {
                 Copy-Item "$sourcePath\*" "$artifactPath\" -Recurse -Force
-                Write-Host "Main program files copied successfully"
+                
+                # Post-copy verification
+                $targetFiles = Get-ChildItem $artifactPath -Recurse -File -ErrorAction SilentlyContinue
+                $targetSize = ($targetFiles | Measure-Object -Property Length -Sum).Sum
+                $targetCount = $targetFiles.Count
+                Write-Host "Target directory analysis:"
+                Write-Host "  Files: $targetCount"
+                Write-Host "  Total size: $([math]::Round($targetSize/1MB, 2)) MB"
+                
+                # Verify copy completeness
+                if ($targetSize -lt ($sourceSize * 0.9)) {
+                    Write-Host "WARNING: Significant file size difference detected"
+                    Write-Host "Expected: ~$([math]::Round($sourceSize/1MB, 2)) MB, Got: $([math]::Round($targetSize/1MB, 2)) MB"
+                }
+                
+                Write-Host "Standard path copy completed successfully"
                 $sourceFound = $true
                 break
               } catch {
@@ -935,12 +979,83 @@ jobs:
             Write-Host "Found exe files:"
             $allExes | ForEach-Object { Write-Host "  - $($_.FullName)" }
             
-            # Copy the first found exe file and its directory
+            # Copy the first found exe file and its directory with enhanced verification
             $firstExe = $allExes[0]
             $sourceDir = $firstExe.Directory.FullName
             Write-Host "Using directory: $sourceDir"
-            Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force -ErrorAction Continue
-            Write-Host "Copied found files"
+            
+            # Pre-copy verification
+            Write-Host "=== File Copy Verification ==="
+            $sourceFiles = Get-ChildItem $sourceDir -Recurse -File
+            $sourceSize = ($sourceFiles | Measure-Object -Property Length -Sum).Sum
+            $sourceCount = $sourceFiles.Count
+            Write-Host "Source directory analysis:"
+            Write-Host "  Files: $sourceCount"
+            Write-Host "  Total size: $([math]::Round($sourceSize/1MB, 2)) MB"
+            
+            # Check for critical CEF files
+            $criticalFiles = @("DesktopTerminal-CEF.exe", "libcef.dll", "cef.pak")
+            foreach ($file in $criticalFiles) {
+                $filePath = Join-Path $sourceDir $file
+                if (Test-Path $filePath) {
+                    $fileSize = (Get-Item $filePath).Length
+                    Write-Host "  Found $file : $([math]::Round($fileSize/1MB, 2)) MB"
+                } else {
+                    Write-Host "  Missing $file"
+                    Write-Host "ERROR: Critical file missing: $file"
+                    exit 1
+                }
+            }
+            
+            # Strict copy without ignoring errors
+            Write-Host "Starting file copy operation..."
+            try {
+                Copy-Item "$sourceDir\*" "$artifactPath\" -Recurse -Force
+                Write-Host "File copy completed successfully"
+            } catch {
+                Write-Host "ERROR: File copy failed: $($_.Exception.Message)"
+                exit 1
+            }
+            
+            # Post-copy verification
+            $targetFiles = Get-ChildItem $artifactPath -Recurse -File
+            $targetSize = ($targetFiles | Measure-Object -Property Length -Sum).Sum
+            $targetCount = $targetFiles.Count
+            Write-Host "Target directory analysis:"
+            Write-Host "  Files: $targetCount"
+            Write-Host "  Total size: $([math]::Round($targetSize/1MB, 2)) MB"
+            
+            # Verify copy completeness
+            $copyRatio = $targetSize / $sourceSize
+            Write-Host "Copy completeness: $([math]::Round($copyRatio * 100, 1))%"
+            
+            if ($targetSize -lt ($sourceSize * 0.95)) {
+                Write-Host "ERROR: File copy incomplete!"
+                Write-Host "Expected: ~$([math]::Round($sourceSize/1MB, 2)) MB"
+                Write-Host "Actual: $([math]::Round($targetSize/1MB, 2)) MB"
+                Write-Host "Missing: $([math]::Round(($sourceSize - $targetSize)/1MB, 2)) MB"
+                exit 1
+            }
+            
+            # Final verification of critical files in target
+            foreach ($file in $criticalFiles) {
+                $targetFile = Join-Path $artifactPath $file
+                if (Test-Path $targetFile) {
+                    $fileSize = (Get-Item $targetFile).Length
+                    Write-Host "  Verified $file in target: $([math]::Round($fileSize/1MB, 2)) MB"
+                } else {
+                    Write-Host "ERROR: Critical file missing in target: $file"
+                    exit 1
+                }
+            }
+            
+            Write-Host "=== File Copy Verification Complete ==="
+            if ($targetSize -gt 100MB) {
+                Write-Host "Package size looks normal: $([math]::Round($targetSize/1MB, 2)) MB"
+            } else {
+                Write-Host "WARNING: Package size seems small: $([math]::Round($targetSize/1MB, 2)) MB"
+                Write-Host "This may indicate missing CEF runtime files"
+            }
           } else {
             Write-Host "Critical error: No exe files found at all!"
             exit 1
