@@ -5,6 +5,7 @@
 #include <functional>
 
 class Logger;
+class ConfigManager;
 class QWidget;
 
 /**
@@ -19,7 +20,7 @@ namespace CommonUtils {
      */
     struct Managers {
         Logger* logger;
-        class ConfigManager* configManager;
+        ConfigManager* configManager;
         
         Managers();
     };

@@ -15,6 +15,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <versionhelpers.h>
+#include <shellapi.h>
 #endif
 
 WindowsPrivilegeManager::WindowsPrivilegeManager(QObject* parent)
