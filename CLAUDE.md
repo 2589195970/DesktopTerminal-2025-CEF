@@ -802,10 +802,10 @@ Application outputs current working directory and attempts multiple config paths
 
 | 平台 | CEF版本 | 下载URL | 文件大小 | 用途 |
 |------|---------|---------|----------|------|
-| Windows 32位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2` | 178MB | 全平台统一版本 - 最大兼容性 |
-| Windows 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows64.tar.bz2` | 228MB | 全平台统一版本 - 最大兼容性 |
-| Linux 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_linux64.tar.bz2` | 412MB | 全平台统一版本 - 最大兼容性 |
-| macOS 64位 | `75.1.14+gc81164e+chromium-75.0.3770.100` | `https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_macosx64.tar.bz2` | 156MB | 全平台统一版本 - 最大兼容性 |
+| Windows 32位 | `109.1.18+gf1c41e4+chromium-109.0.5414.120` | `https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_windows32.tar.bz2` | 237MB | 全平台统一版本 - 最大兼容性 |
+| Windows 64位 | `109.1.18+gf1c41e4+chromium-109.0.5414.120` | `https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_windows64.tar.bz2` | 260MB | 全平台统一版本 - 最大兼容性 |
+| Linux 64位 | `109.1.18+gf1c41e4+chromium-109.0.5414.120` | `https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_linux64.tar.bz2` | 599MB | 全平台统一版本 - 最大兼容性 |
+| macOS 64位 | `109.1.18+gf1c41e4+chromium-109.0.5414.120` | `https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_macosx64.tar.bz2` | 208MB | 全平台统一版本 - 最大兼容性 |
 
 ### 配置文件一致性检查清单
 
@@ -813,27 +813,27 @@ Application outputs current working directory and attempts multiple config paths
 
 1. **`.github/workflows/build.yml`** - GitHub Actions构建配置
    ```yaml
-   cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
+   cef_version: "109.1.18+gf1c41e4+chromium-109.0.5414.120"  # 全平台统一版本
    ```
 
 2. **`scripts/download-cef.bat`** - Windows下载脚本
    ```batch
-   set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
+   set "CEF_VERSION=109.1.18+gf1c41e4+chromium-109.0.5414.120"  # 全平台统一版本
    ```
 
 3. **`scripts/download-cef.sh`** - Linux/macOS下载脚本
    ```bash
-   CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"  # 全平台统一版本
+   CEF_VERSION="109.1.18+gf1c41e4+chromium-109.0.5414.120"  # 全平台统一版本
    ```
 
 4. **`CMakeLists.txt`** - 主CMake配置
    ```cmake
-   set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")  # 全平台统一版本
+   set(CEF_VERSION "109.1.18+gf1c41e4+chromium-109.0.5414.120")  # 全平台统一版本
    ```
 
 5. **`cmake/FindCEF.cmake`** - ⚠️ 关键模块 - 覆盖主配置
    ```cmake
-   set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")  # 全平台统一版本
+   set(CEF_VERSION_DEFAULT "109.1.18+gf1c41e4+chromium-109.0.5414.120")  # 全平台统一版本
    ```
 
 ### 常见CEF构建问题解决方案
@@ -877,15 +877,15 @@ Application outputs current working directory and attempts multiple config paths
 ### URL编码规则
 CEF下载需要URL编码特殊字符：
 - `+` → `%2B`
-- 示例: `75.1.14+gc81164e` → `75.1.14%2Bgc81164e`
+- 示例: `109.1.18+gf1c41e4` → `109.1.18%2Bgf1c41e4`
 
 ### 版本验证命令
 ```bash
 # 验证Windows 32位
-curl -I "https://cef-builds.spotifycdn.com/cef_binary_75.1.14%2Bgc81164e%2Bchromium-75.0.3770.100_windows32.tar.bz2"
+curl -I "https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_windows32.tar.bz2"
 
 # 验证Windows 64位  
-curl -I "https://cef-builds.spotifycdn.com/cef_binary_118.7.1%2Bg99817d2%2Bchromium-118.0.5993.119_windows64.tar.bz2"
+curl -I "https://cef-builds.spotifycdn.com/cef_binary_109.1.18%2Bgf1c41e4%2Bchromium-109.0.5414.120_windows64.tar.bz2"
 
 # 预期结果: HTTP/2 200
 ```
