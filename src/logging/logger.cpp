@@ -436,3 +436,45 @@ void Logger::generatePerformanceReport()
     
     logEvent("性能监控", "=== 性能报告生成完成 ===", "performance.log", L_INFO);
 }
+
+void Logger::onRuntimePerformanceCheck()
+{
+    if (!m_performanceMonitoringEnabled) {
+        return;
+    }
+    
+    try {
+        // 记录当前时间戳
+        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+        
+        // 根据配置监控不同的性能指标
+        if (m_monitorCPU) {
+            logCPUUsage();
+        }
+        
+        if (m_monitorMemory) {
+            logMemoryUsage();
+        }
+        
+        if (m_monitorNetwork) {
+            logNetworkStatus();
+        }
+        
+        if (m_monitorDisk) {
+            logDiskUsage();
+        }
+        
+        // 记录CEF进程状态
+        logCEFProcessStatus();
+        
+        // 清理过期的性能数据
+        cleanupOldSnapshots();
+        
+        // 记录监控周期完成
+        logEvent("性能监控", QString("运行时性能检查完成 - 时间戳: %1").arg(currentTime), 
+                "performance.log", L_DEBUG);
+                
+    } catch (...) {
+        logEvent("性能监控", "运行时性能检查异常", "performance.log", L_ERROR);
+    }
+}
