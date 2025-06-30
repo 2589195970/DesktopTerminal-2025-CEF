@@ -7,6 +7,13 @@
 #include <QCloseEvent>
 #include <QFocusEvent>
 #include <QWindowStateChangeEvent>
+#include <QLabel>
+#include <QProgressBar>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFrame>
+#include <QMovie>
+#include <memory>
 
 class QHotkey;
 class CEFManager;
@@ -81,6 +88,31 @@ private slots:
      */
     void onBrowserCreated();
 
+    /**
+     * @brief 显示加载动画
+     */
+    void showLoadingAnimation();
+
+    /**
+     * @brief 隐藏加载动画
+     */
+    void hideLoadingAnimation();
+
+    /**
+     * @brief 更新加载进度
+     */
+    void updateLoadingProgress(int progress);
+
+    /**
+     * @brief 页面开始加载回调
+     */
+    void onPageLoadStart();
+
+    /**
+     * @brief 页面加载完成回调
+     */
+    void onPageLoadEnd();
+
 private:
     // 初始化方法
     void initializeWindow();
@@ -89,6 +121,7 @@ private:
     void initializeMaintenanceTimer();
     void initializeCEFMessageLoopTimer();
     void setupSecuritySettings();
+    void initializeLoadingAnimation();
 
     // 安全控制方法
     void enforceFullscreen();
@@ -106,6 +139,10 @@ private:
     void createCEFBrowser();
     void destroyCEFBrowser();
     void resizeCEFBrowser();
+    
+    // CEF性能状态管理
+    void setCEFPerformanceState(CEFPerformanceState state);
+    void updateCEFMessageLoopInterval();
 
     // 错误处理
     void handleBrowserError(const QString& error);
@@ -117,13 +154,20 @@ private:
     Logger* m_logger;
     ConfigManager* m_configManager;
 
-    // 热键管理
-    QHotkey* m_exitHotkeyF10;
-    QHotkey* m_exitHotkeyBackslash;
+    // 热键管理（使用智能指针）
+    std::unique_ptr<QHotkey> m_exitHotkeyF10;
+    std::unique_ptr<QHotkey> m_exitHotkeyBackslash;
 
-    // 定时器
-    QTimer* m_maintenanceTimer;
-    QTimer* m_cefMessageLoopTimer;
+    // 定时器（使用智能指针）
+    std::unique_ptr<QTimer> m_maintenanceTimer;
+    std::unique_ptr<QTimer> m_cefMessageLoopTimer;
+
+    // CEF性能状态枚举
+    enum class CEFPerformanceState {
+        Loading,    // 页面加载中 - 高频率消息循环
+        Loaded,     // 页面已加载 - 中频率消息循环
+        Idle        // 空闲状态 - 低频率消息循环
+    };
 
     // 状态管理
     bool m_needFocusCheck;
@@ -132,6 +176,7 @@ private:
     int m_cefBrowserId;
     QUrl m_currentUrl;
     QString m_windowTitle;
+    CEFPerformanceState m_cefPerformanceState;
 
     // 安全设置
     bool m_strictSecurityMode;
@@ -143,6 +188,15 @@ private:
     
     // CEF消息循环日志计数器（避免日志过多）
     int m_cefMessageLoopLogCounter;
+
+    // 加载动画组件
+    QFrame* m_loadingOverlay;
+    QVBoxLayout* m_loadingLayout;
+    QLabel* m_loadingIcon;
+    QLabel* m_loadingText;
+    QProgressBar* m_loadingProgressBar;
+    QMovie* m_loadingMovie;
+    bool m_isLoadingVisible;
 };
 
 #endif // SECURE_BROWSER_H

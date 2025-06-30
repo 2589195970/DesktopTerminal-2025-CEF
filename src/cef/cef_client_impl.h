@@ -19,6 +19,10 @@
 class Logger;
 class ConfigManager;
 
+#ifdef CEF_VERSION_109
+class CEFResourceRequestHandler;
+#endif
+
 /**
  * @brief CEF客户端实现类
  * 
@@ -99,6 +103,11 @@ public:
     void enableWindows7Compatibility(bool enable);
     void setLowMemoryMode(bool enable);
 
+    // URL检测与自动退出功能
+    void setUrlDetectionEnabled(bool enabled);
+    void setUrlDetectionPattern(const QString& pattern);
+    void setUrlDetectionPatterns(const QStringList& patterns);
+
 private:
     // URL验证
     bool isUrlAllowed(const QString& url);
@@ -119,6 +128,11 @@ private:
     void applyWindows7Optimizations();
     bool handleWindows7KeyEvent(const CefKeyEvent& event);
 
+    // URL检测与自动退出功能
+    bool checkExitUrlPattern(const QString& url);
+    void triggerAutoExit(const QString& triggeredUrl, const QString& source);
+    void logUrlDetectionEvent(const QString& event, const QString& url);
+
 private:
     Logger* m_logger;
     ConfigManager* m_configManager;
@@ -135,6 +149,11 @@ private:
     bool m_windows7CompatibilityMode;
     bool m_lowMemoryMode;
 
+    // URL检测与自动退出配置
+    bool m_urlDetectionEnabled;
+    QString m_urlDetectionPattern;
+    QStringList m_urlDetectionPatterns;
+
     // 浏览器引用
     CefRefPtr<CefBrowser> m_browser;
     int m_browserCount;
@@ -142,6 +161,11 @@ private:
     // 性能优化标志
     bool m_reduceLogging;
     bool m_disableAnimations;
+
+#ifdef CEF_VERSION_109
+    // CEF 109资源请求处理器
+    CefRefPtr<CEFResourceRequestHandler> m_resourceRequestHandler;
+#endif
 
     IMPLEMENT_REFCOUNTING(CEFClient);
 };

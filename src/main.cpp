@@ -112,16 +112,16 @@ bool checkAndHandleAdminPrivileges(int argc, char* argv[], Logger& logger)
         return true;
     }
     
-    // 询问用户是否需要管理员权限
+    // 询问用户是否需要管理员权限（可选）
     QMessageBox::StandardButton reply = QMessageBox::question(
         nullptr,
-        "管理员权限",
+        "权限提示",
         "检测到应用程序未以管理员权限运行。\n\n"
-        "为确保所有安全功能正常工作，建议以管理员权限运行。\n\n"
-        "是否现在重新以管理员权限启动？\n\n"
-        "注意：选择\"否\"可能导致部分安全功能无法正常工作。",
+        "程序的核心功能在普通用户权限下完全可用。\n\n"
+        "是否需要以管理员权限重新启动？\n\n"
+        "注意：大多数情况下选择\"否\"即可正常使用。",
         QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-        QMessageBox::Yes
+        QMessageBox::No
     );
     
     switch (reply) {
@@ -144,12 +144,6 @@ bool checkAndHandleAdminPrivileges(int argc, char* argv[], Logger& logger)
             
         case QMessageBox::No:
             logger.appEvent("用户选择以当前权限继续运行");
-            QMessageBox::information(
-                nullptr,
-                "权限提示",
-                "程序将以当前权限运行。\n\n"
-                "注意：部分安全功能可能无法正常工作。"
-            );
             return true;
             
         case QMessageBox::Cancel:

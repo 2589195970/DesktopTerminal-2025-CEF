@@ -1,5 +1,6 @@
 #include "cef_manager.h"
 #include "application.h"
+#include "common_utils.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../cef/cef_app_impl.h"
@@ -98,20 +99,17 @@ bool CEFManager::initialize()
 
     // 初始化CEF设置
     if (!initializeCEFSettings()) {
-        m_logger->errorEvent("CEF设置初始化失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "CEF设置初始化失败");
     }
 
     // 初始化CEF应用
     if (!initializeCEFApp()) {
-        m_logger->errorEvent("CEF应用初始化失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "CEF应用初始化失败");
     }
 
     // 初始化CEF上下文
     if (!initializeCEFContext()) {
-        m_logger->errorEvent("CEF上下文初始化失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "CEF上下文初始化失败");
     }
 
     m_initialized = true;
@@ -388,12 +386,35 @@ bool CEFManager::initializeCEFContext()
 void CEFManager::buildCEFSettings(CefSettings& settings)
 {
     // 基础设置
-    // 注意：CEF 75不支持single_process字段，改为使用命令行参数
     settings.no_sandbox = true;
     settings.multi_threaded_message_loop = false;
     settings.log_severity = LOGSEVERITY_WARNING;
     
+#ifdef CEF_VERSION_109
+    // CEF 109特定配置
+    
+    // 实现root_cache_path和cache_path层级关系
+    applyCachingPolicy(settings);
+    
+    // CEF 109 NetworkService配置
+    // accept_language_list 迁移到 CefRequestContextSettings
+    // 这里保留为空，将在请求上下文中设置
+    
+    // 安全设置
+    applySecuritySettings(settings);
+    
+    // Windows 7特定设置（CEF 109是最后支持版本）
+#ifdef Q_OS_WIN
+    if (Application::isWindows7SP1()) {
+        applyWindows7Optimizations(settings);
+    }
+#endif
+    
+    m_logger->appEvent("应用CEF 109配置设置");
+    
+#else
     // CEF 75版本兼容性设置
+    // 注意：CEF 75不支持single_process字段，改为使用命令行参数
     // windowless_rendering_enabled 在CEF 75中可能不存在
     
     // 进程限制
@@ -401,6 +422,80 @@ void CEFManager::buildCEFSettings(CefSettings& settings)
         // 使用默认的子进程路径
         // settings.browser_subprocess_path = CefString();
     }
+    
+    m_logger->appEvent("应用CEF 75兼容配置设置");
+#endif
+}
+
+void CEFManager::applyCachingPolicy(CefSettings& settings)
+{
+#ifdef CEF_VERSION_109
+    // CEF 109要求实现root_cache_path和cache_path层级关系
+    
+    // 设置root_cache_path作为所有缓存的父目录
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString rootCachePath = QDir(appDataPath).filePath("DesktopTerminal-CEF");
+    
+    // 确保根缓存目录存在
+    QDir rootCacheDir(rootCachePath);
+    if (!rootCacheDir.exists()) {
+        if (!rootCacheDir.mkpath(".")) {
+            m_logger->errorEvent(QString("无法创建根缓存目录: %1").arg(rootCachePath));
+            return;
+        }
+    }
+    
+    // 设置root_cache_path（CEF 109要求）
+    CefString(&settings.root_cache_path) = rootCachePath.toStdString();
+    
+    // 设置cache_path为root_cache_path的子目录
+    QString cachePath = rootCacheDir.filePath("cache");
+    QDir cacheDir(cachePath);
+    if (!cacheDir.exists()) {
+        cacheDir.mkpath(".");
+    }
+    CefString(&settings.cache_path) = cachePath.toStdString();
+    
+    // 设置日志路径也在根目录下
+    QString logPath = rootCacheDir.filePath("debug.log");
+    CefString(&settings.log_file) = logPath.toStdString();
+    
+    m_logger->appEvent(QString("CEF 109缓存配置 - 根目录: %1").arg(rootCachePath));
+    m_logger->appEvent(QString("CEF 109缓存配置 - 缓存: %1").arg(cachePath));
+    
+#else
+    // CEF 75缓存配置（简单模式）
+    QString cachePath = getCEFCachePath();
+    CefString(&settings.cache_path) = cachePath.toStdString();
+    
+    QString logPath = getCEFLogPath();
+    CefString(&settings.log_file) = logPath.toStdString();
+    
+    m_logger->appEvent(QString("CEF 75缓存配置: %1").arg(cachePath));
+#endif
+}
+
+void CEFManager::applySecuritySettings(CefSettings& settings)
+{
+#ifdef CEF_VERSION_109
+    // CEF 109 安全配置
+    
+    // 禁用Chrome扩展（安全考虑）
+    settings.chrome_runtime = false;
+    
+    // 网络安全配置
+    // NetworkService相关配置在请求处理器中实现
+    
+    // 内容安全策略
+    // 具体策略在Request Handler中实现
+    
+    m_logger->appEvent("应用CEF 109安全设置");
+    
+#else
+    // CEF 75安全设置
+    // 在CEF 75中，安全设置主要通过命令行参数实现
+    m_logger->appEvent("CEF 75安全设置通过命令行参数应用");
+#endif
 }
 
 void CEFManager::applyMemoryOptimizations(CefSettings& settings)

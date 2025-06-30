@@ -3,6 +3,10 @@
 #include "../config/config_manager.h"
 #include "../core/application.h"
 
+#ifdef CEF_VERSION_109
+#include "cef_resource_request_handler.h"
+#endif
+
 #include <QUrl>
 #include <QRegularExpression>
 
@@ -19,6 +23,8 @@ CEFClient::CEFClient()
     , m_browserCount(0)
     , m_reduceLogging(false)
     , m_disableAnimations(false)
+    , m_urlDetectionEnabled(false)
+    , m_urlDetectionPattern("^https?://[^/]+/#/login_s$")
 {
     // 从配置读取允许的域名
     m_allowedDomain = m_configManager->getUrl();
@@ -38,6 +44,32 @@ CEFClient::CEFClient()
     if (Application::is32BitSystem()) {
         setLowMemoryMode(true);
     }
+
+    // 从配置管理器加载URL检测设置
+    m_urlDetectionEnabled = m_configManager->isUrlExitDetectionEnabled();
+    m_urlDetectionPattern = m_configManager->getUrlExitDetectionPattern();
+    m_urlDetectionPatterns = m_configManager->getUrlExitDetectionPatterns();
+    
+    m_logger->configEvent(QString("URL检测配置加载 - 启用: %1, 模式: %2")
+        .arg(m_urlDetectionEnabled ? "是" : "否")
+        .arg(m_urlDetectionPattern));
+
+#ifdef CEF_VERSION_109
+    // 创建CEF 109资源请求处理器
+    m_resourceRequestHandler = new CEFResourceRequestHandler();
+    
+    // 配置资源请求处理器
+    if (!m_allowedDomains.isEmpty()) {
+        m_resourceRequestHandler->setAllowedDomains(m_allowedDomains);
+    }
+    m_resourceRequestHandler->setStrictSecurityMode(m_strictSecurityMode);
+    
+    // 配置URL检测功能
+    m_resourceRequestHandler->setUrlDetectionEnabled(m_urlDetectionEnabled);
+    m_resourceRequestHandler->setUrlDetectionPatterns(m_urlDetectionPatterns);
+    
+    m_logger->appEvent("CEF 109资源请求处理器创建完成");
+#endif
 
     m_logger->appEvent("CEFClient创建完成");
 }
@@ -66,6 +98,12 @@ void CEFClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFram
         // 验证URL是否被允许
         if (!isUrlAllowed(urlStr)) {
             logSecurityEvent("非法地址访问", urlStr);
+        }
+        
+        // URL检测功能 - 在地址变更时检查
+        if (m_urlDetectionEnabled && checkExitUrlPattern(urlStr)) {
+            logUrlDetectionEvent("OnAddressChange检测到退出URL模式", urlStr);
+            triggerAutoExit(urlStr, "OnAddressChange");
         }
     }
 }
@@ -145,6 +183,12 @@ void CEFClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> f
     if (frame->IsMain()) {
         QString url = QString::fromStdString(frame->GetURL().ToString());
         m_logger->appEvent(QString("开始加载页面: %1").arg(url));
+        
+        // URL检测功能 - 在页面开始加载时检查
+        if (m_urlDetectionEnabled && checkExitUrlPattern(url)) {
+            logUrlDetectionEvent("OnLoadStart检测到退出URL模式", url);
+            triggerAutoExit(url, "OnLoadStart");
+        }
     }
 }
 
@@ -205,9 +249,13 @@ bool CEFClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFra
 
 CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation, bool is_download, const CefString& request_initiator, bool& disable_default_handling)
 {
-    // 在这里可以返回自定义的资源请求处理器
-    // 目前返回nullptr使用默认处理
+#ifdef CEF_VERSION_109
+    // CEF 109: 返回我们的资源请求处理器
+    return m_resourceRequestHandler;
+#else
+    // CEF 75: 返回nullptr使用默认处理
     return nullptr;
+#endif
 }
 
 // 注意：CEF 75中此方法签名可能不同，暂时注释掉
@@ -358,12 +406,27 @@ void CEFClient::setAllowedDomain(const QString& domain)
         m_allowedDomains << extractedDomain;
     }
     
+#ifdef CEF_VERSION_109
+    // 同步更新资源请求处理器的配置
+    if (m_resourceRequestHandler) {
+        m_resourceRequestHandler->setAllowedDomains(m_allowedDomains);
+    }
+#endif
+    
     m_logger->configEvent(QString("设置允许域名: %1").arg(domain));
 }
 
 void CEFClient::setSecurityMode(bool strict)
 {
     m_strictSecurityMode = strict;
+    
+#ifdef CEF_VERSION_109
+    // 同步更新资源请求处理器的配置
+    if (m_resourceRequestHandler) {
+        m_resourceRequestHandler->setStrictSecurityMode(strict);
+    }
+#endif
+    
     m_logger->configEvent(QString("安全模式: %1").arg(strict ? "严格" : "宽松"));
 }
 
@@ -546,4 +609,95 @@ bool CEFClient::handleWindows7KeyEvent(const CefKeyEvent& event)
     
     // 其他都阻止
     return true;
+}
+
+// ==================== URL检测与自动退出功能实现 ====================
+
+void CEFClient::setUrlDetectionEnabled(bool enabled)
+{
+    m_urlDetectionEnabled = enabled;
+    
+#ifdef CEF_VERSION_109
+    // 同步更新资源请求处理器的配置
+    if (m_resourceRequestHandler) {
+        m_resourceRequestHandler->setUrlDetectionEnabled(enabled);
+    }
+#endif
+    
+    m_logger->configEvent(QString("URL检测功能: %1").arg(enabled ? "启用" : "禁用"));
+}
+
+void CEFClient::setUrlDetectionPattern(const QString& pattern)
+{
+    m_urlDetectionPattern = pattern;
+    m_urlDetectionPatterns.clear();
+    m_urlDetectionPatterns << pattern;
+    
+#ifdef CEF_VERSION_109
+    // 同步更新资源请求处理器的配置
+    if (m_resourceRequestHandler) {
+        m_resourceRequestHandler->setUrlDetectionPatterns(m_urlDetectionPatterns);
+    }
+#endif
+    
+    m_logger->configEvent(QString("URL检测模式: %1").arg(pattern));
+}
+
+void CEFClient::setUrlDetectionPatterns(const QStringList& patterns)
+{
+    m_urlDetectionPatterns = patterns;
+    if (!patterns.isEmpty()) {
+        m_urlDetectionPattern = patterns.first();
+    }
+    
+#ifdef CEF_VERSION_109
+    // 同步更新资源请求处理器的配置
+    if (m_resourceRequestHandler) {
+        m_resourceRequestHandler->setUrlDetectionPatterns(patterns);
+    }
+#endif
+    
+    m_logger->configEvent(QString("URL检测模式列表: %1").arg(patterns.join(", ")));
+}
+
+bool CEFClient::checkExitUrlPattern(const QString& url)
+{
+    if (!m_urlDetectionEnabled || m_urlDetectionPatterns.isEmpty()) {
+        return false;
+    }
+    
+    // 检查URL是否匹配退出模式
+    for (const QString& pattern : m_urlDetectionPatterns) {
+        QRegularExpression regex(pattern, QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch match = regex.match(url);
+        
+        if (match.hasMatch()) {
+            logUrlDetectionEvent("URL模式匹配成功", QString("URL: %1, 模式: %2").arg(url).arg(pattern));
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+void CEFClient::triggerAutoExit(const QString& triggeredUrl, const QString& source)
+{
+    // 记录触发自动退出的详细信息
+    logUrlDetectionEvent("触发自动退出", QString("来源: %1, URL: %2").arg(source).arg(triggeredUrl));
+    
+    // 安全机制：延迟退出，确保日志完整性
+    m_logger->exitEvent(QString("[自动退出] 检测到退出URL - 来源: %1").arg(source));
+    m_logger->exitEvent(QString("[自动退出] 触发URL: %1").arg(triggeredUrl));
+    m_logger->exitEvent(QString("[自动退出] 匹配模式: %1").arg(m_urlDetectionPattern));
+    
+    // TODO: 这里应该触发应用程序的安全退出流程
+    // 可以发送信号到主应用程序，或者调用QApplication::quit()
+    // 为了安全起见，这里先只记录日志，具体的退出机制需要与主应用程序集成
+    
+    m_logger->appEvent("[URL检测] 自动退出流程已触发，等待主应用程序处理");
+}
+
+void CEFClient::logUrlDetectionEvent(const QString& event, const QString& url)
+{
+    m_logger->logEvent("URL检测", QString("%1: %2").arg(event).arg(url), "url_detection.log", L_INFO);
 }

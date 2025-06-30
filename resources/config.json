@@ -10,5 +10,32 @@
     "enableJavaScript": true,
     "debugPort": 0,
     "multiThreadedMessageLoop": true
+  },
+  "urlExitDetection": {
+    "enabled": false,
+    "pattern": "/login_s",
+    "patterns": [
+      "/login_s"
+    ],
+    "delayMs": 1000,
+    "confirmationEnabled": false
+  },
+  "security": {
+    "strictMode": true,
+    "keyboardFilterEnabled": true,
+    "contextMenuEnabled": false,
+    "downloadEnabled": false,
+    "javascriptDialogEnabled": false
+  },
+  "performance": {
+    "hardwareAccelerationDisabled": false,
+    "maxMemoryMB": 1024,
+    "lowMemoryMode": false,
+    "processModel": "auto"
+  },
+  "logging": {
+    "level": "INFO",
+    "bufferingEnabled": true,
+    "flushIntervalSeconds": 5
   }
 } 

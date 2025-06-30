@@ -1,0 +1,90 @@
+{
+  // ==================== 基本应用配置 ====================
+  "url": "http://stu.sdzdf.com?Client='ExamTerminal'",           // 考试系统访问地址，带客户端标识参数
+  "exitPassword": "sdzdf@2025",                                  // 安全退出密码，用于F10/\键退出应用时的身份验证
+  "appName": "智多分机考桌面端-CEF",                              // 应用程序显示名称，将显示在窗口标题栏
+  "iconPath": "logo.ico",                                        // 应用程序图标文件路径（相对于resources目录）
+  "appVersion": "1.0.0",                                         // 应用程序版本号，用于版本管理和更新检查
+
+  // ==================== CEF浏览器引擎设置 ====================
+  "cefSettings": {
+    "enableGPU": true,                                           // 启用GPU硬件加速，提升图形渲染性能
+    "enableWebSecurity": true,                                   // 启用Web安全策略，防止跨域攻击等安全风险
+    "enableJavaScript": true,                                    // 启用JavaScript执行，现代网页必需功能
+    "debugPort": 0,                                              // CEF调试端口，0表示禁用调试功能（生产环境推荐）
+    "multiThreadedMessageLoop": true                             // 启用多线程消息循环，提升UI响应性能
+  },
+
+  // ==================== URL退出检测机制 ====================
+  // 当检测到特定URL模式时自动退出应用，用于考试结束后的自动退出
+  "urlExitDetection": {
+    "enabled": false,                                            // 是否启用URL退出检测功能（当前已禁用）
+    "pattern": "^https?://[^/]+/#/login_s$",                    // 主要检测模式：匹配登录页面URL
+    "patterns": [                                                // 退出检测的URL正则表达式数组
+      "^https?://[^/]+/#/login_s$"                              // 检测模式：http(s)://任意域名/#/login_s 结尾
+    ],
+    "delayMs": 1000,                                            // 检测到匹配URL后的延迟退出时间（毫秒）
+    "confirmationEnabled": false                                 // 是否启用退出前的用户确认对话框
+  },
+
+  // ==================== 安全策略配置 ====================
+  // 严格的安全限制，确保考试环境的封闭性和安全性
+  "security": {
+    "strictMode": true,                                          // 启用严格安全模式，最高级别的安全限制
+    "keyboardFilterEnabled": true,                               // 启用键盘过滤，阻止系统快捷键（如Alt+Tab等）
+    "contextMenuEnabled": false,                                 // 禁用右键上下文菜单，防止通过右键访问系统功能
+    "downloadEnabled": false,                                    // 禁用文件下载功能，防止考试资料外泄
+    "javascriptDialogEnabled": false                             // 禁用JavaScript对话框（alert/confirm等）
+  },
+
+  // ==================== 性能优化配置 ====================
+  // 根据硬件环境优化应用性能，确保稳定运行
+  "performance": {
+    "hardwareAccelerationDisabled": false,                      // 是否禁用硬件加速（false=启用，提升性能）
+    "maxMemoryMB": 1024,                                        // 最大内存使用限制（MB），防止内存泄露
+    "lowMemoryMode": false,                                     // 是否启用低内存模式（适用于配置较低的设备）
+    "processModel": "auto"                                      // 进程模型："auto"=自动选择，"single"=单进程，"multi"=多进程
+  },
+
+  // ==================== 日志记录配置 ====================
+  // 详细的日志记录，用于问题诊断和审计追踪
+  "logging": {
+    "level": "INFO",                                            // 日志级别：DEBUG/INFO/WARN/ERROR，INFO适合生产环境
+    "bufferingEnabled": true,                                   // 启用日志缓冲，提升I/O性能
+    "flushIntervalSeconds": 5                                   // 日志缓冲刷新间隔（秒），确保日志及时写入磁盘
+  }
+}
+
+/*
+=== 配置文件使用说明 ===
+
+1. 基本配置修改：
+   - url: 修改为实际的考试系统地址
+   - exitPassword: 设置管理员退出密码
+   - appName: 自定义应用显示名称
+
+2. 安全等级调整：
+   - strictMode: 控制整体安全严格程度
+   - keyboardFilterEnabled: 控制是否拦截系统快捷键
+   - contextMenuEnabled: 控制是否允许右键菜单
+
+3. 性能调优：
+   - enableGPU: 根据硬件情况启用/禁用GPU加速
+   - maxMemoryMB: 根据系统内存设置合理限制
+   - processModel: 根据稳定性需求选择进程模型
+
+4. 调试支持：
+   - debugPort: 开发时可设置为9222等端口启用调试
+   - level: 开发时可设置为DEBUG获取详细日志
+
+5. URL退出检测：
+   - 用于考试结束后自动退出应用
+   - patterns数组支持多个URL模式
+   - 可配置延迟时间和确认对话框
+
+=== 重要安全提醒 ===
+- 生产环境请确保debugPort为0
+- exitPassword应使用强密码并定期更换
+- 严格测试keyboardFilterEnabled功能确保无法绕过
+- 定期检查security配置确保符合考试要求
+*/

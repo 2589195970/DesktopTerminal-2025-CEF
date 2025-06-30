@@ -4,11 +4,15 @@
 #include <QApplication>
 #include <QString>
 #include <QVersionNumber>
+#include <memory>
 
 class CEFManager;
 class SecureBrowser;
 class Logger;
 class ConfigManager;
+class SystemDetector;
+class CompatibilityManager;
+class WindowsPrivilegeManager;
 
 /**
  * @brief 主应用程序类
@@ -96,7 +100,6 @@ private:
     bool createMainWindow();
 
     // 系统检测
-    void detectSystemInfo();
     static void detectSystemInfoStatic();  // 静态版本，用于静态方法调用
     void applyCompatibilitySettings();
     void logSystemInfo();
@@ -109,17 +112,15 @@ private:
 #endif
 
 private:
-    CEFManager* m_cefManager;
-    SecureBrowser* m_mainWindow;
-    Logger* m_logger;
-    ConfigManager* m_configManager;
-
-    // 系统信息
-    static ArchType s_architecture;
-    static PlatformType s_platform;
-    static CompatibilityLevel s_compatibility;
-    static QString s_systemDescription;
-    static bool s_systemInfoDetected;
+    std::unique_ptr<CEFManager> m_cefManager;
+    std::unique_ptr<SecureBrowser> m_mainWindow;
+    Logger* m_logger;  // 单例，不使用智能指针管理
+    ConfigManager* m_configManager;  // 单例，不使用智能指针管理
+    std::unique_ptr<SystemDetector> m_systemDetector;
+    std::unique_ptr<CompatibilityManager> m_compatibilityManager;
+#ifdef Q_OS_WIN
+    std::unique_ptr<WindowsPrivilegeManager> m_windowsPrivilegeManager;
+#endif
 
     bool m_initialized;
     bool m_shutdownRequested;

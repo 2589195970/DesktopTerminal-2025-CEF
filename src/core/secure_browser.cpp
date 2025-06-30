@@ -27,19 +27,23 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_cefManager(cefManager)
     , m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
-    , m_exitHotkeyF10(nullptr)
-    , m_exitHotkeyBackslash(nullptr)
-    , m_maintenanceTimer(nullptr)
-    , m_cefMessageLoopTimer(nullptr)
     , m_needFocusCheck(true)
     , m_needFullscreenCheck(true)
     , m_cefBrowserCreated(false)
     , m_cefBrowserId(0)
+    , m_cefPerformanceState(CEFPerformanceState::Loading)
     , m_strictSecurityMode(true)
     , m_keyboardFilterEnabled(true)
     , m_contextMenuEnabled(false)
     , m_windowHandle(nullptr)
     , m_cefMessageLoopLogCounter(0)
+    , m_loadingOverlay(nullptr)
+    , m_loadingLayout(nullptr)
+    , m_loadingIcon(nullptr)
+    , m_loadingText(nullptr)
+    , m_loadingProgressBar(nullptr)
+    , m_loadingMovie(nullptr)
+    , m_isLoadingVisible(false)
 {
     m_logger->appEvent("SecureBrowser创建开始");
 
@@ -58,6 +62,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     initializeMaintenanceTimer();
     initializeCEFMessageLoopTimer();
     setupSecuritySettings();
+    initializeLoadingAnimation();
 
     m_logger->appEvent("SecureBrowser创建完成");
 }
@@ -66,31 +71,31 @@ SecureBrowser::~SecureBrowser()
 {
     m_logger->appEvent("SecureBrowser开始销毁");
 
-    // 停止定时器
+    // 停止定时器（智能指针自动管理内存）
     if (m_maintenanceTimer) {
         m_maintenanceTimer->stop();
-        delete m_maintenanceTimer;
-        m_maintenanceTimer = nullptr;
     }
     
     if (m_cefMessageLoopTimer) {
         m_cefMessageLoopTimer->stop();
-        delete m_cefMessageLoopTimer;
-        m_cefMessageLoopTimer = nullptr;
     }
 
     // 销毁CEF浏览器
     destroyCEFBrowser();
 
-    // 清理热键
-    if (m_exitHotkeyF10) {
-        delete m_exitHotkeyF10;
-        m_exitHotkeyF10 = nullptr;
+    // 清理热键（智能指针自动管理内存）
+    // 智能指针会在析构时自动清理，无需手动delete
+
+    // 清理加载动画组件
+    if (m_loadingMovie) {
+        m_loadingMovie->stop();
+        delete m_loadingMovie;
+        m_loadingMovie = nullptr;
     }
     
-    if (m_exitHotkeyBackslash) {
-        delete m_exitHotkeyBackslash;
-        m_exitHotkeyBackslash = nullptr;
+    if (m_loadingOverlay) {
+        delete m_loadingOverlay;
+        m_loadingOverlay = nullptr;
     }
 
     m_logger->appEvent("SecureBrowser销毁完成");
@@ -100,6 +105,9 @@ void SecureBrowser::load(const QUrl& url)
 {
     m_currentUrl = url;
     m_logger->appEvent(QString("加载URL: %1").arg(url.toString()));
+
+    // 显示加载动画
+    onPageLoadStart();
 
     if (m_cefBrowserCreated) {
         // CEF浏览器已创建，可以直接导航
@@ -292,6 +300,19 @@ void SecureBrowser::onMaintenanceTimer()
     if (m_needFullscreenCheck && windowState() != Qt::WindowFullScreen) {
         setFullscreenMode();
     }
+    
+    // CEF性能状态管理：如果页面已加载且空闲一段时间，切换到Idle状态以节约CPU
+    static int idleCounter = 0;
+    if (m_cefPerformanceState == CEFPerformanceState::Loaded) {
+        idleCounter++;
+        // 空闲15秒后（10次维护周期 * 1.5秒）切换到Idle状态
+        if (idleCounter >= 10) {
+            setCEFPerformanceState(CEFPerformanceState::Idle);
+            idleCounter = 0;
+        }
+    } else {
+        idleCounter = 0; // 重置计数器
+    }
 }
 
 void SecureBrowser::onCEFMessageLoop()
@@ -369,9 +390,9 @@ void SecureBrowser::initializeCEF()
 void SecureBrowser::initializeHotkeys()
 {
     try {
-        // 创建全局热键（与原项目相同）
-        m_exitHotkeyF10 = new QHotkey(QKeySequence("F10"), true, this);
-        m_exitHotkeyBackslash = new QHotkey(QKeySequence("\\"), true, this);
+        // 创建全局热键（使用智能指针）
+        m_exitHotkeyF10 = std::make_unique<QHotkey>(QKeySequence("F10"), true, this);
+        m_exitHotkeyBackslash = std::make_unique<QHotkey>(QKeySequence("\\"), true, this);
         
         // 连接信号（使用队列连接提高稳定性）
         connect(m_exitHotkeyF10, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
@@ -385,8 +406,8 @@ void SecureBrowser::initializeHotkeys()
 
 void SecureBrowser::initializeMaintenanceTimer()
 {
-    // 创建维护定时器（与原项目相同）
-    m_maintenanceTimer = new QTimer(this);
+    // 创建维护定时器（使用智能指针）
+    m_maintenanceTimer = std::make_unique<QTimer>(this);
     connect(m_maintenanceTimer, &QTimer::timeout, this, &SecureBrowser::onMaintenanceTimer, Qt::QueuedConnection);
     m_maintenanceTimer->start(1500); // 每1.5秒检查一次
     
@@ -395,12 +416,14 @@ void SecureBrowser::initializeMaintenanceTimer()
 
 void SecureBrowser::initializeCEFMessageLoopTimer()
 {
-    // 创建CEF消息循环定时器（单进程模式必需）
-    m_cefMessageLoopTimer = new QTimer(this);
+    // 创建CEF消息循环定时器（使用智能指针）
+    m_cefMessageLoopTimer = std::make_unique<QTimer>(this);
     connect(m_cefMessageLoopTimer, &QTimer::timeout, this, &SecureBrowser::onCEFMessageLoop, Qt::QueuedConnection);
-    m_cefMessageLoopTimer->start(10); // 每10ms调用一次CEF消息循环（约100FPS）
     
-    m_logger->appEvent("CEF消息循环定时器启动 - 间隔10ms，这对解决白屏问题至关重要");
+    // 使用动态间隔而非固定10ms
+    updateCEFMessageLoopInterval();
+    
+    m_logger->appEvent("CEF消息循环定时器启动 - 使用动态间隔优化性能");
     m_logger->appEvent(QString("CEF管理器状态: %1, 浏览器创建状态: %2")
         .arg(m_cefManager ? "已初始化" : "未初始化")
         .arg(m_cefBrowserCreated ? "已创建" : "未创建"));
@@ -591,5 +614,220 @@ void SecureBrowser::showSecurityViolationWarning(const QString& violation)
     if (m_strictSecurityMode) {
         QMessageBox::warning(this, "安全警告", 
             QString("检测到安全违规行为：\n%1").arg(violation));
+    }
+}
+
+void SecureBrowser::initializeLoadingAnimation()
+{
+    // 创建加载动画覆盖层
+    m_loadingOverlay = new QFrame(this);
+    m_loadingOverlay->setObjectName("loadingOverlay");
+    m_loadingOverlay->setFrameStyle(QFrame::NoFrame);
+    m_loadingOverlay->setStyleSheet(
+        "#loadingOverlay {"
+        "    background-color: rgba(255, 255, 255, 220);"
+        "    border: none;"
+        "}"
+    );
+    
+    // 创建垂直布局
+    m_loadingLayout = new QVBoxLayout(m_loadingOverlay);
+    m_loadingLayout->setAlignment(Qt::AlignCenter);
+    m_loadingLayout->setSpacing(20);
+    
+    // 创建加载图标
+    m_loadingIcon = new QLabel();
+    m_loadingIcon->setAlignment(Qt::AlignCenter);
+    m_loadingIcon->setFixedSize(64, 64);
+    
+    // 创建简单的加载动画（旋转圆点）
+    QString loadingStyle = 
+        "QLabel {"
+        "    border: 6px solid #f3f3f3;"
+        "    border-top: 6px solid #3498db;"
+        "    border-radius: 32px;"
+        "    background-color: transparent;"
+        "}";
+    m_loadingIcon->setStyleSheet(loadingStyle);
+    
+    // 创建加载文本
+    m_loadingText = new QLabel("正在加载页面...");
+    m_loadingText->setAlignment(Qt::AlignCenter);
+    m_loadingText->setStyleSheet(
+        "QLabel {"
+        "    font-size: 16px;"
+        "    color: #333333;"
+        "    background-color: transparent;"
+        "    font-weight: bold;"
+        "}"
+    );
+    
+    // 创建进度条
+    m_loadingProgressBar = new QProgressBar();
+    m_loadingProgressBar->setRange(0, 100);
+    m_loadingProgressBar->setValue(0);
+    m_loadingProgressBar->setFixedWidth(300);
+    m_loadingProgressBar->setFixedHeight(20);
+    m_loadingProgressBar->setStyleSheet(
+        "QProgressBar {"
+        "    border: 2px solid #cccccc;"
+        "    border-radius: 10px;"
+        "    text-align: center;"
+        "    background-color: #f0f0f0;"
+        "}"
+        "QProgressBar::chunk {"
+        "    background-color: #3498db;"
+        "    border-radius: 8px;"
+        "}"
+    );
+    
+    // 添加组件到布局
+    m_loadingLayout->addWidget(m_loadingIcon);
+    m_loadingLayout->addWidget(m_loadingText);
+    m_loadingLayout->addWidget(m_loadingProgressBar);
+    
+    // 初始状态隐藏
+    m_loadingOverlay->hide();
+    m_isLoadingVisible = false;
+    
+    m_logger->appEvent("加载动画初始化完成");
+}
+
+void SecureBrowser::showLoadingAnimation()
+{
+    if (!m_loadingOverlay || m_isLoadingVisible) {
+        return;
+    }
+    
+    // 调整覆盖层大小以匹配窗口
+    m_loadingOverlay->resize(size());
+    m_loadingOverlay->raise(); // 确保在最前面
+    m_loadingOverlay->show();
+    m_isLoadingVisible = true;
+    
+    // 重置进度条
+    m_loadingProgressBar->setValue(0);
+    
+    m_logger->appEvent("显示加载动画");
+}
+
+void SecureBrowser::hideLoadingAnimation()
+{
+    if (!m_loadingOverlay || !m_isLoadingVisible) {
+        return;
+    }
+    
+    m_loadingOverlay->hide();
+    m_isLoadingVisible = false;
+    
+    m_logger->appEvent("隐藏加载动画");
+}
+
+void SecureBrowser::updateLoadingProgress(int progress)
+{
+    if (!m_loadingProgressBar) {
+        return;
+    }
+    
+    // 确保进度值在有效范围内
+    progress = qBound(0, progress, 100);
+    m_loadingProgressBar->setValue(progress);
+    
+    // 更新加载文本
+    if (m_loadingText) {
+        if (progress < 100) {
+            m_loadingText->setText(QString("正在加载页面... %1%").arg(progress));
+        } else {
+            m_loadingText->setText("页面加载完成");
+        }
+    }
+    
+    m_logger->appEvent(QString("更新加载进度: %1%").arg(progress));
+}
+
+void SecureBrowser::onPageLoadStart()
+{
+    // 页面开始加载，切换到Loading状态以提高消息循环频率
+    setCEFPerformanceState(CEFPerformanceState::Loading);
+    
+    showLoadingAnimation();
+    updateLoadingProgress(0);
+    m_logger->appEvent("页面开始加载，显示加载动画");
+}
+
+void SecureBrowser::onPageLoadEnd()
+{
+    updateLoadingProgress(100);
+    
+    // 延迟隐藏加载动画，让用户看到完成状态
+    QTimer::singleShot(500, this, [this]() {
+        hideLoadingAnimation();
+    });
+    
+    // 页面加载完成，切换到Loaded状态以降低消息循环频率
+    setCEFPerformanceState(CEFPerformanceState::Loaded);
+    
+    m_logger->appEvent("页面加载完成，隐藏加载动画");
+}
+
+void SecureBrowser::setCEFPerformanceState(CEFPerformanceState state)
+{
+    if (m_cefPerformanceState != state) {
+        CEFPerformanceState oldState = m_cefPerformanceState;
+        m_cefPerformanceState = state;
+        
+        // 更新消息循环间隔
+        updateCEFMessageLoopInterval();
+        
+        // 记录状态变化
+        QString oldStateStr, newStateStr;
+        switch (oldState) {
+            case CEFPerformanceState::Loading: oldStateStr = "Loading"; break;
+            case CEFPerformanceState::Loaded: oldStateStr = "Loaded"; break;
+            case CEFPerformanceState::Idle: oldStateStr = "Idle"; break;
+        }
+        switch (state) {
+            case CEFPerformanceState::Loading: newStateStr = "Loading"; break;
+            case CEFPerformanceState::Loaded: newStateStr = "Loaded"; break;
+            case CEFPerformanceState::Idle: newStateStr = "Idle"; break;
+        }
+        
+        m_logger->appEvent(QString("CEF性能状态变化: %1 -> %2").arg(oldStateStr).arg(newStateStr));
+    }
+}
+
+void SecureBrowser::updateCEFMessageLoopInterval()
+{
+    if (!m_cefMessageLoopTimer) {
+        return;
+    }
+    
+    int interval;
+    QString description;
+    
+    switch (m_cefPerformanceState) {
+        case CEFPerformanceState::Loading:
+            interval = 10;  // 高频率 - 页面加载中需要快速响应
+            description = "Loading状态 - 10ms间隔（高性能）";
+            break;
+        case CEFPerformanceState::Loaded:
+            interval = 30;  // 中频率 - 页面已加载，保持正常响应
+            description = "Loaded状态 - 30ms间隔（平衡性能）";
+            break;
+        case CEFPerformanceState::Idle:
+            interval = 100; // 低频率 - 空闲状态，节约CPU资源
+            description = "Idle状态 - 100ms间隔（节能模式）";
+            break;
+        default:
+            interval = 30;
+            description = "默认状态 - 30ms间隔";
+            break;
+    }
+    
+    m_cefMessageLoopTimer->setInterval(interval);
+    
+    // 只在调试模式下记录详细的间隔变化
+    if (m_logger->getLogLevel() <= L_DEBUG) {
+        m_logger->appEvent(QString("CEF消息循环间隔更新: %1").arg(description));
     }
 }

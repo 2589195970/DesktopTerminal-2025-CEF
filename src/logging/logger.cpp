@@ -8,6 +8,28 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QWidget>
+#include <QMutexLocker>
+#include <QRegExp>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <psapi.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <tlhelp32.h>
+#pragma comment(lib, "pdh.lib")
+#elif defined(Q_OS_LINUX)
+#include <unistd.h>
+#include <sys/times.h>
+#include <sys/sysinfo.h>
+#include <sys/statvfs.h>
+#elif defined(Q_OS_MAC)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+#include <mach/processor_info.h>
+#include <mach/mach_host.h>
+#endif
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <QTextCodec>
@@ -25,6 +47,8 @@ Logger::Logger()
     : QObject(nullptr)
     , m_logLevel(L_INFO)
     , m_flushTimer(nullptr)
+    , m_nextTimerId(1)
+    , m_applicationStartTime(QDateTime::currentDateTime())
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
@@ -212,4 +236,198 @@ void Logger::logSystemInfo()
     systemEvent(QString("主机名: %1").arg(QSysInfo::machineHostName()));
     systemEvent(QString("Qt版本: %1").arg(qVersion()));
     systemEvent("=== 系统信息记录完成 ===");
+}
+
+// 性能监控方法实现
+int Logger::startPerformanceTimer(const QString &operationName)
+{
+    QMutexLocker locker(&m_performanceMutex);
+    
+    PerformanceTimer timer;
+    timer.operationName = operationName;
+    timer.startTime = QDateTime::currentDateTime();
+    timer.timer.start();
+    
+    int timerId = m_nextTimerId++;
+    m_performanceTimers[timerId] = timer;
+    
+    logEvent("性能监控", QString("开始计时: %1 (ID: %2)").arg(operationName).arg(timerId), "performance.log", L_DEBUG);
+    
+    return timerId;
+}
+
+void Logger::endPerformanceTimer(int timerId, const QString &additionalInfo)
+{
+    QMutexLocker locker(&m_performanceMutex);
+    
+    if (!m_performanceTimers.contains(timerId)) {
+        logEvent("性能监控", QString("无效的计时器ID: %1").arg(timerId), "performance.log", L_WARNING);
+        return;
+    }
+    
+    PerformanceTimer timer = m_performanceTimers.take(timerId);
+    qint64 elapsedMs = timer.timer.elapsed();
+    
+    QString message = QString("操作完成: %1, 耗时: %2ms").arg(timer.operationName).arg(elapsedMs);
+    if (!additionalInfo.isEmpty()) {
+        message += QString(", 附加信息: %1").arg(additionalInfo);
+    }
+    
+    logEvent("性能监控", message, "performance.log", L_INFO);
+    
+    // 记录性能指标
+    PerformanceMetric metric;
+    metric.name = timer.operationName;
+    metric.value = elapsedMs;
+    metric.unit = "ms";
+    metric.timestamp = QDateTime::currentDateTime();
+    m_performanceMetrics.append(metric);
+}
+
+void Logger::logPerformanceMetric(const QString &metricName, double value, const QString &unit)
+{
+    QMutexLocker locker(&m_performanceMutex);
+    
+    PerformanceMetric metric;
+    metric.name = metricName;
+    metric.value = value;
+    metric.unit = unit;
+    metric.timestamp = QDateTime::currentDateTime();
+    m_performanceMetrics.append(metric);
+    
+    QString message = QString("性能指标: %1 = %2 %3").arg(metricName).arg(value).arg(unit);
+    logEvent("性能监控", message, "performance.log", L_INFO);
+}
+
+void Logger::logMemoryUsage()
+{
+#ifdef Q_OS_WIN
+    // Windows内存使用情况
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        double workingSetMB = pmc.WorkingSetSize / (1024.0 * 1024.0);
+        double pageFileUsageMB = pmc.PagefileUsage / (1024.0 * 1024.0);
+        
+        logPerformanceMetric("内存-工作集", workingSetMB, "MB");
+        logPerformanceMetric("内存-页面文件使用", pageFileUsageMB, "MB");
+        
+        QString message = QString("内存使用: 工作集=%1MB, 页面文件=%2MB")
+            .arg(workingSetMB, 0, 'f', 2)
+            .arg(pageFileUsageMB, 0, 'f', 2);
+        logEvent("性能监控", message, "performance.log", L_INFO);
+    }
+#else
+    // Linux/macOS: 使用/proc/self/status（Linux）或其他方法
+    QFile statusFile("/proc/self/status");
+    if (statusFile.open(QIODevice::ReadOnly)) {
+        QTextStream stream(&statusFile);
+        QString line;
+        double vmSizeMB = 0, vmRssMB = 0;
+        
+        while (stream.readLineInto(&line)) {
+            if (line.startsWith("VmSize:")) {
+                QStringList parts = line.split(QRegExp("\\s+"));
+                if (parts.size() >= 2) {
+                    vmSizeMB = parts[1].toDouble() / 1024.0; // KB to MB
+                }
+            } else if (line.startsWith("VmRSS:")) {
+                QStringList parts = line.split(QRegExp("\\s+"));
+                if (parts.size() >= 2) {
+                    vmRssMB = parts[1].toDouble() / 1024.0; // KB to MB
+                }
+            }
+        }
+        
+        if (vmSizeMB > 0 || vmRssMB > 0) {
+            logPerformanceMetric("内存-虚拟内存", vmSizeMB, "MB");
+            logPerformanceMetric("内存-物理内存", vmRssMB, "MB");
+            
+            QString message = QString("内存使用: 虚拟内存=%1MB, 物理内存=%2MB")
+                .arg(vmSizeMB, 0, 'f', 2)
+                .arg(vmRssMB, 0, 'f', 2);
+            logEvent("性能监控", message, "performance.log", L_INFO);
+        }
+    } else {
+        logEvent("性能监控", "无法读取内存使用信息", "performance.log", L_WARNING);
+    }
+#endif
+}
+
+void Logger::logApplicationStartTime(const QDateTime &startTime)
+{
+    QDateTime currentTime = QDateTime::currentDateTime();
+    qint64 startupMs = startTime.msecsTo(currentTime);
+    
+    logPerformanceMetric("应用启动时间", startupMs, "ms");
+    
+    QString message = QString("应用启动完成: 耗时 %1ms").arg(startupMs);
+    logEvent("性能监控", message, "performance.log", L_INFO);
+}
+
+void Logger::logPageLoadPerformance(const QString &url, qint64 loadTime)
+{
+    logPerformanceMetric("页面加载时间", loadTime, "ms");
+    
+    QString message = QString("页面加载: %1, 耗时: %2ms").arg(url).arg(loadTime);
+    logEvent("性能监控", message, "performance.log", L_INFO);
+}
+
+void Logger::logCEFInitPerformance(qint64 initTime, bool success)
+{
+    logPerformanceMetric("CEF初始化时间", initTime, "ms");
+    
+    QString message = QString("CEF初始化: %1, 耗时: %2ms")
+        .arg(success ? "成功" : "失败")
+        .arg(initTime);
+    logEvent("性能监控", message, "performance.log", success ? L_INFO : L_ERROR);
+}
+
+void Logger::generatePerformanceReport()
+{
+    QMutexLocker locker(&m_performanceMutex);
+    
+    logEvent("性能监控", "=== 性能报告生成开始 ===", "performance.log", L_INFO);
+    
+    // 统计不同类型的性能指标
+    QMap<QString, QList<double>> metricsByName;
+    
+    for (const PerformanceMetric &metric : m_performanceMetrics) {
+        metricsByName[metric.name].append(metric.value);
+    }
+    
+    // 生成统计报告
+    for (auto it = metricsByName.begin(); it != metricsByName.end(); ++it) {
+        const QString &name = it.key();
+        const QList<double> &values = it.value();
+        
+        if (values.isEmpty()) continue;
+        
+        // 计算统计信息
+        double sum = 0;
+        double min = values.first();
+        double max = values.first();
+        
+        for (double value : values) {
+            sum += value;
+            min = qMin(min, value);
+            max = qMax(max, value);
+        }
+        
+        double avg = sum / values.size();
+        
+        QString report = QString("指标统计: %1 - 次数:%2, 平均:%3ms, 最小:%4ms, 最大:%5ms")
+            .arg(name)
+            .arg(values.size())
+            .arg(avg, 0, 'f', 2)
+            .arg(min, 0, 'f', 2)
+            .arg(max, 0, 'f', 2);
+            
+        logEvent("性能监控", report, "performance.log", L_INFO);
+    }
+    
+    // 应用运行时长
+    qint64 runtimeMs = m_applicationStartTime.msecsTo(QDateTime::currentDateTime());
+    logEvent("性能监控", QString("应用运行时长: %1ms").arg(runtimeMs), "performance.log", L_INFO);
+    
+    logEvent("性能监控", "=== 性能报告生成完成 ===", "performance.log", L_INFO);
 }

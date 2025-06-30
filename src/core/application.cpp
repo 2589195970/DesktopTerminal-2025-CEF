@@ -1,6 +1,12 @@
 #include "application.h"
 #include "cef_manager.h"
 #include "secure_browser.h"
+#include "system_detector.h"
+#include "compatibility_manager.h"
+#include "common_utils.h"
+#ifdef Q_OS_WIN
+#include "windows_privilege_manager.h"
+#endif
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 
@@ -10,6 +16,8 @@
 #include <QSysInfo>
 #include <QVersionNumber>
 #include <QTimer>
+#include <QProcess>
+#include <QFileInfo>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -25,8 +33,6 @@ bool Application::s_systemInfoDetected = false;
 
 Application::Application(int &argc, char **argv)
     : QApplication(argc, argv)
-    , m_cefManager(nullptr)
-    , m_mainWindow(nullptr)
     , m_logger(nullptr)
     , m_configManager(nullptr)
     , m_initialized(false)
@@ -42,8 +48,15 @@ Application::Application(int &argc, char **argv)
     // 设置退出策略
     setQuitOnLastWindowClosed(false);
 
+    // 创建管理器实例（使用智能指针）
+    m_systemDetector = std::make_unique<SystemDetector>();
+    m_compatibilityManager = std::make_unique<CompatibilityManager>(this);
+#ifdef Q_OS_WIN
+    m_windowsPrivilegeManager = std::make_unique<WindowsPrivilegeManager>(this);
+#endif
+
     // 检测系统信息
-    detectSystemInfo();
+    m_systemDetector->detectSystemInfo();
 
     // 连接退出信号
     connect(this, &QApplication::aboutToQuit, this, &Application::onAboutToQuit);
@@ -70,9 +83,8 @@ bool Application::initialize()
 
     // 2. 检查系统要求
     if (!checkSystemRequirements()) {
-        m_logger->errorEvent("系统要求检查失败");
-        QMessageBox::critical(nullptr, "系统要求不满足", 
-            getCompatibilityReport() + "\n\n应用程序将退出。");
+        CommonUtils::showErrorDialog(nullptr, "系统要求不满足", 
+            getCompatibilityReport() + "\n\n应用程序将退出。", m_logger);
         return false;
     }
 
@@ -81,14 +93,12 @@ bool Application::initialize()
 
     // 4. 初始化配置管理
     if (!initializeConfiguration()) {
-        m_logger->errorEvent("配置初始化失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "配置初始化失败");
     }
 
     // 5. 初始化CEF
     if (!initializeCEF()) {
-        m_logger->errorEvent("CEF初始化失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "CEF初始化失败");
     }
 
     m_initialized = true;
@@ -103,8 +113,7 @@ bool Application::startMainWindow()
     }
 
     if (!createMainWindow()) {
-        m_logger->errorEvent("主窗口创建失败");
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "主窗口创建失败");
     }
 
     m_logger->appEvent("主窗口启动成功");
@@ -123,19 +132,21 @@ void Application::shutdown()
         m_logger->appEvent("应用程序开始关闭...");
     }
 
-    // 关闭主窗口
+    // 关闭主窗口（智能指针自动管理内存）
     if (m_mainWindow) {
         m_mainWindow->close();
-        delete m_mainWindow;
-        m_mainWindow = nullptr;
+        m_mainWindow.reset();  // 显式重置智能指针
     }
 
-    // 关闭CEF
+    // 关闭CEF（智能指针自动管理内存）
     if (m_cefManager) {
         m_cefManager->shutdown();
-        delete m_cefManager;
-        m_cefManager = nullptr;
+        m_cefManager.reset();  // 显式重置智能指针
     }
+
+    // 清理管理器（智能指针自动管理内存）
+    m_systemDetector.reset();
+    m_compatibilityManager.reset();
 
     // 关闭日志系统
     if (m_logger) {
@@ -238,6 +249,21 @@ bool Application::checkSystemRequirements()
     if (!checkWindowsAPI()) {
         return false;
     }
+    
+    // Windows 7系统特别需要检查VC++运行时
+#ifdef Q_OS_WIN
+    if (isWindows7SP1() && m_windowsPrivilegeManager) {
+        m_windowsPrivilegeManager->setLogger(m_logger);
+        m_windowsPrivilegeManager->setConfigManager(m_configManager);
+        
+        WindowsPrivilegeManager::Result result = m_windowsPrivilegeManager->checkAndHandleVCRuntime();
+        if (result == WindowsPrivilegeManager::Result::Failed) {
+            // VC++运行时检查失败，但不阻止程序继续运行
+            if (m_logger) {
+                m_logger->appEvent("VC++运行时检查失败，但程序将继续运行");
+            }
+        }
+    }
 #endif
 
     // 检查CEF兼容性
@@ -333,46 +359,32 @@ bool Application::initializeConfiguration()
                     QString("已生成默认配置文件：\n%1\n请修改后重新启动。").arg(defaultPath));
                 return false;
             } else {
-                m_logger->errorEvent("无法创建或加载配置文件");
-                return false;
+                return CommonUtils::logErrorAndReturnFalse(m_logger, "无法创建或加载配置文件");
             }
         }
 
         m_logger->logStartup(m_configManager->getActualConfigPath());
         return true;
     } catch (...) {
-        if (m_logger) {
-            m_logger->errorEvent("配置管理器初始化异常");
-        }
-        return false;
+        return CommonUtils::logErrorAndReturnFalse(m_logger, "配置管理器初始化异常");
     }
 }
 
 bool Application::initializeCEF()
 {
-    try {
-        m_cefManager = new CEFManager(this);
+    return CommonUtils::safeExecute([this]() {
+        m_cefManager = std::make_unique<CEFManager>(this);
         return m_cefManager->initialize();
-    } catch (...) {
-        if (m_logger) {
-            m_logger->errorEvent("CEF管理器初始化异常");
-        }
-        return false;
-    }
+    }, "CEF管理器初始化异常", m_logger);
 }
 
 bool Application::createMainWindow()
 {
-    try {
-        m_mainWindow = new SecureBrowser(m_cefManager);
+    return CommonUtils::safeExecute([this]() {
+        m_mainWindow = std::make_unique<SecureBrowser>(m_cefManager.get());
         m_mainWindow->show();
         return true;
-    } catch (...) {
-        if (m_logger) {
-            m_logger->errorEvent("主窗口创建异常");
-        }
-        return false;
-    }
+    }, "主窗口创建异常", m_logger);
 }
 
 void Application::detectSystemInfoStatic()
@@ -448,101 +460,12 @@ void Application::detectSystemInfoStatic()
     s_systemInfoDetected = true;
 }
 
-void Application::detectSystemInfo()
-{
-    if (s_systemInfoDetected) {
-        return;
-    }
-
-    // 检测平台
-#ifdef Q_OS_WIN
-    s_platform = PlatformType::Windows;
-#elif defined(Q_OS_MAC)
-    s_platform = PlatformType::MacOS;
-#elif defined(Q_OS_LINUX)
-    s_platform = PlatformType::Linux;
-#else
-    s_platform = PlatformType::Unknown;
-#endif
-
-    // 检测架构
-    if (sizeof(void*) == 8) {
-        QString arch = QSysInfo::currentCpuArchitecture();
-        if (arch.contains("arm", Qt::CaseInsensitive)) {
-            s_architecture = ArchType::ARM64;
-        } else {
-            s_architecture = ArchType::X86_64;
-        }
-    } else {
-        s_architecture = ArchType::X86_32;
-    }
-
-    // 检测兼容性级别
-    QString product = QSysInfo::productType();
-    QString version = QSysInfo::productVersion();
-    
-    if (s_platform == PlatformType::Windows) {
-        QVersionNumber winVersion = QVersionNumber::fromString(version);
-        
-        if (winVersion.majorVersion() < 6 || 
-            (winVersion.majorVersion() == 6 && winVersion.minorVersion() < 1)) {
-            // Windows Vista或更早版本
-            s_compatibility = CompatibilityLevel::Unknown;
-        } else if (winVersion.majorVersion() == 6 && winVersion.minorVersion() == 1) {
-            // Windows 7
-            s_compatibility = CompatibilityLevel::LegacySystem;
-        } else if (winVersion.majorVersion() == 6 || winVersion.majorVersion() == 10) {
-            // Windows 8/8.1/10
-            s_compatibility = CompatibilityLevel::ModernSystem;
-        } else {
-            // Windows 11+
-            s_compatibility = CompatibilityLevel::OptimalSystem;
-        }
-    } else if (s_platform == PlatformType::MacOS) {
-        QVersionNumber macVersion = QVersionNumber::fromString(version);
-        
-        if (macVersion < QVersionNumber(10, 14)) {
-            s_compatibility = CompatibilityLevel::LegacySystem;
-        } else if (macVersion < QVersionNumber(12, 0)) {
-            s_compatibility = CompatibilityLevel::ModernSystem;
-        } else {
-            s_compatibility = CompatibilityLevel::OptimalSystem;
-        }
-    } else {
-        s_compatibility = CompatibilityLevel::ModernSystem; // Linux一般都是现代系统
-    }
-
-    // 构建系统描述
-    s_systemDescription = QString("%1 %2 (%3)")
-        .arg(QSysInfo::prettyProductName())
-        .arg(QSysInfo::currentCpuArchitecture())
-        .arg(s_architecture == ArchType::X86_32 ? "32位" : "64位");
-
-    s_systemInfoDetected = true;
-}
 
 void Application::applyCompatibilitySettings()
 {
-    if (s_compatibility == CompatibilityLevel::LegacySystem) {
-        if (m_logger) {
-            m_logger->appEvent("应用传统系统兼容性设置");
-        }
-
-#ifdef Q_OS_WIN
-        if (isWindows7SP1()) {
-            applyWindows7Optimizations();
-        }
-#endif
-
-        // 32位系统内存优化
-        if (is32BitSystem()) {
-            setAttribute(Qt::AA_UseDesktopOpenGL, false);
-            setAttribute(Qt::AA_UseSoftwareOpenGL, true);
-            
-            if (m_logger) {
-                m_logger->appEvent("应用32位系统内存优化设置");
-            }
-        }
+    if (m_compatibilityManager && m_systemDetector && m_logger) {
+        SystemDetector::SystemInfo systemInfo = m_systemDetector->getSystemInfo();
+        m_compatibilityManager->applyCompatibilitySettings(systemInfo, m_logger);
     }
 }
 
@@ -604,6 +527,177 @@ bool Application::checkWindowsAPI()
     }
 
     return true;
+}
+
+// 注意：以下方法已被抽象到 WindowsPrivilegeManager 类中
+// 这些方法保留仅为向后兼容，实际功能委托给 WindowsPrivilegeManager
+
+bool Application::isRunningAsAdministrator()
+{
+#ifdef Q_OS_WIN
+    return WindowsPrivilegeManager::isRunningAsAdministrator();
+#else
+    return false;
+#endif
+}
+
+bool Application::checkVCRuntimeInstalled()
+{
+    // 检查VC++ 2015-2022 Redistributable是否已安装
+    // 检查32位版本的注册表项
+    HKEY hKey;
+    LONG result;
+    
+    // 首先检查VC++ 2015-2022 Redistributable (x86)
+    result = RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86",
+        0, KEY_READ, &hKey);
+    
+    if (result == ERROR_SUCCESS) {
+        DWORD installed = 0;
+        DWORD dataSize = sizeof(DWORD);
+        DWORD valueType;
+        
+        result = RegQueryValueExA(hKey, "Installed", NULL, &valueType, 
+                                 (LPBYTE)&installed, &dataSize);
+        RegCloseKey(hKey);
+        
+        if (result == ERROR_SUCCESS && installed == 1) {
+            return true;
+        }
+    }
+    
+    // 检查VC++ 2013 Redistributable (x86) - 作为备选
+    result = RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\VisualStudio\\12.0\\VC\\Runtimes\\x86",
+        0, KEY_READ, &hKey);
+    
+    if (result == ERROR_SUCCESS) {
+        DWORD installed = 0;
+        DWORD dataSize = sizeof(DWORD);
+        DWORD valueType;
+        
+        result = RegQueryValueExA(hKey, "Installed", NULL, &valueType, 
+                                 (LPBYTE)&installed, &dataSize);
+        RegCloseKey(hKey);
+        
+        if (result == ERROR_SUCCESS && installed == 1) {
+            return true;
+        }
+    }
+    
+    // 检查Windows\System32中的关键DLL文件
+    QString systemDir = QString::fromLocal8Bit(qgetenv("SystemRoot")) + "\\System32\\";
+    QStringList requiredDlls = {
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "vcruntime140.dll",
+        "msvcp140.dll"
+    };
+    
+    bool allDllsExist = true;
+    for (const QString& dll : requiredDlls) {
+        if (!QFile::exists(systemDir + dll)) {
+            allDllsExist = false;
+            break;
+        }
+    }
+    
+    return allDllsExist;
+}
+
+QString Application::getVCRuntimeInstallerPath()
+{
+    // 获取配置中的安装包文件名
+    ConfigManager& configManager = ConfigManager::instance();
+    QString installerFileName = configManager.getVCRuntimeInstallerFileName();
+    
+    // 获取应用程序目录
+    QString appDir = QCoreApplication::applicationDirPath();
+    
+    // 检查resources目录中的安装包
+    QStringList possiblePaths = {
+        appDir + "/resources/" + installerFileName,
+        appDir + "/" + installerFileName,
+        appDir + "/../resources/" + installerFileName
+    };
+    
+    for (const QString& path : possiblePaths) {
+        QFileInfo fileInfo(path);
+        if (fileInfo.exists() && fileInfo.isFile() && fileInfo.isReadable()) {
+            return QDir::toNativeSeparators(fileInfo.absoluteFilePath());
+        }
+    }
+    
+    return QString(); // 未找到安装包
+}
+
+bool Application::installVCRuntime()
+{
+    Logger& logger = Logger::instance();
+    
+    // 检查是否有管理员权限
+    if (!isRunningAsAdministrator()) {
+        logger.errorEvent("安装VC++ Redistributable需要管理员权限");
+        return false;
+    }
+    
+    // 获取安装包路径
+    QString installerPath = getVCRuntimeInstallerPath();
+    if (installerPath.isEmpty()) {
+        logger.errorEvent("未找到VC++ Redistributable安装包");
+        return false;
+    }
+    
+    logger.appEvent(QString("开始安装VC++ Redistributable: %1").arg(installerPath));
+    
+    // 使用QProcess执行静默安装
+    QProcess process;
+    process.setProgram(installerPath);
+    
+    // 静默安装参数
+    QStringList arguments;
+    arguments << "/quiet" << "/norestart";
+    process.setArguments(arguments);
+    
+    // 设置超时时间（5分钟）
+    process.start();
+    
+    if (!process.waitForStarted(30000)) { // 30秒启动超时
+        logger.errorEvent("VC++ Redistributable安装程序启动失败");
+        return false;
+    }
+    
+    if (!process.waitForFinished(300000)) { // 5分钟完成超时
+        logger.errorEvent("VC++ Redistributable安装超时");
+        process.kill();
+        return false;
+    }
+    
+    int exitCode = process.exitCode();
+    QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
+    QString errorOutput = QString::fromLocal8Bit(process.readAllStandardError());
+    
+    if (exitCode == 0) {
+        logger.appEvent("VC++ Redistributable安装成功");
+        return true;
+    } else if (exitCode == 1638) {
+        // 1638表示已经安装了更新版本
+        logger.appEvent("VC++ Redistributable已存在更新版本，跳过安装");
+        return true;
+    } else if (exitCode == 3010) {
+        // 3010表示需要重启
+        logger.appEvent("VC++ Redistributable安装成功，建议重启系统");
+        return true;
+    } else {
+        logger.errorEvent(QString("VC++ Redistributable安装失败，退出代码: %1").arg(exitCode));
+        if (!output.isEmpty()) {
+            logger.errorEvent(QString("标准输出: %1").arg(output));
+        }
+        if (!errorOutput.isEmpty()) {
+            logger.errorEvent(QString("错误输出: %1").arg(errorOutput));
+        }
+        return false;
+    }
 }
 
 void Application::applyWindows7Optimizations()

@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QJsonObject>
 
 /**
@@ -77,6 +78,18 @@ public:
     QString getLogLevel() const;
     bool isLogBufferingEnabled() const;
     int getLogFlushIntervalSeconds() const;
+
+    // VC++运行时自动安装配置
+    bool isVCRuntimeAutoInstallEnabled() const;
+    bool isVCRuntimePromptEnabled() const;
+    QString getVCRuntimeInstallerFileName() const;
+
+    // URL检测与自动退出配置（新增）
+    bool isUrlExitDetectionEnabled() const;
+    QString getUrlExitDetectionPattern() const;
+    QStringList getUrlExitDetectionPatterns() const;
+    int getUrlExitDetectionDelayMs() const;
+    bool isUrlExitConfirmationEnabled() const;
 
     // 直接访问配置对象（与原项目兼容）
     QJsonObject config;
