@@ -20,9 +20,7 @@
 
 ### 🏗️ 技术架构
 - **Qt 5.15+**: 跨平台GUI框架
-- **CEF 75/118**: 
-  - CEF 75用于Windows 7 SP1 32位系统
-  - CEF 118用于现代64位系统
+- **CEF 109**: 统一使用CEF 109版本，支持所有平台和架构
 - **QHotkey**: 全局热键支持
 - **CMake**: 跨平台构建系统
 
@@ -30,8 +28,16 @@
 
 ### Windows
 - **Windows 7 SP1** (32位/64位) 或更高版本
-- **内存**: 至少512MB可用内存（32位系统），1GB（64位系统）
+- **内存**: 至少512MB可用内存（32位系统），1GB（64位系统）  
 - **磁盘**: 200MB可用空间
+- **运行时**: Visual C++ Redistributable（详见Windows 7特殊说明）
+
+#### Windows 7 特殊说明
+- 专门优化支持Windows 7 SP1系统
+- 使用CEF 109版本提供现代化支持
+- 如遇到 `api-ms-win-crt-runtime-l1-1-0.dll` 错误，请参考：
+  - [Windows 7运行时安装指南](docs/windows7-runtime-guide.md)
+  - 需要安装特定版本的VC++ Redistributable
 
 ### macOS
 - **macOS 10.12** (Sierra) 或更高版本
@@ -193,6 +199,52 @@ DesktopTerminal-2025-CEF/
 - `logs/security.log`: 安全事件日志
 - `logs/keyboard.log`: 键盘事件日志
 - `logs/window.log`: 窗口管理日志
+
+## 常见问题与故障排除
+
+### Windows 7 运行时问题
+
+**问题**: 程序启动时提示 `api-ms-win-crt-runtime-l1-1-0.dll` 缺失
+```
+无法启动此程序，因为计算机中丢失 api-ms-win-crt-runtime-l1-1-0.dll
+```
+
+**解决方案**:
+1. **推荐方案**: 安装Windows 7兼容的VC++ Redistributable
+   - 详见: [Windows 7运行时安装指南](docs/windows7-runtime-guide.md)
+   - 按顺序安装: VC++ 2013 → VC++ 2015 Update 3
+
+2. **快速方案**: 
+   ```
+   步骤1：安装Windows 7关键更新
+   - 下载KB2999226: https://support.microsoft.com/zh-cn/help/2999226
+   
+   步骤2：安装兼容的VC++ Redistributable
+   - 下载VC++ 2013: https://aka.ms/highdpimfc2013x86enu
+   - 下载VC++ 2015: https://www.microsoft.com/zh-cn/download/details.aspx?id=53840
+   
+   步骤3：以管理员身份安装，重启系统
+   ```
+
+**问题**: Visual C++ 2015-2022 安装失败，错误代码 0x80240017
+
+**解决方案**: 这是Windows 7的已知兼容性问题
+- 不要使用VC++ 2015-2022版本
+- 使用Windows 7兼容版本（见上述推荐方案）
+
+### 其他常见问题
+
+**程序无法启动或黑屏**:
+- 检查GPU驱动兼容性
+- 在程序目录创建 `disable-gpu.txt` 空文件强制软件渲染
+
+**快捷键无效**:
+- 确保以管理员身份运行
+- 检查杀毒软件是否阻止QHotkey库
+
+**网页显示异常**:
+- 验证CEF资源文件完整性
+- 检查网络连接和URL配置
 
 ## 技术支持
 

@@ -53,16 +53,16 @@ if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 call :log_info "检测到平台: Windows %ARCH_TYPE% -> %PLATFORM%"
 goto :eof
 
-REM 全平台统一使用CEF 75以获得最大兼容性
+REM 全平台统一使用CEF 109版本
 :select_cef_version
-set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"
+set "CEF_VERSION=109.1.18+gf1c41e4+chromium-109.0.5414.120"
 
 if "%PLATFORM%"=="windows32" (
     set "CEF_PLATFORM=windows32"
-    call :log_info "选择CEF 75.1.14版本 - Windows 32位最大兼容性"
+    call :log_info "选择CEF 109.1.18版本 - Windows 32位统一版本"
 ) else (
     set "CEF_PLATFORM=windows64" 
-    call :log_info "选择CEF 75.1.14版本 - Windows 64位最大兼容性"
+    call :log_info "选择CEF 109.1.18版本 - Windows 64位统一版本"
 )
 
 set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"

@@ -1,8 +1,10 @@
 # FindCEF.cmake - CEF库查找模块
-# 全平台统一使用CEF 75以获得最大兼容性
+# 统一使用CEF 109版本
 
-# 统一CEF版本 - 所有平台使用CEF 75
-set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")
+# CEF 109 统一配置
+set(CEF_VERSION_DEFAULT "109.1.18+gf1c41e4+chromium-109.0.5414.120")
+set(CEF_ROOT_SUBDIR "cef")
+message(STATUS "FindCEF: 使用CEF 109.1.18统一版本")
 
 # 根据平台确定CEF平台后缀
 if(WIN32)
@@ -31,12 +33,12 @@ endif()
 # 构建CEF二进制包名称
 set(CEF_BINARY_NAME "cef_binary_${CEF_VERSION}_${CEF_PLATFORM_SUFFIX}")
 
-# CEF根目录查找路径
+# CEF根目录查找路径 - 支持版本特定目录
 set(CEF_ROOT_PATHS
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef"
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/${CEF_BINARY_NAME}"
-    "${CMAKE_CURRENT_BINARY_DIR}/third_party/cef"
-    "${CMAKE_CURRENT_BINARY_DIR}/third_party/cef/${CEF_BINARY_NAME}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/${CEF_ROOT_SUBDIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/${CEF_ROOT_SUBDIR}/${CEF_BINARY_NAME}"
+    "${CMAKE_CURRENT_BINARY_DIR}/third_party/${CEF_ROOT_SUBDIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/third_party/${CEF_ROOT_SUBDIR}/${CEF_BINARY_NAME}"
     "$ENV{CEF_ROOT}"
 )
 
@@ -59,7 +61,7 @@ if(NOT CEF_ROOT_DIR)
 endif()
 
 if(NOT CEF_ROOT_DIR)
-    message(STATUS "CEF未找到，将在构建时自动下载")
+    message(STATUS "CEF 109未找到，将在构建时自动下载")
     set(CEF_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef/${CEF_BINARY_NAME}")
 endif()
 

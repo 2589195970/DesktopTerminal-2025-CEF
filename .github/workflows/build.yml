@@ -23,14 +23,14 @@ jobs:
         include:
           - arch: x86
             platform: Win32
-            cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
+            cef_version: "109.1.18+gf1c41e4+chromium-109.0.5414.120"
             qt_arch: win32_msvc2019
-            name: "Windows 32-bit (CEF 75 - Maximum Compatibility)"
+            name: "Windows 32-bit (CEF 109 - Unified Version)"
           - arch: x64
             platform: x64
-            cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
+            cef_version: "109.1.18+gf1c41e4+chromium-109.0.5414.120"
             qt_arch: win64_msvc2019_64
-            name: "Windows 64-bit (CEF 75 - Maximum Compatibility)"
+            name: "Windows 64-bit (CEF 109 - Unified Version)"
 
     name: ${{ matrix.name }}
     
@@ -64,11 +64,11 @@ jobs:
       uses: actions/cache@v4
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-75.1.14-stable-v7
+        key: cef-windows-${{ matrix.arch }}-109.1.18-stable-v1
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-75.1.14-stable-
-          cef-windows-${{ matrix.arch }}-75.1.14-
-          cef-windows-${{ matrix.arch }}-75-
+          cef-windows-${{ matrix.arch }}-109.1.18-stable-
+          cef-windows-${{ matrix.arch }}-109.1.18-
+          cef-windows-${{ matrix.arch }}-109-
 
     - name: Verify CEF Cache Status
       id: verify-cef-cache  
@@ -1352,16 +1352,16 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-linux-x64-75.1.14-verified-v3
+        key: cef-linux-x64-109.1.18-verified-v1
         restore-keys: |
-          cef-linux-x64-75.1.14-verified-
+          cef-linux-x64-109.1.18-verified-
 
     - name: Verify CEF Cache Integrity (Linux)
       id: verify-cef-cache-linux
       run: |
         echo "验证Linux CEF缓存完整性..."
         CEF_VALID=false
-        CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
+        CEF_VERSION="109.1.18+gf1c41e4+chromium-109.0.5414.120"
         CEF_PLATFORM="linux64"
         CEF_BINARY_NAME="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
         
@@ -1440,7 +1440,7 @@ jobs:
         ====================================
         Architecture: x64
         Platform: Linux 64-bit
-        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
+        CEF Version: 109.1.18+gf1c41e4+chromium-109.0.5414.120
         Qt Version: ${{ env.QT_VERSION }}
         Build Type: ${{ env.BUILD_TYPE }}
         Build Date: $(date -u)
@@ -1475,9 +1475,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: third_party/cef
-        key: cef-macos-x64-75.1.14
+        key: cef-macos-x64-109.1.18
         restore-keys: |
-          cef-macos-x64-
+          cef-macos-x64-109-
 
     - name: Download CEF
       if: steps.cache-cef-macos.outputs.cache-hit != 'true'
@@ -1522,7 +1522,7 @@ jobs:
         ====================================
         Architecture: x64
         Platform: macOS 64-bit
-        CEF Version: 75.1.14+gc81164e+chromium-75.0.3770.100
+        CEF Version: 109.1.18+gf1c41e4+chromium-109.0.5414.120
         Qt Version: ${{ env.QT_VERSION }}
         Build Type: ${{ env.BUILD_TYPE }}
         Build Date: $(date -u)
@@ -1688,16 +1688,16 @@ jobs:
           ## DesktopTerminal-CEF Release ${{ github.ref_name }}
           
           ### [PACKAGE] 包含的平台
-          - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
-          - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)  
-          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 75 - 最大兼容性)
-          - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 75 - 最大兼容性)
+          - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 109 - 统一版本)
+          - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 109 - 统一版本)  
+          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 109 - 统一版本)
+          - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 109 - 统一版本)
           
           ### [CHECK] 主要特性
-          - Qt5 + CEF集成的安全桌面终端
+          - Qt5 + CEF 109集成的安全桌面终端
           - 完整的安全控制功能（键盘拦截、URL过滤、全屏锁定）
           - 跨平台兼容性
-          - 针对Windows 7 SP1 32位系统的特别优化
+          - CEF 109统一版本支持
           
           ### [REPORT] 系统要求
           - **Windows**: Windows 7 SP1 或更高版本
