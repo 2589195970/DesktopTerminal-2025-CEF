@@ -162,6 +162,11 @@ void Logger::hotkeyEvent(const QString &msg)
     logEvent("热键退出尝试", msg, "exit.log", L_INFO);
 }
 
+void Logger::exitEvent(const QString &msg, LogLevel lv)
+{
+    logEvent("程序退出", msg, "exit.log", lv);
+}
+
 void Logger::logStartup(const QString &path)
 {
     logEvent("启动", QString("程序启动成功，使用配置文件: %1").arg(path), "startup.log", L_INFO);

@@ -124,6 +124,13 @@ private:
 
     bool m_initialized;
     bool m_shutdownRequested;
+
+    // 静态成员变量（系统信息缓存）
+    static ArchType s_architecture;
+    static PlatformType s_platform;
+    static CompatibilityLevel s_compatibility;
+    static QString s_systemDescription;
+    static bool s_systemInfoDetected;
 };
 
 #endif // APPLICATION_H

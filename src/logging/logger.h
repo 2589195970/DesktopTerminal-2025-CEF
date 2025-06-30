@@ -113,6 +113,7 @@ public:
     void appEvent(const QString &msg, LogLevel lv = L_INFO);
     void configEvent(const QString &msg, LogLevel lv = L_INFO);
     void hotkeyEvent(const QString &msg);
+    void exitEvent(const QString &msg, LogLevel lv = L_INFO);
     void logStartup(const QString &path);
     void errorEvent(const QString &msg, LogLevel lv = L_ERROR);
     void systemEvent(const QString &msg, LogLevel lv = L_INFO);

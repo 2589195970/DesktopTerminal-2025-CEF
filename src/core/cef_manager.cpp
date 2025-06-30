@@ -162,7 +162,16 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         HWND hwnd = static_cast<HWND>(parentWidget);
         RECT rect;
         GetClientRect(hwnd, &rect);
+        
+#ifdef CEF_VERSION_109
+        // CEF 109: SetAsChild使用CefRect而不是RECT
+        CefRect cefRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+        windowInfo.SetAsChild(hwnd, cefRect);
+#else
+        // CEF 75: 使用RECT结构
         windowInfo.SetAsChild(hwnd, rect);
+#endif
+
 #elif defined(Q_OS_MAC)
         // macOS实现
         windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
@@ -172,11 +181,21 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
 #endif
 
         // 配置浏览器设置
+#ifdef CEF_VERSION_109
+        // CEF 109: 部分设置已移除或迁移到其他地方
+        browserSettings.javascript = STATE_ENABLED;
+        browserSettings.javascript_close_windows = STATE_DISABLED;
+        browserSettings.javascript_access_clipboard = STATE_DISABLED;
+        // 注意：web_security和plugins字段在CEF 109中已被移除，
+        // 这些安全策略改为在ResourceRequestHandler中实现
+#else
+        // CEF 75: 支持所有字段
         browserSettings.web_security = m_webSecurityEnabled ? STATE_ENABLED : STATE_DISABLED;
         browserSettings.javascript = STATE_ENABLED;
         browserSettings.javascript_close_windows = STATE_DISABLED;
         browserSettings.javascript_access_clipboard = STATE_DISABLED;
         browserSettings.plugins = STATE_DISABLED;
+#endif
 
         // 创建CEF客户端
         CefRefPtr<CEFClient> client = new CEFClient();
