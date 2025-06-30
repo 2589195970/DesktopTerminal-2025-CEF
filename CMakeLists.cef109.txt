@@ -1,0 +1,92 @@
+# CMakeLists.cef109.txt - CEF 109测试构建配置
+# 使用方法: cmake -DUSE_CEF109=ON ..
+
+# 检查是否启用CEF109测试模式
+option(USE_CEF109 "使用CEF 109进行测试构建" OFF)
+
+if(USE_CEF109)
+    message(STATUS "=== CEF 109测试模式已启用 ===")
+    
+    # 包含CEF109查找模块
+    include(FindCEF109)
+    
+    # 如果找到CEF109，替换CEF相关变量
+    if(CEF109_FOUND)
+        message(STATUS "使用CEF109替换CEF75...")
+        
+        # 重新定义CEF变量指向CEF109
+        set(CEF_VERSION ${CEF109_VERSION})
+        set(CEF_ROOT_DIR ${CEF109_ROOT_DIR})
+        set(CEF_INCLUDE_PATH ${CEF109_INCLUDE_PATH})
+        set(CEF_LIBRARY_DIR ${CEF109_LIBRARY_DIR})
+        set(CEF_BINARY_DIR ${CEF109_BINARY_DIR})
+        set(CEF_RESOURCE_DIR ${CEF109_RESOURCE_DIR})
+        set(CEF_LIBRARY ${CEF109_LIBRARY})
+        set(CEF_WRAPPER_LIBRARY ${CEF109_WRAPPER_LIBRARY})
+        set(CEF_LIBRARIES ${CEF109_LIBRARIES})
+        set(CEF_WRAPPER_SOURCE_DIR ${CEF109_WRAPPER_SOURCE_DIR})
+        
+        # 设置CEF109特定的编译定义
+        add_definitions(-DCEF_VERSION_109=1)
+        add_definitions(-DCEF_TESTING_MODE=1)
+        
+        # 更新二进制名称以区分测试版本
+        set(PROJECT_NAME_CEF109 "${PROJECT_NAME}_CEF109")
+        
+        message(STATUS "CEF109配置完成:")
+        message(STATUS "  - 版本: ${CEF_VERSION}")
+        message(STATUS "  - 根目录: ${CEF_ROOT_DIR}")
+        message(STATUS "  - 库文件: ${CEF_LIBRARIES}")
+        message(STATUS "  - 二进制名称: ${PROJECT_NAME_CEF109}")
+        
+        # 标记为已找到CEF
+        set(CEF_FOUND TRUE)
+    else()
+        message(WARNING "CEF109未找到，但测试模式已启用")
+        message(STATUS "请确保CEF109已正确下载到third_party/cef109目录")
+        set(CEF_FOUND FALSE)
+    endif()
+    
+    # CEF109特定的源文件（如果需要）
+    set(CEF109_TEST_SOURCES
+        # 这里可以添加CEF109特定的测试源文件
+        # 例如: src/cef109/cef109_test_client.cpp
+    )
+    
+    # CEF109特定的头文件
+    set(CEF109_TEST_HEADERS
+        # 这里可以添加CEF109特定的测试头文件
+        # 例如: src/cef109/cef109_test_client.h
+    )
+    
+    # 如果有CEF109特定的源文件，添加到构建中
+    if(CEF109_TEST_SOURCES)
+        list(APPEND SOURCES ${CEF109_TEST_SOURCES})
+    endif()
+    
+    if(CEF109_TEST_HEADERS)
+        list(APPEND HEADERS ${CEF109_TEST_HEADERS})
+    endif()
+    
+else()
+    message(STATUS "=== 使用默认CEF 75构建 ===")
+    message(STATUS "要启用CEF 109测试，请使用: cmake -DUSE_CEF109=ON ..")
+endif()
+
+# 构建配置摘要
+if(USE_CEF109 AND CEF109_FOUND)
+    message(STATUS "构建摘要 (CEF109测试模式):")
+    message(STATUS "  - CEF版本: ${CEF_VERSION}")
+    message(STATUS "  - 项目名称: ${PROJECT_NAME_CEF109}")
+    message(STATUS "  - 构建类型: ${CMAKE_BUILD_TYPE}")
+    message(STATUS "  - 测试模式: 启用")
+elseif(USE_CEF109 AND NOT CEF109_FOUND)
+    message(STATUS "构建摘要 (CEF109测试模式 - 未找到CEF109):")
+    message(STATUS "  - 状态: CEF109测试模式已启用但CEF109未找到")
+    message(STATUS "  - 建议: 运行CEF109下载脚本")
+else()
+    message(STATUS "构建摘要 (标准模式):")
+    message(STATUS "  - CEF版本: 75.1.14 (默认)")
+    message(STATUS "  - 项目名称: ${PROJECT_NAME}")
+    message(STATUS "  - 构建类型: ${CMAKE_BUILD_TYPE}")
+endif()
