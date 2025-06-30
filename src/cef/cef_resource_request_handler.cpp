@@ -183,8 +183,9 @@ void CEFResourceRequestHandler::OnProtocolExecution(
     }
 }
 
-// ==================== Cookie管理接口（CEF 109迁移到UI线程）====================
+// ==================== Cookie管理接口（CEF版本兼容性处理）====================
 
+#if defined(CEF_VERSION_75) || (defined(CEF_VERSION_109) && defined(CEF_SUPPORTS_COOKIE_CALLBACKS))
 bool CEFResourceRequestHandler::CanGetCookies(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -243,6 +244,7 @@ bool CEFResourceRequestHandler::CanSetCookie(
     return true;
 #endif
 }
+#endif // CEF版本兼容性条件编译结束
 
 // ==================== 安全策略配置 ====================
 

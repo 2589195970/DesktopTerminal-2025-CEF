@@ -89,11 +89,12 @@ public:
         CefRefPtr<CefRequest> request,
         bool& allow_os_execution) override;
 
-    // ==================== Cookie管理接口（CEF 109迁移到UI线程）====================
+    // ==================== Cookie管理接口（CEF版本兼容性处理）====================
 
+#if defined(CEF_VERSION_75) || (defined(CEF_VERSION_109) && defined(CEF_SUPPORTS_COOKIE_CALLBACKS))
     /**
      * @brief Cookie访问权限回调
-     * CEF 109: Cookie回调从IO线程迁移到UI线程
+     * 注意：在某些CEF版本中此方法可能不可用
      */
     virtual bool CanGetCookies(
         CefRefPtr<CefBrowser> browser,
@@ -102,13 +103,14 @@ public:
 
     /**
      * @brief Cookie设置权限回调
-     * CEF 109: Cookie回调从IO线程迁移到UI线程
+     * 注意：在某些CEF版本中此方法可能不可用
      */
     virtual bool CanSetCookie(
         CefRefPtr<CefBrowser> browser,
         CefRefPtr<CefFrame> frame,
         CefRefPtr<CefRequest> request,
         const CefCookie& cookie) override;
+#endif
 
     // ==================== 安全策略配置 ====================
 

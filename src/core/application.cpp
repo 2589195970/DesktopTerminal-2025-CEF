@@ -91,6 +91,22 @@ bool Application::initialize()
     // 3. 应用兼容性设置
     applyCompatibilitySettings();
 
+#ifdef Q_OS_WIN
+    // 3.1 Windows 7系统特别需要检查VC++运行时
+    if (isWindows7SP1() && m_windowsPrivilegeManager) {
+        m_windowsPrivilegeManager->setLogger(m_logger);
+        m_windowsPrivilegeManager->setConfigManager(m_configManager);
+        
+        WindowsPrivilegeManager::Result result = m_windowsPrivilegeManager->checkAndHandleVCRuntime();
+        if (result == WindowsPrivilegeManager::Result::Failed) {
+            // VC++运行时检查失败，但不阻止程序继续运行
+            if (m_logger) {
+                m_logger->appEvent("VC++运行时检查失败，但程序将继续运行");
+            }
+        }
+    }
+#endif
+
     // 4. 初始化配置管理
     if (!initializeConfiguration()) {
         return CommonUtils::logErrorAndReturnFalse(m_logger, "配置初始化失败");
@@ -248,21 +264,6 @@ bool Application::checkSystemRequirements()
     
     if (!checkWindowsAPI()) {
         return false;
-    }
-    
-    // Windows 7系统特别需要检查VC++运行时
-#ifdef Q_OS_WIN
-    if (isWindows7SP1() && m_windowsPrivilegeManager) {
-        m_windowsPrivilegeManager->setLogger(m_logger);
-        m_windowsPrivilegeManager->setConfigManager(m_configManager);
-        
-        WindowsPrivilegeManager::Result result = m_windowsPrivilegeManager->checkAndHandleVCRuntime();
-        if (result == WindowsPrivilegeManager::Result::Failed) {
-            // VC++运行时检查失败，但不阻止程序继续运行
-            if (m_logger) {
-                m_logger->appEvent("VC++运行时检查失败，但程序将继续运行");
-            }
-        }
     }
 #endif
 

@@ -108,6 +108,10 @@ private:
 #ifdef Q_OS_WIN
     static bool checkWindowsVersion();
     static bool checkWindowsAPI();
+    static bool isRunningAsAdministrator();
+    static bool checkVCRuntimeInstalled();
+    static QString getVCRuntimeInstallerPath();
+    static bool installVCRuntime();
     void applyWindows7Optimizations();
 #endif
 

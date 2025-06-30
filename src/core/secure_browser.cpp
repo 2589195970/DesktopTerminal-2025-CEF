@@ -395,8 +395,8 @@ void SecureBrowser::initializeHotkeys()
         m_exitHotkeyBackslash = std::make_unique<QHotkey>(QKeySequence("\\"), true, this);
         
         // 连接信号（使用队列连接提高稳定性）
-        connect(m_exitHotkeyF10, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
-        connect(m_exitHotkeyBackslash, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
+        connect(m_exitHotkeyF10.get(), &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
+        connect(m_exitHotkeyBackslash.get(), &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
         
         m_logger->appEvent("全局热键注册成功");
     } catch (...) {
@@ -408,7 +408,7 @@ void SecureBrowser::initializeMaintenanceTimer()
 {
     // 创建维护定时器（使用智能指针）
     m_maintenanceTimer = std::make_unique<QTimer>(this);
-    connect(m_maintenanceTimer, &QTimer::timeout, this, &SecureBrowser::onMaintenanceTimer, Qt::QueuedConnection);
+    connect(m_maintenanceTimer.get(), &QTimer::timeout, this, &SecureBrowser::onMaintenanceTimer, Qt::QueuedConnection);
     m_maintenanceTimer->start(1500); // 每1.5秒检查一次
     
     m_logger->appEvent("维护定时器启动");
@@ -418,7 +418,7 @@ void SecureBrowser::initializeCEFMessageLoopTimer()
 {
     // 创建CEF消息循环定时器（使用智能指针）
     m_cefMessageLoopTimer = std::make_unique<QTimer>(this);
-    connect(m_cefMessageLoopTimer, &QTimer::timeout, this, &SecureBrowser::onCEFMessageLoop, Qt::QueuedConnection);
+    connect(m_cefMessageLoopTimer.get(), &QTimer::timeout, this, &SecureBrowser::onCEFMessageLoop, Qt::QueuedConnection);
     
     // 使用动态间隔而非固定10ms
     updateCEFMessageLoopInterval();
