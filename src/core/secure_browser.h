@@ -30,6 +30,13 @@ class SecureBrowser : public QWidget
 {
     Q_OBJECT
 
+    // CEF性能状态枚举（移到类开始以避免类型解析问题）
+    enum class CEFPerformanceState {
+        Loading,    // 页面加载中 - 高频率消息循环
+        Loaded,     // 页面已加载 - 中频率消息循环
+        Idle        // 空闲状态 - 低频率消息循环
+    };
+
 public:
     explicit SecureBrowser(CEFManager* cefManager, QWidget *parent = nullptr);
     ~SecureBrowser();
@@ -162,12 +169,7 @@ private:
     std::unique_ptr<QTimer> m_maintenanceTimer;
     std::unique_ptr<QTimer> m_cefMessageLoopTimer;
 
-    // CEF性能状态枚举
-    enum class CEFPerformanceState {
-        Loading,    // 页面加载中 - 高频率消息循环
-        Loaded,     // 页面已加载 - 中频率消息循环
-        Idle        // 空闲状态 - 低频率消息循环
-    };
+    // CEF性能状态枚举已移至类开始
 
     // 状态管理
     bool m_needFocusCheck;

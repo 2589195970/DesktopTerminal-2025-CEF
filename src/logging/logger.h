@@ -10,8 +10,7 @@
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QThread>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
+// QNetworkAccessManager和QNetworkReply已移除以避免Qt Network模块依赖
 
 class QWidget;
 
@@ -209,7 +208,7 @@ public:
     void logCPUUsage();
 
     /**
-     * @brief 记录网络状态
+     * @brief 记录网络状态（简化版本，不依赖Qt Network模块）
      */
     void logNetworkStatus();
 
@@ -257,7 +256,7 @@ private:
 private slots:
     void onTimerTimeout();
     void onRuntimePerformanceCheck();
-    void onNetworkLatencyCheckFinished();
+    // onNetworkLatencyCheckFinished已移除以避免Qt Network模块依赖
 
 private:
     static const int LOG_BUFFER_SIZE = 10;
@@ -278,9 +277,9 @@ private:
     QList<RuntimePerformanceSnapshot> m_runtimeSnapshots;
     QMutex m_runtimeMutex;
     
-    // 网络延迟检测
-    QNetworkAccessManager* m_networkManager;
-    QElapsedTimer m_networkLatencyTimer;
+    // 网络延迟检测功能已移除以避免Qt Network模块依赖
+    // QNetworkAccessManager* m_networkManager;
+    // QElapsedTimer m_networkLatencyTimer;
     
     // 性能监控配置
     bool m_performanceMonitoringEnabled;

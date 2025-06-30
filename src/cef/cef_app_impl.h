@@ -36,10 +36,10 @@ public:
     // CefBrowserProcessHandler接口
     virtual void OnContextInitialized() override;
     virtual void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
-    virtual void OnRenderProcessThreadCreated(CefRefPtr<CefListValue> extra_info) override;
+    // OnRenderProcessThreadCreated在CEF 109中已移除或签名已改变
 
     // CefRenderProcessHandler接口
-    virtual void OnRenderThreadCreated(CefRefPtr<CefListValue> extra_info) override;
+    // OnRenderThreadCreated在CEF 109中已移除或签名已改变
     virtual void OnWebKitInitialized() override;
     // 注意：CEF 75中某些RenderProcessHandler方法可能不存在，暂时移除
     // virtual void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info);
