@@ -1,2 +1,21 @@
 build/
 third_party/cef/
+
+# 构建产物
+cmake-build-debug/
+cmake-build-release/
+bin/
+*.log
+
+# 系统文件  
+.DS_Store
+Thumbs.db
+
+# IDE临时文件
+*.vcxproj.user
+*.tmp
+*.bak
+*~
+
+# 日志文件
+log/*.log
