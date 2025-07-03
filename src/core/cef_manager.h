@@ -81,6 +81,12 @@ public:
      */
     void doMessageLoopWork();
 
+    /**
+     * @brief 通知URL退出事件（由CEFClient调用）
+     * @param url 触发退出的URL
+     */
+    void notifyUrlExitTriggered(const QString& url);
+
     // 静态配置方法
     static ProcessMode selectOptimalProcessMode();
     static MemoryProfile selectOptimalMemoryProfile();
@@ -121,6 +127,27 @@ private:
     bool checkCEFDependencies();
     void checkOptionalFiles(const QStringList& optionalFiles, const QString& cefDir);
     QString checkCrashpadStatus();
+
+signals:
+    /**
+     * @brief URL检测到退出触发器时发出此信号
+     * @param url 触发退出的URL
+     */
+    void urlExitTriggered(const QString& url);
+
+    /**
+     * @brief 初始化进度更新信号
+     * @param progress 进度百分比 (0-100)
+     * @param message 当前步骤描述
+     */
+    void initializationProgress(int progress, const QString& message);
+
+    /**
+     * @brief 初始化完成信号
+     * @param success 是否成功
+     * @param errorMessage 错误信息（如果失败）
+     */
+    void initializationFinished(bool success, const QString& errorMessage);
 
 private slots:
     void onApplicationShutdown();

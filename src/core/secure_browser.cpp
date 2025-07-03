@@ -55,6 +55,13 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     initializeWindow();
     initializeCEF();
     initializeHotkeys();
+    
+    // 连接CEFManager的URL退出信号
+    if (m_cefManager) {
+        connect(m_cefManager, &CEFManager::urlExitTriggered, this, &SecureBrowser::handleUrlExit);
+        m_logger->appEvent("URL退出信号已连接");
+    }
+    
     initializeMaintenanceTimer();
     initializeCEFMessageLoopTimer();
     setupSecuritySettings();
@@ -280,6 +287,19 @@ void SecureBrowser::handleExitHotkey()
         m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
         m_needFocusCheck = true; // 恢复焦点检查
     }
+}
+
+void SecureBrowser::handleUrlExit(const QString& url)
+{
+    m_logger->appEvent(QString("收到URL退出信号: %1").arg(url));
+    
+    // 记录URL退出事件到exit.log
+    m_logger->exitEvent(QString("URL退出触发: %1").arg(url));
+    
+    // 直接退出，不需要密码验证
+    m_logger->appEvent("URL检测退出，无需密码验证");
+    m_logger->shutdown();
+    QApplication::quit();
 }
 
 void SecureBrowser::onMaintenanceTimer()

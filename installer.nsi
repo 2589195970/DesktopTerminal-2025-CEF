@@ -280,6 +280,14 @@ Section "主程序" SecMain
     ${Else}
         DetailPrint "警告：未找到应用图标文件"
     ${EndIf}
+    
+    ; 复制VC++ Redistributable安装包（用于自动安装）
+    ${If} ${FileExists} "resources\VC_redist.x86.exe"
+        File /oname=resources\VC_redist.x86.exe "resources\VC_redist.x86.exe"
+        DetailPrint "已复制VC++ Redistributable安装包"
+    ${Else}
+        DetailPrint "警告：未找到VC++ Redistributable安装包"
+    ${EndIf}
 
     ; 注册表写入（适配CEF版本）
     WriteRegStr HKLM "Software\${COMPANYNAME}\${APPNAME}" "InstallDir" "$INSTDIR"
@@ -388,18 +396,68 @@ Section "主程序" SecMain
     ${Else}
         DetailPrint "✅ 所有验证检查通过"
         
-        ; 检查VC++运行时（CEF需要）
+        ; 检查并自动安装VC++运行时（CEF需要）
+        DetailPrint "检查Visual C++ Redistributable运行时..."
         ClearErrors
         ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
         ${If} ${Errors}
-            MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，这可能导致程序无法运行。$\n$\n是否现在打开Microsoft官网下载页面？" IDYES open_vc_download IDNO skip_vc_download
-            open_vc_download:
-                ${If} "${ARCH}" == "x64"
-                    ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+            DetailPrint "未检测到Visual C++ Redistributable，正在自动安装..."
+            
+            ; 检查VC++ Redistributable安装包是否存在
+            ${If} ${FileExists} "$INSTDIR\resources\VC_redist.x86.exe"
+                DetailPrint "开始静默安装VC++ Redistributable..."
+                
+                ; 执行静默安装
+                ExecWait '"$INSTDIR\resources\VC_redist.x86.exe" /install /quiet /norestart' $R1
+                
+                ; 检查安装结果
+                ${If} $R1 == 0
+                    DetailPrint "✓ VC++ Redistributable安装成功"
+                    
+                    ; 重新检查注册表确认安装
+                    ClearErrors
+                    ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
+                    ${If} ${Errors}
+                        DetailPrint "⚠ 安装后仍无法检测到VC++运行时，可能需要重启系统"
+                    ${Else}
+                        DetailPrint "✓ VC++运行时安装验证成功，版本：$R0"
+                    ${EndIf}
+                ${ElseIf} $R1 == 1638
+                    DetailPrint "ℹ VC++ Redistributable已是最新版本"
+                ${ElseIf} $R1 == 3010
+                    DetailPrint "✓ VC++ Redistributable安装成功，但需要重启系统"
+                    MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。"
                 ${Else}
-                    ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+                    DetailPrint "❌ VC++ Redistributable安装失败，返回码：$R1"
+                    
+                    ; 安装失败时提供手动下载选项
+                    MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" IDYES manual_vc_download IDNO skip_manual_vc_download
+                    manual_vc_download:
+                        ${If} "${ARCH}" == "x64"
+                            ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+                        ${Else}
+                            ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+                        ${EndIf}
+                    skip_manual_vc_download:
                 ${EndIf}
-            skip_vc_download:
+                
+                ; 清理临时文件（可选，保留供用户手动重试）
+                ; Delete "$INSTDIR\resources\VC_redist.x86.exe"
+                
+            ${Else}
+                ; VC++安装包不存在时的fallback
+                DetailPrint "❌ 未找到VC++ Redistributable安装包"
+                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" IDYES fallback_vc_download IDNO skip_fallback_vc_download
+                fallback_vc_download:
+                    ${If} "${ARCH}" == "x64"
+                        ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+                    ${Else}
+                        ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+                    ${EndIf}
+                skip_fallback_vc_download:
+            ${EndIf}
+        ${Else}
+            DetailPrint "✓ 检测到Visual C++ Redistributable，版本：$R0"
         ${EndIf}
         
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"

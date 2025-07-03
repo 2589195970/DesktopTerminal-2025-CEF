@@ -239,6 +239,16 @@ bool ConfigManager::isJavaScriptDialogEnabled() const
     return config.value("javascriptDialogEnabled").toBool(false);
 }
 
+bool ConfigManager::isUrlExitEnabled() const
+{
+    return config.value("urlExitEnabled").toBool(true);
+}
+
+QString ConfigManager::getUrlExitPattern() const
+{
+    return config.value("urlExitPattern").toString("/logout");
+}
+
 // 架构和兼容性配置
 bool ConfigManager::isAutoArchDetectionEnabled() const
 {

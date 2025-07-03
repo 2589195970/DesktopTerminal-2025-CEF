@@ -18,6 +18,7 @@
 
 class Logger;
 class ConfigManager;
+class CEFManager;
 
 /**
  * @brief CEF客户端实现类
@@ -36,7 +37,7 @@ class CEFClient : public CefClient,
                   public CefDownloadHandler
 {
 public:
-    CEFClient();
+    CEFClient(CEFManager* cefManager = nullptr);
     virtual ~CEFClient();
 
     // CefClient接口
@@ -122,6 +123,7 @@ private:
 private:
     Logger* m_logger;
     ConfigManager* m_configManager;
+    CEFManager* m_cefManager;
 
     // 安全配置
     QString m_allowedDomain;

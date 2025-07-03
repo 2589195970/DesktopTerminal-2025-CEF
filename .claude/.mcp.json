@@ -1,0 +1,53 @@
+{
+    "mcpServers": {
+        "sequentialThinking": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@zengwenliang/mcp-server-sequential-thinking"
+            ]
+        },
+        "context7": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@upstash/context7-mcp"
+            ]
+        },
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "@playwright/mcp@latest"
+            ]
+        },
+        "memory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+            ]
+        },
+        "puppeteer": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-puppeteer"
+            ]
+        },
+        "filesystem": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "/Users/zhaoziyi/CLionProjects/DesktopTerminal-2025-all/DesktopTerminal-2025-CEF"
+            ]
+        },
+        "package-docs": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-package-docs"
+            ]
+        }
+    }
+}

@@ -2,13 +2,15 @@
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../core/application.h"
+#include "../core/cef_manager.h"
 
 #include <QUrl>
 #include <QRegularExpression>
 
-CEFClient::CEFClient()
+CEFClient::CEFClient(CEFManager* cefManager)
     : m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
+    , m_cefManager(cefManager)
     , m_strictSecurityMode(true)
     , m_keyboardFilterEnabled(true)
     , m_contextMenuEnabled(false)
@@ -62,6 +64,15 @@ void CEFClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFram
     
     if (frame->IsMain()) {
         m_logger->appEvent(QString("主框架地址变更: %1").arg(urlStr));
+        
+        // 检测URL退出触发器（根据配置启用）
+        if (m_configManager->isUrlExitEnabled() && m_cefManager) {
+            QString exitPattern = m_configManager->getUrlExitPattern();
+            if (!exitPattern.isEmpty() && urlStr.contains(exitPattern, Qt::CaseInsensitive)) {
+                m_logger->appEvent(QString("检测到URL退出触发器 '%1' 在URL: %2").arg(exitPattern, urlStr));
+                m_cefManager->notifyUrlExitTriggered(urlStr);
+            }
+        }
         
         // 验证URL是否被允许
         if (!isUrlAllowed(urlStr)) {

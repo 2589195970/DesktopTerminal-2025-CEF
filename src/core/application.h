@@ -4,11 +4,14 @@
 #include <QApplication>
 #include <QString>
 #include <QVersionNumber>
+#include <QThread>
 
 class CEFManager;
 class SecureBrowser;
 class Logger;
 class ConfigManager;
+class LoadingDialog;
+class NetworkChecker;
 
 /**
  * @brief 主应用程序类
@@ -55,10 +58,16 @@ public:
     ~Application();
 
     /**
-     * @brief 初始化应用程序
+     * @brief 初始化应用程序（同步版本）
      * @return 成功返回true，失败返回false
      */
     bool initialize();
+
+    /**
+     * @brief 异步初始化应用程序（带加载对话框）
+     * @return 成功返回true，失败返回false
+     */
+    bool initializeAsync();
 
     /**
      * @brief 启动主界面
@@ -87,6 +96,12 @@ public:
 
 private slots:
     void onAboutToQuit();
+    
+    // 异步初始化相关槽函数
+    void onNetworkCheckCompleted(int status, const QString& details);
+    void onCEFInitializationFinished();
+    void onLoadingDialogRetryRequested();
+    void onLoadingDialogCancelRequested();
 
 private:
     // 初始化步骤
@@ -94,6 +109,13 @@ private:
     bool initializeConfiguration();
     bool initializeCEF();
     bool createMainWindow();
+    
+    // 异步初始化步骤
+    void startAsyncInitialization();
+    void performNetworkCheck();
+    void performCEFInitialization();
+    void handleInitializationSuccess();
+    void handleInitializationFailure(const QString& error, const QString& details = QString());
 
     // 系统检测
     void detectSystemInfo();
@@ -113,6 +135,11 @@ private:
     SecureBrowser* m_mainWindow;
     Logger* m_logger;
     ConfigManager* m_configManager;
+    
+    // 异步初始化相关
+    LoadingDialog* m_loadingDialog;
+    NetworkChecker* m_networkChecker;
+    QThread* m_initializationThread;
 
     // 系统信息
     static ArchType s_architecture;
@@ -123,6 +150,7 @@ private:
 
     bool m_initialized;
     bool m_shutdownRequested;
+    bool m_asyncInitialization;
 };
 
 #endif // APPLICATION_H

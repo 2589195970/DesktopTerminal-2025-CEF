@@ -26,6 +26,22 @@ struct LogEntry {
     QString filename;
 };
 
+// 性能指标数据结构
+struct PerformanceMetrics {
+    double cpuUsageSystem;      // 系统CPU使用率 (%)
+    double cpuUsageProcess;     // 进程CPU使用率 (%)
+    quint64 memoryPhysicalTotal; // 物理内存总量 (MB)
+    quint64 memoryPhysicalUsed;  // 物理内存已用 (MB)
+    quint64 memoryProcessUsed;   // 进程内存使用 (MB)
+    quint64 diskReadBytes;       // 磁盘读取字节数
+    quint64 diskWriteBytes;      // 磁盘写入字节数
+    quint64 networkRecvBytes;    // 网络接收字节数
+    quint64 networkSentBytes;    // 网络发送字节数
+    int processHandles;          // 进程句柄数
+    int processThreads;          // 进程线程数
+    QDateTime timestamp;         // 采集时间戳
+};
+
 /**
  * @brief 日志管理器类
  * 
@@ -105,6 +121,26 @@ public:
      */
     void shutdown();
 
+    /**
+     * @brief 记录性能监控数据
+     */
+    void performanceEvent(const PerformanceMetrics &metrics);
+
+    /**
+     * @brief 启动性能监控
+     */
+    void startPerformanceMonitoring();
+
+    /**
+     * @brief 停止性能监控
+     */
+    void stopPerformanceMonitoring();
+
+    /**
+     * @brief 收集当前性能指标
+     */
+    PerformanceMetrics collectPerformanceMetrics();
+
 private:
     Logger();
     ~Logger();
@@ -113,13 +149,24 @@ private:
 
 private slots:
     void onTimerTimeout();
+    void onPerformanceTimerTimeout();
 
 private:
+    // 平台特定的性能数据收集方法
+#ifdef Q_OS_WIN
+    PerformanceMetrics collectWindowsPerformanceMetrics();
+#elif defined(Q_OS_MAC)
+    PerformanceMetrics collectMacOSPerformanceMetrics();
+#elif defined(Q_OS_LINUX)
+    PerformanceMetrics collectLinuxPerformanceMetrics();
+#endif
+
     static const int LOG_BUFFER_SIZE = 10;
     
     LogLevel m_logLevel;
     QMap<QString, QList<LogEntry>> m_logBuffer;
     QTimer* m_flushTimer;
+    QTimer* m_performanceTimer;
 };
 
 #endif // LOGGER_H

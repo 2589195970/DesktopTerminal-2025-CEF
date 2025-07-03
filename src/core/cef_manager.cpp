@@ -81,39 +81,51 @@ bool CEFManager::initialize()
     }
 
     m_logger->appEvent("开始初始化CEF...");
+    emit initializationProgress(0, "开始初始化CEF...");
 
     // 验证CEF安装
+    emit initializationProgress(20, "正在验证CEF安装...");
     if (!verifyCEFInstallation()) {
         m_logger->errorEvent("CEF安装验证失败");
         handleInitializationError("CEF安装不完整或损坏");
+        emit initializationFinished(false, "CEF安装不完整或损坏");
         return false;
     }
 
     // 检查依赖
+    emit initializationProgress(40, "正在检查CEF依赖...");
     if (!checkCEFDependencies()) {
         m_logger->errorEvent("CEF依赖检查失败");
         handleInitializationError("CEF依赖库缺失");
+        emit initializationFinished(false, "CEF依赖库缺失");
         return false;
     }
 
     // 初始化CEF设置
+    emit initializationProgress(60, "正在初始化CEF设置...");
     if (!initializeCEFSettings()) {
         m_logger->errorEvent("CEF设置初始化失败");
+        emit initializationFinished(false, "CEF设置初始化失败");
         return false;
     }
 
     // 初始化CEF应用
+    emit initializationProgress(80, "正在初始化CEF应用...");
     if (!initializeCEFApp()) {
         m_logger->errorEvent("CEF应用初始化失败");
+        emit initializationFinished(false, "CEF应用初始化失败");
         return false;
     }
 
     // 初始化CEF上下文
+    emit initializationProgress(90, "正在初始化CEF上下文...");
     if (!initializeCEFContext()) {
         m_logger->errorEvent("CEF上下文初始化失败");
+        emit initializationFinished(false, "CEF上下文初始化失败");
         return false;
     }
 
+    emit initializationProgress(100, "CEF初始化完成");
     m_initialized = true;
     m_logger->appEvent("CEF初始化成功");
     m_logger->appEvent(QString("进程模式: %1").arg(
@@ -125,6 +137,9 @@ bool CEFManager::initialize()
     // 记录crashpad状态信息
     QString crashpadStatus = checkCrashpadStatus();
     m_logger->appEvent(QString("Crashpad状态: %1").arg(crashpadStatus));
+
+    // 发射成功完成信号
+    emit initializationFinished(true, QString());
 
     return true;
 }
@@ -181,7 +196,7 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         browserSettings.plugins = STATE_DISABLED;
 
         // 创建CEF客户端
-        CefRefPtr<CEFClient> client = new CEFClient();
+        CefRefPtr<CEFClient> client = new CEFClient(this);
 
         // 创建浏览器
         bool result = CefBrowserHost::CreateBrowser(
@@ -600,6 +615,12 @@ QString CEFManager::checkCrashpadStatus()
     }
     
     return statusInfo.join("，");
+}
+
+void CEFManager::notifyUrlExitTriggered(const QString& url)
+{
+    m_logger->appEvent(QString("检测到URL退出触发器: %1").arg(url));
+    emit urlExitTriggered(url);
 }
 
 void CEFManager::onApplicationShutdown()

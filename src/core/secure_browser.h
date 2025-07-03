@@ -67,6 +67,12 @@ private slots:
     void handleExitHotkey();
 
     /**
+     * @brief 处理URL检测退出
+     * @param url 触发退出的URL
+     */
+    void handleUrlExit(const QString& url);
+
+    /**
      * @brief 定时维护任务
      */
     void onMaintenanceTimer();

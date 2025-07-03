@@ -66,6 +66,10 @@ public:
     bool isContextMenuEnabled() const;
     bool isDownloadEnabled() const;
     bool isJavaScriptDialogEnabled() const;
+    
+    // URL退出配置（新增）
+    bool isUrlExitEnabled() const;
+    QString getUrlExitPattern() const;
 
     // 架构和兼容性配置（新增）
     bool isAutoArchDetectionEnabled() const;

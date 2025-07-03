@@ -1,0 +1,220 @@
+/* 加载动画样式文件 */
+/* 这个文件作为UI主题参考，实际动画通过Qt代码实现 */
+
+/* 主对话框样式 */
+.loading-dialog {
+    background-color: #f0f0f0;
+    border: 2px solid #cccccc;
+    border-radius: 8px;
+    font-family: "Microsoft YaHei", "SimHei", sans-serif;
+}
+
+/* 标题样式 */
+.loading-title {
+    color: #333333;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 10px 0px;
+    text-align: center;
+}
+
+/* 状态文本样式 */
+.loading-status {
+    color: #666666;
+    font-size: 12px;
+    margin: 5px 0px;
+    text-align: center;
+}
+
+/* 错误状态样式 */
+.loading-error {
+    color: #f44336;
+    font-weight: bold;
+}
+
+/* 成功状态样式 */
+.loading-success {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+/* 进度条样式 */
+.loading-progress {
+    border: 2px solid #cccccc;
+    border-radius: 5px;
+    background-color: #ffffff;
+    height: 20px;
+}
+
+.loading-progress-chunk {
+    background-color: #4CAF50;
+    border-radius: 3px;
+}
+
+/* 按钮样式 */
+.loading-button {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 12px;
+    min-width: 70px;
+    cursor: pointer;
+}
+
+.loading-button:hover {
+    background-color: #f5f5f5;
+    border-color: #999999;
+}
+
+.loading-button:pressed {
+    background-color: #e0e0e0;
+}
+
+/* 详细信息文本框样式 */
+.loading-details {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    background-color: #ffffff;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 10px;
+    padding: 5px;
+}
+
+/* 旋转动画关键帧 */
+@keyframes rotate {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* 加载图标动画 */
+.loading-icon {
+    animation: rotate 1s linear infinite;
+    width: 48px;
+    height: 48px;
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1.0;
+    }
+    100% {
+        opacity: 0.6;
+    }
+}
+
+.loading-pulse {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* 渐变动画 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.loading-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* 滑入动画 */
+@keyframes slideIn {
+    from {
+        transform: translateY(-10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.loading-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+    .loading-dialog {
+        width: 90%;
+        max-width: 350px;
+    }
+    
+    .loading-title {
+        font-size: 14px;
+    }
+    
+    .loading-status {
+        font-size: 11px;
+    }
+}
+
+/* 高对比度主题 */
+@media (prefers-contrast: high) {
+    .loading-dialog {
+        background-color: #ffffff;
+        border: 3px solid #000000;
+    }
+    
+    .loading-title {
+        color: #000000;
+    }
+    
+    .loading-status {
+        color: #333333;
+    }
+    
+    .loading-button {
+        border: 2px solid #000000;
+        background-color: #ffffff;
+        color: #000000;
+    }
+}
+
+/* 暗色主题 */
+.loading-dialog.dark-theme {
+    background-color: #2d2d2d;
+    border-color: #555555;
+    color: #ffffff;
+}
+
+.loading-dialog.dark-theme .loading-title {
+    color: #ffffff;
+}
+
+.loading-dialog.dark-theme .loading-status {
+    color: #cccccc;
+}
+
+.loading-dialog.dark-theme .loading-button {
+    background-color: #3d3d3d;
+    border-color: #555555;
+    color: #ffffff;
+}
+
+.loading-dialog.dark-theme .loading-button:hover {
+    background-color: #4d4d4d;
+}
+
+.loading-dialog.dark-theme .loading-progress {
+    background-color: #3d3d3d;
+    border-color: #555555;
+}
+
+.loading-dialog.dark-theme .loading-details {
+    background-color: #1e1e1e;
+    border-color: #555555;
+    color: #ffffff;
+}

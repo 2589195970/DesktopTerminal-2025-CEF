@@ -52,7 +52,7 @@ include(DeployCEF)
 include(ForceCEFDeploy)
 
 # 查找Qt5
-find_package(Qt5 COMPONENTS Core Widgets REQUIRED)
+find_package(Qt5 COMPONENTS Core Widgets Network REQUIRED)
 
 # 设置Qt5的MOC、UIC、RCC
 set(CMAKE_AUTOMOC ON)
@@ -271,6 +271,8 @@ set(SOURCES
     src/logging/logger.cpp
     src/security/security_controller.cpp
     src/security/keyboard_filter.cpp
+    src/ui/loading_dialog.cpp
+    src/network/network_checker.cpp
 )
 
 # 头文件列表
@@ -285,6 +287,8 @@ set(HEADERS
     src/logging/logger.h
     src/security/security_controller.h
     src/security/keyboard_filter.h
+    src/ui/loading_dialog.h
+    src/network/network_checker.h
 )
 
 # QHotkey子项目
@@ -450,6 +454,7 @@ message(STATUS "=== 配置库链接 ===")
 target_link_libraries(${PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
+    Qt5::Network
     qhotkey
 )
 
@@ -621,7 +626,7 @@ if(WIN32)
         dbghelp.lib
         dnsapi.lib
         gdi32.lib
-        psapi.lib
+        psapi.lib        # 性能监控：进程内存信息
         user32.lib
         version.lib
         winmm.lib

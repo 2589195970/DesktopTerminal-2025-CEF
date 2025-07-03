@@ -233,23 +233,18 @@ int main(int argc, char *argv[])
         return -2;
     }
     
-    // 初始化应用程序
-    if (!application.initialize()) {
-        logger.errorEvent("应用程序初始化失败");
+    // 使用异步初始化（带加载动画）
+    if (!application.initializeAsync()) {
+        logger.errorEvent("应用程序异步初始化失败");
         QMessageBox::critical(nullptr, "初始化错误", 
-            "应用程序初始化失败。\\n\\n详细信息请查看日志文件。");
+            "应用程序异步初始化失败。\\n\\n详细信息请查看日志文件。");
         return -3;
     }
     
-    // 显示主窗口
-    if (!application.startMainWindow()) {
-        logger.errorEvent("主窗口显示失败");
-        QMessageBox::critical(nullptr, "窗口错误", 
-            "无法显示主窗口。\\n\\n详细信息请查看日志文件。");
-        return -4;
-    }
-    
     logger.appEvent("应用程序启动完成，进入事件循环");
+    
+    // 启动性能监控
+    logger.startPerformanceMonitoring();
     
     // 运行应用程序
     int result = app.exec();
