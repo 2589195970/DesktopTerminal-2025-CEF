@@ -1126,7 +1126,8 @@ jobs:
             $qtDlls = @(
                 "Qt5Core.dll",
                 "Qt5Gui.dll", 
-                "Qt5Widgets.dll"
+                "Qt5Widgets.dll",
+                "Qt5Network.dll"
             )
             
             Write-Host "Copying Qt5 runtime DLLs..."
@@ -1158,14 +1159,14 @@ jobs:
             # Verify Qt5 deployment
             Write-Host "=== Qt5 Deployment Verification ==="
             $qtDeployedFiles = Get-ChildItem "$artifactPath\Qt5*.dll" -ErrorAction SilentlyContinue
-            if ($qtDeployedFiles.Count -eq 3) {
+            if ($qtDeployedFiles.Count -eq 4) {
                 $qtTotalSize = ($qtDeployedFiles | Measure-Object -Property Length -Sum).Sum
                 Write-Host "SUCCESS: All Qt5 DLLs deployed ($($qtDeployedFiles.Count) files, $([math]::Round($qtTotalSize/1MB, 2)) MB)"
             } else {
-                Write-Host "WARNING: Qt5 deployment verification failed ($($qtDeployedFiles.Count)/3 DLLs found)"
+                Write-Host "WARNING: Qt5 deployment verification failed ($($qtDeployedFiles.Count)/4 DLLs found)"
                 Write-Host "Checking individual Qt5 DLL files..."
                 
-                $qtDllsCheck = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll")
+                $qtDllsCheck = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll", "Qt5Network.dll")
                 $foundDlls = 0
                 foreach ($dll in $qtDllsCheck) {
                     $dllPath = Join-Path $artifactPath $dll
@@ -1178,10 +1179,10 @@ jobs:
                     }
                 }
                 
-                if ($foundDlls -eq 3) {
+                if ($foundDlls -eq 4) {
                     Write-Host "SUCCESS: All Qt5 DLLs verified individually"
                 } else {
-                    Write-Host "ERROR: Qt5 deployment incomplete ($foundDlls/3 DLLs found)"
+                    Write-Host "ERROR: Qt5 deployment incomplete ($foundDlls/4 DLLs found)"
                     exit 1
                 }
             }

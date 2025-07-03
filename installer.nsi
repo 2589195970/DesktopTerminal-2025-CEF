@@ -130,6 +130,7 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Core.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Gui.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\Qt5Network.dll"
     DetailPrint "✓ Qt5运行时库已安装"
     
     ; 安装CEF子进程文件（架构特定处理）
@@ -223,7 +224,11 @@ Section "主程序" SecMain
     ${If} ${FileExists} "$INSTDIR\Qt5Core.dll"
         ${If} ${FileExists} "$INSTDIR\Qt5Gui.dll"
             ${If} ${FileExists} "$INSTDIR\Qt5Widgets.dll"
-                DetailPrint "✓ Qt5运行时库安装完整"
+                ${If} ${FileExists} "$INSTDIR\Qt5Network.dll"
+                    DetailPrint "✓ Qt5运行时库安装完整"
+                ${Else}
+                    DetailPrint "⚠ Qt5Network.dll缺失，网络功能将无法使用"
+                ${EndIf}
             ${Else}
                 DetailPrint "⚠ Qt5Widgets.dll缺失"
             ${EndIf}
