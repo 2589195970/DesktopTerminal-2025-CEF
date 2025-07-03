@@ -16,8 +16,6 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#elif defined(Q_OS_MAC)
-#include <AppKit/AppKit.h>
 #elif defined(Q_OS_LINUX)
 #include <X11/Xlib.h>
 #endif

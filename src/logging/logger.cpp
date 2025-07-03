@@ -450,11 +450,11 @@ PerformanceMetrics Logger::collectMacOSPerformanceMetrics()
 
     // 获取当前进程的内存信息
     task_t current_task = mach_task_self();
-    mach_task_basic_info_data_t task_info;
+    mach_task_basic_info_data_t task_basic_info;
     mach_msg_type_number_t task_info_count = MACH_TASK_BASIC_INFO_COUNT;
     
-    if (task_info(current_task, MACH_TASK_BASIC_INFO, (task_info_t)&task_info, &task_info_count) == KERN_SUCCESS) {
-        metrics.memoryProcessUsed = task_info.resident_size / (1024 * 1024); // 转换为MB
+    if (task_info(current_task, MACH_TASK_BASIC_INFO, (task_info_t)&task_basic_info, &task_info_count) == KERN_SUCCESS) {
+        metrics.memoryProcessUsed = task_basic_info.resident_size / (1024 * 1024); // 转换为MB
     }
 
     // 获取CPU信息

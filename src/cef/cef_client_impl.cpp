@@ -559,8 +559,10 @@ void CEFClient::showDevTools()
         CefWindowInfo windowInfo;
         CefBrowserSettings settings;
         
-        // 设置开发者工具窗口为弹出窗口
+        // 在Windows平台设置开发者工具窗口为弹出窗口
+#ifdef Q_OS_WIN
         windowInfo.SetAsPopup(nullptr, "开发者工具");
+#endif
         
         // 显示开发者工具
         host->ShowDevTools(windowInfo, nullptr, settings, CefPoint());

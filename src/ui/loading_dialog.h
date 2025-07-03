@@ -99,11 +99,6 @@ private:
     void drawCheckIcon(QPainter *painter, int size) const;
     void drawExclamationIcon(QPainter *painter, int size) const;
     
-    // DPI感知工具函数
-    int scaledSize(int baseSize) const;
-    int scaledFont(int baseFontSize) const;
-    QSize scaledWindowSize(int baseWidth, int baseHeight) const;
-    double getDpiScale() const;
     void applyModernStyles();
 
 private:
