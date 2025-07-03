@@ -2,14 +2,18 @@
 #define LOADING_DIALOG_H
 
 #include <QDialog>
-#include <QLabel>
-#include <QProgressBar>
-#include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QMovie>
-#include <QTimer>
+#include <QLabel>
+#include <QProgressBar>
 #include <QTextEdit>
+#include <QPushButton>
+#include <QTimer>
+#include <QMovie>
+#include <QGraphicsDropShadowEffect>
+#include <QPropertyAnimation>
+#include <QSequentialAnimationGroup>
+#include <QParallelAnimationGroup>
 
 /**
  * @brief CEF加载进度对话框
@@ -38,97 +42,112 @@ public:
     explicit LoadingDialog(QWidget *parent = nullptr);
     ~LoadingDialog();
 
-    /**
-     * @brief 更新加载状态
-     * @param state 当前状态
-     * @param message 状态描述
-     */
     void updateLoadingState(LoadingState state, const QString& message = QString());
-
-    /**
-     * @brief 显示错误信息
-     * @param error 错误描述
-     * @param details 详细错误信息
-     * @param showRetry 是否显示重试按钮
-     */
     void showError(const QString& error, const QString& details = QString(), bool showRetry = true);
-
-    /**
-     * @brief 显示网络错误
-     * @param networkError 网络错误描述
-     */
     void showNetworkError(const QString& networkError);
-
-    /**
-     * @brief 设置是否可以取消
-     * @param cancellable 是否可取消
-     */
     void setCancellable(bool cancellable);
-
-    /**
-     * @brief 获取当前状态
-     */
     LoadingState getCurrentState() const { return m_currentState; }
 
 signals:
-    /**
-     * @brief 用户请求重试
-     */
     void retryRequested();
-
-    /**
-     * @brief 用户请求取消
-     */
     void cancelRequested();
-
-    /**
-     * @brief 用户请求查看详细信息
-     */
     void detailsRequested();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private slots:
     void onRetryClicked();
     void onCancelClicked();
     void onDetailsToggled();
-    void updateAnimation();
+    void updateLoadingAnimation();
+    void updateProgressAnimation();
 
 private:
     void setupUI();
-    void setupLoadingAnimation();
+    void setupAnimations();
+    void setupShadowEffects();
+    void setupProgressSteps();
     void updateStateText();
+    void updateStateIcon();
+    void updateProgressSteps();
     void showButtons(bool retry, bool cancel, bool details);
+    void animateStateTransition();
+    void startLoadingAnimation();
+    void stopLoadingAnimation();
     QString getStateMessage(LoadingState state) const;
+    QString getModernStyleSheet() const;
+    QPixmap createStateIcon(LoadingState state) const;
+    QPixmap createLoadingRing(int frame) const;
+    QColor getStateColor(LoadingState state) const;
+    int getStateProgress(LoadingState state) const;
+    
+    // DPI感知工具函数
+    double getDpiScale() const;
+    int scaledSize(int baseSize) const;
+    int scaledFont(int baseFontSize) const;
+    QSize scaledWindowSize(int baseWidth, int baseHeight) const;
+    
+    // 图标绘制辅助函数
+    void drawGearIcon(QPainter *painter, int size) const;
+    void drawWifiIcon(QPainter *painter, int size) const;
+    void drawShieldIcon(QPainter *painter, int size) const;
+    void drawGlobeIcon(QPainter *painter, int size) const;
+    void drawMonitorIcon(QPainter *painter, int size) const;
+    void drawCheckIcon(QPainter *painter, int size) const;
+    void drawExclamationIcon(QPainter *painter, int size) const;
+    
+    // DPI感知工具函数
+    int scaledSize(int baseSize) const;
+    int scaledFont(int baseFontSize) const;
+    QSize scaledWindowSize(int baseWidth, int baseHeight) const;
+    double getDpiScale() const;
+    void applyModernStyles();
 
 private:
+    // 布局组件
+    QVBoxLayout *m_mainLayout;
+    QHBoxLayout *m_buttonLayout;
+    QVBoxLayout *m_headerLayout;
+    QHBoxLayout *m_iconLayout;
+    QHBoxLayout *m_stepsLayout;
+    
     // UI组件
-    QVBoxLayout* m_mainLayout;
-    QHBoxLayout* m_buttonLayout;
+    QLabel *m_iconLabel;
+    QLabel *m_loadingRingLabel;
+    QLabel *m_titleLabel;
+    QLabel *m_statusLabel;
+    QLabel *m_subtitleLabel;
+    QProgressBar *m_progressBar;
+    QLabel *m_progressLabel;
+    QTextEdit *m_detailsText;
+    QPushButton *m_retryButton;
+    QPushButton *m_cancelButton;
+    QPushButton *m_detailsButton;
     
-    QLabel* m_iconLabel;
-    QLabel* m_titleLabel;
-    QLabel* m_statusLabel;
-    QProgressBar* m_progressBar;
-    QTextEdit* m_detailsText;
+    // 进度步骤指示器
+    QList<QLabel*> m_stepLabels;
     
-    QPushButton* m_retryButton;
-    QPushButton* m_cancelButton;
-    QPushButton* m_detailsButton;
-
-    // 加载动画
-    QMovie* m_loadingMovie;
-    QTimer* m_animationTimer;
-    int m_animationFrame;
-
-    // 状态管理
+    // 动画相关
+    QTimer *m_loadingAnimationTimer;
+    QTimer *m_progressAnimationTimer;
+    QPropertyAnimation *m_iconAnimation;
+    QPropertyAnimation *m_progressAnimation;
+    QSequentialAnimationGroup *m_stateTransitionGroup;
+    
+    // 状态变量
+    int m_loadingFrame;
+    int m_progressFrame;
     LoadingState m_currentState;
     QString m_currentMessage;
     QString m_errorDetails;
     bool m_cancellable;
     bool m_detailsVisible;
+    
+    // 视觉效果
+    QGraphicsDropShadowEffect *m_shadowEffect;
 };
 
 #endif // LOADING_DIALOG_H

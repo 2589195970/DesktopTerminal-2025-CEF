@@ -393,7 +393,7 @@ bool Application::createMainWindow()
 {
     try {
         m_mainWindow = new SecureBrowser(m_cefManager);
-        m_mainWindow->show();
+        // 不在这里立即显示窗口，由调用者控制显示时机
         return true;
     } catch (...) {
         if (m_logger) {
@@ -767,19 +767,36 @@ void Application::performCEFInitialization()
 
 void Application::handleInitializationSuccess()
 {
-    m_loadingDialog->updateLoadingState(LoadingDialog::Completed, "启动完成！");
-    
     m_initialized = true;
     m_logger->appEvent("异步初始化完成");
     
-    // 短暂延迟后创建主窗口
-    QTimer::singleShot(500, this, [this]() {
-        if (createMainWindow()) {
-            m_logger->appEvent("主窗口创建成功");
-        } else {
-            handleInitializationFailure("主窗口创建失败", "无法创建应用程序主窗口。");
-        }
-    });
+    // 立即创建主窗口但不显示
+    if (createMainWindow()) {
+        m_logger->appEvent("主窗口创建成功");
+        
+        // 等待主窗口完全准备就绪后再关闭加载对话框
+        QTimer::singleShot(200, this, [this]() {
+            // 确保主窗口已经准备好并开始加载内容
+            if (m_mainWindow) {
+                // 先显示主窗口
+                m_mainWindow->show();
+                m_mainWindow->raise();
+                m_mainWindow->activateWindow();
+                
+                // 然后更新加载状态为完成并关闭对话框
+                m_loadingDialog->updateLoadingState(LoadingDialog::Completed, "启动完成！");
+                
+                // 短暂显示完成状态后关闭对话框
+                QTimer::singleShot(300, this, [this]() {
+                    if (m_loadingDialog) {
+                        m_loadingDialog->accept();
+                    }
+                });
+            }
+        });
+    } else {
+        handleInitializationFailure("主窗口创建失败", "无法创建应用程序主窗口。");
+    }
 }
 
 void Application::handleInitializationFailure(const QString& error, const QString& details)
