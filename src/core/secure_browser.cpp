@@ -29,6 +29,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_configManager(&ConfigManager::instance())
     , m_exitHotkeyF10(nullptr)
     , m_exitHotkeyBackslash(nullptr)
+    , m_devToolsHotkeyF12(nullptr)
     , m_maintenanceTimer(nullptr)
     , m_cefMessageLoopTimer(nullptr)
     , m_needFocusCheck(true)
@@ -38,6 +39,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_strictSecurityMode(true)
     , m_keyboardFilterEnabled(true)
     , m_contextMenuEnabled(false)
+    , m_devToolsOpen(false)
     , m_windowHandle(nullptr)
     , m_cefMessageLoopLogCounter(0)
 {
@@ -98,6 +100,11 @@ SecureBrowser::~SecureBrowser()
     if (m_exitHotkeyBackslash) {
         delete m_exitHotkeyBackslash;
         m_exitHotkeyBackslash = nullptr;
+    }
+    
+    if (m_devToolsHotkeyF12) {
+        delete m_devToolsHotkeyF12;
+        m_devToolsHotkeyF12 = nullptr;
     }
 
     m_logger->appEvent("SecureBrowser销毁完成");
@@ -289,6 +296,24 @@ void SecureBrowser::handleExitHotkey()
     }
 }
 
+void SecureBrowser::handleDevToolsHotkey()
+{
+    m_needFocusCheck = false; // 暂时禁用焦点检查
+    
+    QString password;
+    bool ok = m_logger->getPassword(this, "开发者工具", "请输入密码以开启/关闭开发者工具：", password);
+    QString exitPassword = m_configManager->getExitPassword();
+    
+    if (ok && password == exitPassword) {
+        m_logger->hotkeyEvent("开发者工具密码正确");
+        toggleDevTools();
+    } else {
+        m_logger->hotkeyEvent(ok ? "开发者工具密码错误" : "取消开发者工具");
+        m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
+        m_needFocusCheck = true; // 恢复焦点检查
+    }
+}
+
 void SecureBrowser::handleUrlExit(const QString& url)
 {
     m_logger->appEvent(QString("收到URL退出信号: %1").arg(url));
@@ -392,12 +417,14 @@ void SecureBrowser::initializeHotkeys()
         // 创建全局热键（与原项目相同）
         m_exitHotkeyF10 = new QHotkey(QKeySequence("F10"), true, this);
         m_exitHotkeyBackslash = new QHotkey(QKeySequence("\\"), true, this);
+        m_devToolsHotkeyF12 = new QHotkey(QKeySequence("F12"), true, this);
         
         // 连接信号（使用队列连接提高稳定性）
         connect(m_exitHotkeyF10, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
         connect(m_exitHotkeyBackslash, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
+        connect(m_devToolsHotkeyF12, &QHotkey::activated, this, &SecureBrowser::handleDevToolsHotkey, Qt::QueuedConnection);
         
-        m_logger->appEvent("全局热键注册成功");
+        m_logger->appEvent("全局热键注册成功 (F10, \\, F12)");
     } catch (...) {
         m_logger->errorEvent("全局热键注册失败");
     }
@@ -602,6 +629,45 @@ void SecureBrowser::handleBrowserError(const QString& error)
     
     QMessageBox::critical(this, "浏览器错误", 
         QString("浏览器初始化失败：\n%1\n\n请检查CEF安装是否完整。").arg(error));
+}
+
+void SecureBrowser::toggleDevTools()
+{
+    if (!m_cefManager || !m_cefBrowserCreated) {
+        m_logger->errorEvent("开发者工具操作失败：CEF浏览器未准备就绪");
+        m_logger->showMessage(this, "错误", "浏览器未准备就绪，无法操作开发者工具");
+        return;
+    }
+    
+    if (m_devToolsOpen) {
+        // 关闭开发者工具
+        if (m_cefManager->closeDevTools(m_cefBrowserId)) {
+            m_devToolsOpen = false;
+            m_logger->appEvent("开发者工具已关闭");
+            m_logger->showMessage(this, "开发者工具", "开发者工具已关闭");
+            
+            // 通知键盘过滤器禁用开发者模式
+            // TODO: 集成KeyboardFilter实例并调用setDeveloperModeEnabled(false)
+        }
+    } else {
+        // 开启开发者工具
+        if (m_cefManager->showDevTools(m_cefBrowserId)) {
+            m_devToolsOpen = true;
+            m_logger->appEvent("开发者工具已开启");
+            m_logger->showMessage(this, "开发者工具", "开发者工具已开启");
+            
+            // 通知键盘过滤器启用开发者模式
+            // TODO: 集成KeyboardFilter实例并调用setDeveloperModeEnabled(true)
+        }
+    }
+    
+    // 操作完成后恢复焦点检查
+    m_needFocusCheck = true;
+}
+
+bool SecureBrowser::isDevToolsOpen() const
+{
+    return m_devToolsOpen;
 }
 
 void SecureBrowser::showSecurityViolationWarning(const QString& violation)

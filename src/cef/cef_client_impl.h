@@ -116,6 +116,10 @@ private:
     void logNavigationAttempt(const QString& url, bool allowed);
     void logKeyboardEvent(const CefKeyEvent& event, bool allowed);
 
+    // 开发者工具管理
+    void showDevTools();
+    void closeDevTools();
+
     // Windows 7兼容性处理
     void applyWindows7Optimizations();
     bool handleWindows7KeyEvent(const CefKeyEvent& event);

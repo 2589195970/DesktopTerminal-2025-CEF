@@ -623,6 +623,79 @@ void CEFManager::notifyUrlExitTriggered(const QString& url)
     emit urlExitTriggered(url);
 }
 
+bool CEFManager::showDevTools(int browserId)
+{
+    if (!m_initialized) {
+        m_logger->errorEvent("开发者工具操作失败：CEF未初始化");
+        return false;
+    }
+    
+    // 通过CEF API获取浏览器实例
+    CefRefPtr<CefBrowser> browser = CefBrowser::GetBrowser(browserId);
+    if (!browser) {
+        m_logger->errorEvent(QString("开发者工具操作失败：找不到浏览器ID %1").arg(browserId));
+        return false;
+    }
+    
+    // 获取主机对象并显示开发者工具
+    CefRefPtr<CefBrowserHost> host = browser->GetHost();
+    if (!host) {
+        m_logger->errorEvent("开发者工具操作失败：无法获取浏览器主机");
+        return false;
+    }
+    
+    try {
+        // 创建开发者工具窗口信息
+        CefWindowInfo windowInfo;
+        CefBrowserSettings settings;
+        
+        // 设置开发者工具窗口为弹出窗口
+        windowInfo.SetAsPopup(nullptr, "开发者工具");
+        
+        // 显示开发者工具
+        host->ShowDevTools(windowInfo, nullptr, settings, CefPoint());
+        
+        m_logger->appEvent(QString("成功开启浏览器ID %1 的开发者工具").arg(browserId));
+        return true;
+    } catch (...) {
+        m_logger->errorEvent("开发者工具开启异常");
+        return false;
+    }
+}
+
+bool CEFManager::closeDevTools(int browserId)
+{
+    if (!m_initialized) {
+        m_logger->errorEvent("开发者工具操作失败：CEF未初始化");
+        return false;
+    }
+    
+    // 通过CEF API获取浏览器实例
+    CefRefPtr<CefBrowser> browser = CefBrowser::GetBrowser(browserId);
+    if (!browser) {
+        m_logger->errorEvent(QString("开发者工具操作失败：找不到浏览器ID %1").arg(browserId));
+        return false;
+    }
+    
+    // 获取主机对象并关闭开发者工具
+    CefRefPtr<CefBrowserHost> host = browser->GetHost();
+    if (!host) {
+        m_logger->errorEvent("开发者工具操作失败：无法获取浏览器主机");
+        return false;
+    }
+    
+    try {
+        // 关闭开发者工具
+        host->CloseDevTools();
+        
+        m_logger->appEvent(QString("成功关闭浏览器ID %1 的开发者工具").arg(browserId));
+        return true;
+    } catch (...) {
+        m_logger->errorEvent("开发者工具关闭异常");
+        return false;
+    }
+}
+
 void CEFManager::onApplicationShutdown()
 {
     shutdown();

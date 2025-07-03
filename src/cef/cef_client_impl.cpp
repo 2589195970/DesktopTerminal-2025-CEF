@@ -541,6 +541,59 @@ void CEFClient::applyWindows7Optimizations()
     // 可以在这里添加更多Windows 7特定的优化
 }
 
+void CEFClient::showDevTools()
+{
+    if (!m_browser) {
+        m_logger->errorEvent("开发者工具操作失败：浏览器实例未初始化");
+        return;
+    }
+    
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host) {
+        m_logger->errorEvent("开发者工具操作失败：无法获取浏览器主机");
+        return;
+    }
+    
+    try {
+        // 创建开发者工具窗口信息
+        CefWindowInfo windowInfo;
+        CefBrowserSettings settings;
+        
+        // 设置开发者工具窗口为弹出窗口
+        windowInfo.SetAsPopup(nullptr, "开发者工具");
+        
+        // 显示开发者工具
+        host->ShowDevTools(windowInfo, nullptr, settings, CefPoint());
+        
+        logSecurityEvent("开发者工具", "已开启");
+    } catch (...) {
+        m_logger->errorEvent("开发者工具开启异常");
+    }
+}
+
+void CEFClient::closeDevTools()
+{
+    if (!m_browser) {
+        m_logger->errorEvent("开发者工具操作失败：浏览器实例未初始化");
+        return;
+    }
+    
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host) {
+        m_logger->errorEvent("开发者工具操作失败：无法获取浏览器主机");
+        return;
+    }
+    
+    try {
+        // 关闭开发者工具
+        host->CloseDevTools();
+        
+        logSecurityEvent("开发者工具", "已关闭");
+    } catch (...) {
+        m_logger->errorEvent("开发者工具关闭异常");
+    }
+}
+
 bool CEFClient::handleWindows7KeyEvent(const CefKeyEvent& event)
 {
     // Windows 7特殊键盘事件处理

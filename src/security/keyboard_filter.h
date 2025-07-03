@@ -51,6 +51,18 @@ public:
     bool isAllowedFunctionKey(QKeyEvent* event);
 
     /**
+     * @brief 设置开发者模式状态
+     * @param enabled 是否启用开发者模式
+     */
+    void setDeveloperModeEnabled(bool enabled);
+    
+    /**
+     * @brief 检查是否启用开发者模式
+     * @return 开发者模式启用状态
+     */
+    bool isDeveloperModeEnabled() const;
+
+    /**
      * @brief 启用/禁用键盘过滤
      */
     void setFilterEnabled(bool enabled);
@@ -105,6 +117,7 @@ private:
     // 过滤状态
     bool m_filterEnabled;
     bool m_strictMode;
+    bool m_developerModeEnabled;
     
     // 危险按键组合集合
     QSet<QString> m_dangerousKeyCombos;

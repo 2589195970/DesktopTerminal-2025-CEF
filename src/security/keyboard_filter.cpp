@@ -11,6 +11,7 @@ KeyboardFilter::KeyboardFilter(QObject *parent)
     , m_configManager(&ConfigManager::instance())
     , m_filterEnabled(true)
     , m_strictMode(true)
+    , m_developerModeEnabled(false)
     , m_totalKeyEvents(0)
     , m_filteredKeyEvents(0)
     , m_statisticsTimer(nullptr)
@@ -84,8 +85,17 @@ bool KeyboardFilter::shouldFilterKeyEvent(QKeyEvent* event)
         return true;
     }
     
-    // 检查调试按键组合
+    // 检查调试按键组合（在开发者模式下允许部分调试按键）
     if (isDebugKeyCombo(key, modifiers)) {
+        // 开发者模式下允许F12和部分调试按键
+        if (m_developerModeEnabled && (key == Qt::Key_F12 || 
+                                       (key == Qt::Key_I && modifiers == (Qt::ControlModifier | Qt::ShiftModifier)) ||
+                                       (key == Qt::Key_J && modifiers == (Qt::ControlModifier | Qt::ShiftModifier)) ||
+                                       (key == Qt::Key_C && modifiers == (Qt::ControlModifier | Qt::ShiftModifier)))) {
+            logFilterEvent(QString("开发者模式允许调试按键: %1").arg(getKeyDescription(event)), false);
+            return false;
+        }
+        
         m_filteredKeyEvents++;
         QString keyDesc = getKeyDescription(event);
         logFilterEvent(QString("过滤调试按键: %1").arg(keyDesc), true);
@@ -294,6 +304,17 @@ QString KeyboardFilter::getKeyDescription(int key, Qt::KeyboardModifiers modifie
 {
     QKeySequence sequence(key | modifiers);
     return sequence.toString();
+}
+
+void KeyboardFilter::setDeveloperModeEnabled(bool enabled)
+{
+    m_developerModeEnabled = enabled;
+    m_logger->appEvent(QString("开发者模式键盘过滤: %1").arg(enabled ? "启用" : "禁用"));
+}
+
+bool KeyboardFilter::isDeveloperModeEnabled() const
+{
+    return m_developerModeEnabled;
 }
 
 void KeyboardFilter::logFilterEvent(const QString& description, bool filtered)

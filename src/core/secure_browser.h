@@ -67,6 +67,11 @@ private slots:
     void handleExitHotkey();
 
     /**
+     * @brief 处理开发者工具热键（F12）
+     */
+    void handleDevToolsHotkey();
+
+    /**
      * @brief 处理URL检测退出
      * @param url 触发退出的URL
      */
@@ -113,6 +118,10 @@ private:
     void destroyCEFBrowser();
     void resizeCEFBrowser();
 
+    // 开发者工具管理
+    void toggleDevTools();
+    bool isDevToolsOpen() const;
+
     // 错误处理
     void handleBrowserError(const QString& error);
     void showSecurityViolationWarning(const QString& violation);
@@ -126,6 +135,7 @@ private:
     // 热键管理
     QHotkey* m_exitHotkeyF10;
     QHotkey* m_exitHotkeyBackslash;
+    QHotkey* m_devToolsHotkeyF12;
 
     // 定时器
     QTimer* m_maintenanceTimer;
@@ -143,6 +153,9 @@ private:
     bool m_strictSecurityMode;
     bool m_keyboardFilterEnabled;
     bool m_contextMenuEnabled;
+
+    // 开发者工具状态
+    bool m_devToolsOpen;
 
     // 窗口句柄（用于CEF集成）
     void* m_windowHandle;

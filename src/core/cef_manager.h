@@ -87,6 +87,20 @@ public:
      */
     void notifyUrlExitTriggered(const QString& url);
 
+    /**
+     * @brief 显示开发者工具
+     * @param browserId 浏览器ID
+     * @return 成功返回true
+     */
+    bool showDevTools(int browserId);
+
+    /**
+     * @brief 关闭开发者工具
+     * @param browserId 浏览器ID
+     * @return 成功返回true
+     */
+    bool closeDevTools(int browserId);
+
     // 静态配置方法
     static ProcessMode selectOptimalProcessMode();
     static MemoryProfile selectOptimalMemoryProfile();
