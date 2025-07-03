@@ -59,10 +59,10 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint);
     setModal(true);
     
-    // 参照现代UI设计，设置简洁大方的尺寸
-    QSize windowSize = scaledWindowSize(480, 320);
+    // 参照现代UI设计，设置宽敞的尺寸比例 - 至少712x614
+    QSize windowSize = scaledWindowSize(720, 600);
     resize(windowSize);
-    setMinimumSize(scaledWindowSize(400, 280));
+    setMinimumSize(scaledWindowSize(650, 500));
     
     // 居中显示
     QScreen* screen = QApplication::primaryScreen();
@@ -92,47 +92,47 @@ void LoadingDialog::setupUI()
 {
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setSpacing(scaledSize(0));
-    m_mainLayout->setContentsMargins(scaledSize(40), scaledSize(40), scaledSize(40), scaledSize(40));
+    m_mainLayout->setContentsMargins(scaledSize(80), scaledSize(100), scaledSize(80), scaledSize(80));
     
-    // 顶部弹性空间
-    m_mainLayout->addStretch(2);
+    // 顶部大量留白空间
+    m_mainLayout->addStretch(3);
     
-    // 图标区域 - 居中简洁设计
+    // 图标区域 - 更大尺寸适应大窗口
     m_iconLabel = new QLabel();
     m_iconLabel->setAlignment(Qt::AlignCenter);
-    m_iconLabel->setFixedSize(scaledSize(60), scaledSize(60));
+    m_iconLabel->setFixedSize(scaledSize(140), scaledSize(140));
     m_iconLabel->setObjectName("iconLabel");
     
     // Loading环标签
     m_loadingRingLabel = new QLabel();
     m_loadingRingLabel->setAlignment(Qt::AlignCenter);
-    m_loadingRingLabel->setFixedSize(scaledSize(60), scaledSize(60));
+    m_loadingRingLabel->setFixedSize(scaledSize(140), scaledSize(140));
     m_loadingRingLabel->setObjectName("loadingRingLabel");
     m_loadingRingLabel->setVisible(false);
     
     m_mainLayout->addWidget(m_iconLabel);
-    m_mainLayout->addSpacing(scaledSize(24));
+    m_mainLayout->addSpacing(scaledSize(60));
     
-    // 状态标签 - 作为主要信息
+    // 状态标签 - 更大字体适应大窗口
     m_statusLabel = new QLabel("正在启动");
     m_statusLabel->setObjectName("statusLabel");
     m_statusLabel->setAlignment(Qt::AlignCenter);
     m_statusLabel->setWordWrap(true);
     QFont statusFont = m_statusLabel->font();
-    statusFont.setPointSize(scaledFont(18));
+    statusFont.setPointSize(scaledFont(32));
     statusFont.setWeight(QFont::Medium);
     m_statusLabel->setFont(statusFont);
     m_mainLayout->addWidget(m_statusLabel);
     
-    m_mainLayout->addSpacing(scaledSize(8));
+    m_mainLayout->addSpacing(scaledSize(25));
     
-    // 副标题 - 简化描述
+    // 副标题 - 适当增大字体
     m_subtitleLabel = new QLabel("正在初始化应用程序...");
     m_subtitleLabel->setObjectName("subtitleLabel");
     m_subtitleLabel->setAlignment(Qt::AlignCenter);
     m_subtitleLabel->setWordWrap(true);
     QFont subtitleFont = m_subtitleLabel->font();
-    subtitleFont.setPointSize(scaledFont(12));
+    subtitleFont.setPointSize(scaledFont(18));
     m_subtitleLabel->setFont(subtitleFont);
     m_mainLayout->addWidget(m_subtitleLabel);
     
@@ -140,16 +140,20 @@ void LoadingDialog::setupUI()
     m_titleLabel = new QLabel();
     m_titleLabel->setVisible(false);
     
-    m_mainLayout->addStretch(1);
+    // 中间大量留白空间
+    m_mainLayout->addStretch(2);
     
-    // 简洁的进度条 - 仅在底部显示
+    // 进度条 - 增加高度使其在大窗口中更明显
     m_progressBar = new QProgressBar();
     m_progressBar->setRange(0, 100);
     m_progressBar->setValue(10);
     m_progressBar->setTextVisible(false);
-    m_progressBar->setFixedHeight(scaledSize(4));
+    m_progressBar->setFixedHeight(scaledSize(8));
     m_progressBar->setObjectName("modernProgressBar");
     m_mainLayout->addWidget(m_progressBar);
+    
+    // 底部留白空间
+    m_mainLayout->addStretch(1);
     
     // 隐藏不必要的组件
     m_progressLabel = new QLabel();
@@ -159,36 +163,36 @@ void LoadingDialog::setupUI()
     m_stepsLayout = new QHBoxLayout();
     setupProgressSteps(); // 创建但隐藏
     
-    // 详细信息文本（初始隐藏）
+    // 详细信息文本（初始隐藏）- 适应大窗口
     m_detailsText = new QTextEdit();
     m_detailsText->setVisible(false);
     m_detailsText->setReadOnly(true);
-    m_detailsText->setMaximumHeight(scaledSize(120));
+    m_detailsText->setMaximumHeight(scaledSize(180));
     m_detailsText->setObjectName("detailsText");
-    QFont detailsFont("Consolas", scaledFont(9));
+    QFont detailsFont("Consolas", scaledFont(11));
     m_detailsText->setFont(detailsFont);
     
-    // 按钮区域 - 居中布局
+    // 按钮区域 - 居中布局，适应大窗口
     m_buttonLayout = new QHBoxLayout();
-    m_buttonLayout->setSpacing(scaledSize(12));
+    m_buttonLayout->setSpacing(scaledSize(25));
     m_buttonLayout->setAlignment(Qt::AlignCenter);
     
     m_retryButton = new QPushButton("重试");
     m_retryButton->setVisible(false);
     m_retryButton->setObjectName("primaryButton");
-    m_retryButton->setFixedSize(scaledSize(80), scaledSize(32));
+    m_retryButton->setFixedSize(scaledSize(140), scaledSize(48));
     connect(m_retryButton, &QPushButton::clicked, this, &LoadingDialog::onRetryClicked);
     
     m_detailsButton = new QPushButton("详细信息");
     m_detailsButton->setVisible(false);
     m_detailsButton->setObjectName("secondaryButton");
-    m_detailsButton->setFixedSize(scaledSize(80), scaledSize(32));
+    m_detailsButton->setFixedSize(scaledSize(140), scaledSize(48));
     connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onDetailsToggled);
     
     m_cancelButton = new QPushButton("取消");
     m_cancelButton->setVisible(false);
     m_cancelButton->setObjectName("secondaryButton");
-    m_cancelButton->setFixedSize(scaledSize(80), scaledSize(32));
+    m_cancelButton->setFixedSize(scaledSize(140), scaledSize(48));
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::onCancelClicked);
     
     // 在错误状态时才添加按钮和详细信息到布局
@@ -278,7 +282,7 @@ void LoadingDialog::updateProgressAnimation()
 
 QPixmap LoadingDialog::createLoadingRing(int frame) const
 {
-    int size = scaledSize(60);
+    int size = scaledSize(140);
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     
@@ -288,14 +292,14 @@ QPixmap LoadingDialog::createLoadingRing(int frame) const
     painter.translate(size/2, size/2);
     
     // 简洁的旋转环动画 - 参照现代UI风格
-    painter.rotate(frame * 8); // 稍快的旋转速度
+    painter.rotate(frame * 6); // 适中的旋转速度
     
-    QPen pen(getStateColor(m_currentState), scaledSize(2));
+    QPen pen(getStateColor(m_currentState), scaledSize(3));
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
     
-    // 绘制简洁的圆弧
-    painter.drawArc(-scaledSize(22), -scaledSize(22), scaledSize(44), scaledSize(44), 0, 240 * 16);
+    // 绘制简洁的圆弧 - 适应更大的尺寸
+    painter.drawArc(-scaledSize(45), -scaledSize(45), scaledSize(90), scaledSize(90), 0, 270 * 16);
     
     return pixmap;
 }
@@ -578,7 +582,7 @@ void LoadingDialog::animateStateTransition()
 
 QPixmap LoadingDialog::createStateIcon(LoadingState state) const
 {
-    int size = scaledSize(60);
+    int size = scaledSize(140);
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     
@@ -587,38 +591,38 @@ QPixmap LoadingDialog::createStateIcon(LoadingState state) const
     
     QColor color = getStateColor(state);
     QColor bgColor = color;
-    bgColor.setAlpha(20); // 更淡的背景色，符合现代UI
+    bgColor.setAlpha(15); // 更淡的背景色，符合现代UI和大尺寸
     
     // 绘制背景圆
     painter.setBrush(QBrush(bgColor));
     painter.setPen(Qt::NoPen);
     painter.drawEllipse(0, 0, size, size);
     
-    // 绘制状态图标
-    painter.setPen(QPen(color, scaledSize(2)));
+    // 绘制状态图标 - 适应更大的尺寸
+    painter.setPen(QPen(color, scaledSize(3)));
     painter.translate(size/2, size/2);
     
     switch (state) {
         case Initializing:
-            drawGearIcon(&painter, scaledSize(18));
+            drawGearIcon(&painter, scaledSize(35));
             break;
         case CheckingNetwork:
-            drawWifiIcon(&painter, scaledSize(18));
+            drawWifiIcon(&painter, scaledSize(35));
             break;
         case VerifyingCEF:
-            drawShieldIcon(&painter, scaledSize(18));
+            drawShieldIcon(&painter, scaledSize(35));
             break;
         case LoadingCEF:
-            drawGlobeIcon(&painter, scaledSize(18));
+            drawGlobeIcon(&painter, scaledSize(35));
             break;
         case CreatingBrowser:
-            drawMonitorIcon(&painter, scaledSize(18));
+            drawMonitorIcon(&painter, scaledSize(35));
             break;
         case Completed:
-            drawCheckIcon(&painter, scaledSize(18));
+            drawCheckIcon(&painter, scaledSize(35));
             break;
         case Failed:
-            drawExclamationIcon(&painter, scaledSize(18));
+            drawExclamationIcon(&painter, scaledSize(35));
             break;
     }
     
@@ -739,8 +743,8 @@ void LoadingDialog::showError(const QString& error, const QString& details, bool
     
     showButtons(showRetry, true, !details.isEmpty());
     
-    // 调整窗口大小以容纳按钮
-    resize(scaledWindowSize(480, 400));
+    // 调整窗口大小以容纳按钮 - 保持大窗口设计
+    resize(scaledWindowSize(720, 680));
     
     Logger::instance().errorEvent(QString("LoadingDialog: %1").arg(error));
     if (!details.isEmpty()) {
@@ -865,8 +869,8 @@ void LoadingDialog::onRetryClicked()
     // 从布局中移除按钮
     m_mainLayout->removeItem(m_buttonLayout);
     
-    // 恢复简洁窗口尺寸
-    resize(scaledWindowSize(480, 320));
+    // 恢复原始大窗口尺寸
+    resize(scaledWindowSize(720, 600));
     
     updateStateIcon();
     startLoadingAnimation();
@@ -892,11 +896,13 @@ void LoadingDialog::onDetailsToggled()
             m_mainLayout->insertWidget(m_mainLayout->count() - 1, m_detailsText);
         }
         m_detailsText->setVisible(true);
-        resize(scaledWindowSize(480, 550));
+        // 增加高度以容纳详细信息，保持大窗口设计
+        resize(scaledWindowSize(720, 800));
     } else {
         m_detailsButton->setText("详细信息");
         m_detailsText->setVisible(false);
-        resize(scaledWindowSize(480, 400));
+        // 恢复错误状态的窗口尺寸
+        resize(scaledWindowSize(720, 680));
     }
     
     emit detailsRequested();
