@@ -84,6 +84,12 @@ bool ConfigManager::validateConfig() const
     return true;
 }
 
+bool ConfigManager::isLoaded() const
+{
+    // 检查配置是否已加载（config对象不为空且通过验证）
+    return !config.isEmpty() && validateConfig();
+}
+
 bool ConfigManager::createDefaultConfig(const QString &path)
 {
     QJsonObject defaultConfig;

@@ -35,6 +35,12 @@ public:
     bool validateConfig() const;
 
     /**
+     * @brief 检查配置是否已加载
+     * @return 配置已加载返回true
+     */
+    bool isLoaded() const;
+
+    /**
      * @brief 创建默认配置文件
      * @param path 配置文件路径
      * @return 成功返回true
