@@ -52,12 +52,13 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     updateStateText();
     updateStateIcon();
     
-    // 设置窗口属性 - 720x600固定尺寸
+    // 设置窗口属性 - 1200x800基础尺寸，支持DPI感知
     setWindowTitle("智多分机考桌面端 - 正在启动");
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     
-    // 设置固定尺寸720x600
-    setFixedSize(720, 600);
+    // 智能尺寸计算：基础1200x800，根据DPI和屏幕尺寸调整
+    QSize optimalSize = calculateOptimalWindowSize();
+    setFixedSize(optimalSize);
     
     // 居中显示
     if (QWidget *parentWin = parentWidget()) {
@@ -94,10 +95,11 @@ void LoadingDialog::setupUI()
     // 顶部弹性空间
     m_mainLayout->addStretch(2);
     
-    // WiFi图标区域 - 140px圆形背景
+    // WiFi图标区域 - 自适应大小圆形背景
     m_iconLabel = new QLabel();
     m_iconLabel->setAlignment(Qt::AlignCenter);
-    m_iconLabel->setFixedSize(140, 140);
+    int iconSize = scaledSize(200);  // 基础200px，支持DPI缩放
+    m_iconLabel->setFixedSize(iconSize, iconSize);
     m_iconLabel->setObjectName("iconLabel");
     m_mainLayout->addWidget(m_iconLabel);
     m_mainLayout->addSpacing(scaledSize(50));
@@ -107,7 +109,7 @@ void LoadingDialog::setupUI()
     m_titleLabel->setObjectName("mainTitle");
     m_titleLabel->setAlignment(Qt::AlignCenter);
     QFont titleFont = m_titleLabel->font();
-    titleFont.setPointSize(32);  // 固定32px字体
+    titleFont.setPointSize(scaledFont(36));  // 基础36px，支持DPI缩放
     titleFont.setWeight(QFont::Bold);
     m_titleLabel->setFont(titleFont);
     m_mainLayout->addWidget(m_titleLabel);
@@ -118,7 +120,7 @@ void LoadingDialog::setupUI()
     m_statusLabel->setObjectName("statusLabel");
     m_statusLabel->setAlignment(Qt::AlignCenter);
     QFont statusFont = m_statusLabel->font();
-    statusFont.setPointSize(18);  // 固定18px字体
+    statusFont.setPointSize(scaledFont(22));  // 基础22px，支持DPI缩放
     statusFont.setWeight(QFont::Medium);
     m_statusLabel->setFont(statusFont);
     m_mainLayout->addWidget(m_statusLabel);
@@ -394,6 +396,46 @@ QSize LoadingDialog::scaledWindowSize(int baseWidth, int baseHeight) const
     return QSize(scaledSize(baseWidth), scaledSize(baseHeight));
 }
 
+QSize LoadingDialog::calculateOptimalWindowSize() const
+{
+    // 基础尺寸：1200x800
+    int baseWidth = 1200;
+    int baseHeight = 800;
+    
+    QScreen* screen = QApplication::primaryScreen();
+    if (!screen) {
+        return QSize(baseWidth, baseHeight);
+    }
+    
+    QSize screenSize = screen->availableSize();
+    double dpiScale = getDpiScale();
+    
+    // 根据DPI计算初始尺寸
+    int scaledWidth = static_cast<int>(baseWidth * dpiScale);
+    int scaledHeight = static_cast<int>(baseHeight * dpiScale);
+    
+    // 确保窗口不超过屏幕可用区域的80%
+    int maxWidth = static_cast<int>(screenSize.width() * 0.8);
+    int maxHeight = static_cast<int>(screenSize.height() * 0.8);
+    
+    scaledWidth = qMin(scaledWidth, maxWidth);
+    scaledHeight = qMin(scaledHeight, maxHeight);
+    
+    // 保持宽高比例
+    double aspectRatio = static_cast<double>(baseWidth) / baseHeight;
+    if (scaledWidth / aspectRatio > scaledHeight) {
+        scaledWidth = static_cast<int>(scaledHeight * aspectRatio);
+    } else {
+        scaledHeight = static_cast<int>(scaledWidth / aspectRatio);
+    }
+    
+    // 最小尺寸限制：确保窗口不会太小
+    scaledWidth = qMax(scaledWidth, 900);
+    scaledHeight = qMax(scaledHeight, 600);
+    
+    return QSize(scaledWidth, scaledHeight);
+}
+
 QColor LoadingDialog::getStateColor(LoadingState state) const
 {
     switch (state) {
@@ -626,7 +668,7 @@ void LoadingDialog::animateStateTransition()
 
 QPixmap LoadingDialog::createStateIcon(LoadingState state) const
 {
-    int size = 140;  // 固定140px尺寸
+    int size = scaledSize(200);  // 基础200px，支持DPI缩放
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     

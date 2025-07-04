@@ -384,6 +384,12 @@ void SecureBrowser::onBrowserCreated()
     if (!m_currentUrl.isEmpty()) {
         load(m_currentUrl);
     }
+    
+    // 延时发出内容加载完成信号，给CEF一些时间完成初始页面加载
+    QTimer::singleShot(1000, this, [this]() {
+        m_logger->appEvent("发出内容加载完成信号");
+        emit contentLoadFinished();
+    });
 }
 
 void SecureBrowser::initializeWindow()

@@ -774,22 +774,28 @@ void Application::handleInitializationSuccess()
     if (createMainWindow()) {
         m_logger->appEvent("主窗口创建成功");
         
-        // 等待主窗口完全准备就绪后再关闭加载对话框
-        QTimer::singleShot(200, this, [this]() {
-            // 确保主窗口已经准备好并开始加载内容
+        // 连接内容加载完成信号，等待真正的内容加载完成
+        connect(m_mainWindow, &SecureBrowser::contentLoadFinished,
+                this, [this]() {
+            m_logger->appEvent("收到内容加载完成信号，准备显示主窗口");
+            
+            // 确保主窗口已经准备好并且内容已加载
             if (m_mainWindow) {
                 // 先显示主窗口
                 m_mainWindow->show();
                 m_mainWindow->raise();
                 m_mainWindow->activateWindow();
                 
+                m_logger->appEvent("主窗口已显示，CEF内容应该已准备就绪");
+                
                 // 然后更新加载状态为完成并关闭对话框
                 m_loadingDialog->updateLoadingState(LoadingDialog::Completed, "启动完成！");
                 
                 // 短暂显示完成状态后关闭对话框
-                QTimer::singleShot(300, this, [this]() {
+                QTimer::singleShot(500, this, [this]() {
                     if (m_loadingDialog) {
                         m_loadingDialog->accept();
+                        m_logger->appEvent("LoadingDialog已关闭，应用程序完全就绪");
                     }
                 });
             }

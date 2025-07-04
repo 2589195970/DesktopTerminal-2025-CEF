@@ -47,6 +47,13 @@ public:
      */
     void setWindowTitle(const QString& title);
 
+signals:
+    /**
+     * @brief 内容加载完成信号
+     * 当CEF浏览器完成初始页面加载时发出
+     */
+    void contentLoadFinished();
+
 protected:
     // 事件处理（保持与原项目相同的安全控制逻辑）
     bool event(QEvent *event) override;

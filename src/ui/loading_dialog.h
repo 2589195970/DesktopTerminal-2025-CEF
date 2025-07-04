@@ -89,6 +89,7 @@ private:
     int scaledSize(int baseSize) const;
     int scaledFont(int baseFontSize) const;
     QSize scaledWindowSize(int baseWidth, int baseHeight) const;
+    QSize calculateOptimalWindowSize() const;
     
     // 图标绘制辅助函数
     void drawGearIcon(QPainter *painter, int size) const;
