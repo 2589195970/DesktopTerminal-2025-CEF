@@ -7,15 +7,13 @@
 #include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPainter>
-#include <QStyleOption>
-#include <QGraphicsDropShadowEffect>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
 #include <QFont>
-#include <QFontMetrics>
 #include <QPainterPath>
 #include <QLinearGradient>
 #include <QRadialGradient>
+#include <QStyle>
 #include <QtMath>
 
 LoadingDialog::LoadingDialog(QWidget *parent)
@@ -54,23 +52,22 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     updateStateText();
     updateStateIcon();
     
-    // 设置窗口属性
+    // 设置窗口属性 - 720x600固定尺寸
     setWindowTitle("智多分机考桌面端 - 正在启动");
-    setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint);
-    setModal(true);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     
-    // 参照现代UI设计，设置宽敞的尺寸比例 - 至少712x614
-    QSize windowSize = scaledWindowSize(720, 600);
-    resize(windowSize);
-    setMinimumSize(scaledWindowSize(650, 500));
+    // 设置固定尺寸720x600
+    setFixedSize(720, 600);
     
     // 居中显示
-    QScreen* screen = QApplication::primaryScreen();
-    if (screen) {
-        QRect screenGeometry = screen->geometry();
-        int x = (screenGeometry.width() - width()) / 2;
-        int y = (screenGeometry.height() - height()) / 2;
-        move(x, y);
+    if (QWidget *parentWin = parentWidget()) {
+        QRect parentGeometry = parentWin->geometry();
+        move(parentGeometry.center() - rect().center());
+    } else {
+        if (QScreen *screen = QApplication::primaryScreen()) {
+            QRect screenGeometry = screen->geometry();
+            move(screenGeometry.center() - rect().center());
+        }
     }
     
     // 应用现代化样式将在setupShadowEffects中处理
@@ -91,88 +88,137 @@ LoadingDialog::~LoadingDialog()
 void LoadingDialog::setupUI()
 {
     m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setSpacing(scaledSize(0));
-    m_mainLayout->setContentsMargins(scaledSize(80), scaledSize(100), scaledSize(80), scaledSize(80));
+    m_mainLayout->setSpacing(0);
+    m_mainLayout->setContentsMargins(scaledSize(100), scaledSize(100), scaledSize(100), scaledSize(100));
     
-    // 顶部大量留白空间
-    m_mainLayout->addStretch(3);
+    // 顶部弹性空间
+    m_mainLayout->addStretch(2);
     
-    // 图标区域 - 更大尺寸适应大窗口
+    // WiFi图标区域 - 140px圆形背景
     m_iconLabel = new QLabel();
     m_iconLabel->setAlignment(Qt::AlignCenter);
-    m_iconLabel->setFixedSize(scaledSize(140), scaledSize(140));
+    m_iconLabel->setFixedSize(140, 140);
     m_iconLabel->setObjectName("iconLabel");
-    
-    // Loading环标签
-    m_loadingRingLabel = new QLabel();
-    m_loadingRingLabel->setAlignment(Qt::AlignCenter);
-    m_loadingRingLabel->setFixedSize(scaledSize(140), scaledSize(140));
-    m_loadingRingLabel->setObjectName("loadingRingLabel");
-    m_loadingRingLabel->setVisible(false);
-    
     m_mainLayout->addWidget(m_iconLabel);
-    m_mainLayout->addSpacing(scaledSize(60));
+    m_mainLayout->addSpacing(scaledSize(50));
     
-    // 状态标签 - 更大字体适应大窗口
-    m_statusLabel = new QLabel("正在启动");
+    // 主标题 - 智多分机考桌面端
+    m_titleLabel = new QLabel("智多分机考桌面端");
+    m_titleLabel->setObjectName("mainTitle");
+    m_titleLabel->setAlignment(Qt::AlignCenter);
+    QFont titleFont = m_titleLabel->font();
+    titleFont.setPointSize(32);  // 固定32px字体
+    titleFont.setWeight(QFont::Bold);
+    m_titleLabel->setFont(titleFont);
+    m_mainLayout->addWidget(m_titleLabel);
+    m_mainLayout->addSpacing(scaledSize(20));
+    
+    // 状态标签 - 正在检查网络连接...
+    m_statusLabel = new QLabel("正在检查网络连接...");
     m_statusLabel->setObjectName("statusLabel");
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    m_statusLabel->setWordWrap(true);
     QFont statusFont = m_statusLabel->font();
-    statusFont.setPointSize(scaledFont(32));
+    statusFont.setPointSize(18);  // 固定18px字体
     statusFont.setWeight(QFont::Medium);
     m_statusLabel->setFont(statusFont);
     m_mainLayout->addWidget(m_statusLabel);
+    m_mainLayout->addSpacing(scaledSize(15));
     
-    m_mainLayout->addSpacing(scaledSize(25));
-    
-    // 副标题 - 适当增大字体
-    m_subtitleLabel = new QLabel("正在初始化应用程序...");
+    // 副标题 - 请稍候，正在为您准备最佳的考试环境...
+    m_subtitleLabel = new QLabel("请稍候，正在为您准备最佳的考试环境...");
     m_subtitleLabel->setObjectName("subtitleLabel");
     m_subtitleLabel->setAlignment(Qt::AlignCenter);
-    m_subtitleLabel->setWordWrap(true);
     QFont subtitleFont = m_subtitleLabel->font();
     subtitleFont.setPointSize(scaledFont(18));
     m_subtitleLabel->setFont(subtitleFont);
     m_mainLayout->addWidget(m_subtitleLabel);
     
-    // 隐藏不必要的标题（为了简洁设计）
-    m_titleLabel = new QLabel();
-    m_titleLabel->setVisible(false);
+    // 中间弹性空间
+    m_mainLayout->addStretch(1);
     
-    // 中间大量留白空间
-    m_mainLayout->addStretch(2);
+    // 进度信息区域
+    QHBoxLayout *progressInfoLayout = new QHBoxLayout();
+    progressInfoLayout->setContentsMargins(scaledSize(200), 0, scaledSize(200), 0);
     
-    // 进度条 - 增加高度使其在大窗口中更明显
+    QLabel *progressTitle = new QLabel("启动进度");
+    progressTitle->setObjectName("progressTitle");
+    QFont progressTitleFont = progressTitle->font();
+    progressTitleFont.setPointSize(scaledFont(16));
+    progressTitle->setFont(progressTitleFont);
+    
+    m_progressLabel = new QLabel("25%");
+    m_progressLabel->setObjectName("progressPercent");
+    QFont progressPercentFont = m_progressLabel->font();
+    progressPercentFont.setPointSize(scaledFont(16));
+    progressPercentFont.setWeight(QFont::Bold);
+    m_progressLabel->setFont(progressPercentFont);
+    
+    progressInfoLayout->addWidget(progressTitle);
+    progressInfoLayout->addStretch();
+    progressInfoLayout->addWidget(m_progressLabel);
+    
+    m_mainLayout->addLayout(progressInfoLayout);
+    m_mainLayout->addSpacing(scaledSize(15));
+    
+    // 进度条
     m_progressBar = new QProgressBar();
     m_progressBar->setRange(0, 100);
-    m_progressBar->setValue(10);
+    m_progressBar->setValue(25);
     m_progressBar->setTextVisible(false);
     m_progressBar->setFixedHeight(scaledSize(8));
     m_progressBar->setObjectName("modernProgressBar");
+    m_progressBar->setContentsMargins(scaledSize(200), 0, scaledSize(200), 0);
     m_mainLayout->addWidget(m_progressBar);
+    m_mainLayout->addSpacing(scaledSize(30));
     
-    // 底部留白空间
+    // 步骤指示器
+    m_stepsLayout = new QHBoxLayout();
+    m_stepsLayout->setSpacing(scaledSize(40));
+    m_stepsLayout->setAlignment(Qt::AlignCenter);
+    setupProgressSteps();
+    m_mainLayout->addLayout(m_stepsLayout);
+    
+    // 底部弹性空间
     m_mainLayout->addStretch(1);
     
-    // 隐藏不必要的组件
-    m_progressLabel = new QLabel();
-    m_progressLabel->setVisible(false);
+    // 底部区域
+    QVBoxLayout *bottomLayout = new QVBoxLayout();
+    bottomLayout->setSpacing(scaledSize(20));
+    bottomLayout->setAlignment(Qt::AlignCenter);
     
-    // 简化步骤指示器为不可见
-    m_stepsLayout = new QHBoxLayout();
-    setupProgressSteps(); // 创建但隐藏
+    // 模拟错误按钮（调试用）
+    QPushButton *simulateErrorButton = new QPushButton("模拟错误");
+    simulateErrorButton->setObjectName("debugButton");
+    simulateErrorButton->setFixedSize(scaledSize(120), scaledSize(36));
+    QFont debugFont = simulateErrorButton->font();
+    debugFont.setPointSize(scaledFont(14));
+    simulateErrorButton->setFont(debugFont);
+    simulateErrorButton->setVisible(false); // 默认隐藏
+    bottomLayout->addWidget(simulateErrorButton);
     
-    // 详细信息文本（初始隐藏）- 适应大窗口
+    // 版本信息
+    QLabel *versionLabel = new QLabel("智多分机考系统 v2.0 | 为您提供安全可靠的考试环境");
+    versionLabel->setObjectName("versionLabel");
+    versionLabel->setAlignment(Qt::AlignCenter);
+    QFont versionFont = versionLabel->font();
+    versionFont.setPointSize(scaledFont(14));
+    versionLabel->setFont(versionFont);
+    bottomLayout->addWidget(versionLabel);
+    
+    m_mainLayout->addLayout(bottomLayout);
+    m_mainLayout->addSpacing(scaledSize(50));
+    
+    // 其他隐藏组件
+    m_loadingRingLabel = new QLabel();
+    m_loadingRingLabel->setVisible(false);
+    
     m_detailsText = new QTextEdit();
     m_detailsText->setVisible(false);
     m_detailsText->setReadOnly(true);
-    m_detailsText->setMaximumHeight(scaledSize(180));
+    m_detailsText->setMaximumHeight(scaledSize(200));
     m_detailsText->setObjectName("detailsText");
-    QFont detailsFont("Consolas", scaledFont(11));
-    m_detailsText->setFont(detailsFont);
     
-    // 按钮区域 - 居中布局，适应大窗口
+    // 错误状态按钮
     m_buttonLayout = new QHBoxLayout();
     m_buttonLayout->setSpacing(scaledSize(25));
     m_buttonLayout->setAlignment(Qt::AlignCenter);
@@ -194,19 +240,29 @@ void LoadingDialog::setupUI()
     m_cancelButton->setObjectName("secondaryButton");
     m_cancelButton->setFixedSize(scaledSize(140), scaledSize(48));
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::onCancelClicked);
-    
-    // 在错误状态时才添加按钮和详细信息到布局
-    // 平时保持简洁布局
 }
 
 void LoadingDialog::setupProgressSteps()
 {
-    // 简洁设计 - 不显示步骤指示器
-    // 创建空的步骤标签以保持兼容性
-    for (int i = 0; i < 6; ++i) {
-        QLabel *stepDot = new QLabel();
-        stepDot->setVisible(false); // 隐藏所有步骤指示器
-        m_stepLabels.append(stepDot);
+    // 6个步骤的指示器
+    QStringList stepNames = {"初始化", "网络检测", "组件验证", "引擎加载", "创建实例", "完成"};
+    
+    for (int i = 0; i < stepNames.size(); ++i) {
+        QLabel *stepLabel = new QLabel(stepNames[i]);
+        stepLabel->setObjectName("stepLabel");
+        stepLabel->setAlignment(Qt::AlignCenter);
+        stepLabel->setProperty("stepIndex", i);
+        stepLabel->setProperty("active", i == 1); // 默认"网络检测"为当前步骤
+        
+        QFont stepFont = stepLabel->font();
+        stepFont.setPointSize(scaledFont(14));
+        stepLabel->setFont(stepFont);
+        
+        // 设置固定宽度以确保对齐
+        stepLabel->setMinimumWidth(scaledSize(80));
+        
+        m_stepLabels.append(stepLabel);
+        m_stepsLayout->addWidget(stepLabel);
     }
 }
 
@@ -231,18 +287,17 @@ void LoadingDialog::setupShadowEffects()
     // 改用CSS样式实现视觉效果
     m_shadowEffect = nullptr;
     
-    // 通过CSS边框和背景渐变替代阴影效果
-    QString shadowStyle = QString(R"(
+    // 现代化的渐变背景 - 仿照React设计 (slate-50 -> blue-50 -> indigo-100)
+    QString backgroundStyle = QString(R"(
         QDialog {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #f8fafc, stop:0.5 #f1f5f9, stop:1 #e2e8f0);
-            border: 2px solid #cbd5e1;
-            border-radius: %1px;
+                stop:0 #f8fafc, stop:0.5 #eff6ff, stop:1 #e0e7ff);
+            border: none;
         }
-    )").arg(scaledSize(12));
+    )");
     
-    // 合并阴影样式和其他组件样式
-    QString fullStyle = shadowStyle + getModernStyleSheet().replace(
+    // 合并背景样式和其他组件样式
+    QString fullStyle = backgroundStyle + getModernStyleSheet().replace(
         QRegExp("QDialog\\s*\\{[^}]*\\}"), ""); // 移除QDialog样式块避免冲突
     setStyleSheet(fullStyle);
 }
@@ -358,82 +413,97 @@ QString LoadingDialog::getModernStyleSheet() const
     return QString(R"(
         QDialog {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #f8fafc, stop:0.5 #f1f5f9, stop:1 #e2e8f0);
-            border: 1px solid #cbd5e1;
-            border-radius: %1px;
+                stop:0 #f8fafc, stop:0.5 #eff6ff, stop:1 #e0e7ff);
+            border: none;
         }
         
-        #titleLabel {
-            color: #1e293b;
+        #mainTitle {
+            color: #1a202c;
             font-weight: bold;
         }
         
         #statusLabel {
-            color: #3b82f6;
+            color: #8b5cf6;
             font-weight: 500;
         }
         
         #subtitleLabel {
-            color: #64748b;
+            color: #6b7280;
         }
         
-        #progressTitle, #progressLabel {
+        #progressTitle {
             color: #374151;
             font-weight: 500;
         }
         
+        #progressPercent {
+            color: #1f2937;
+            font-weight: bold;
+        }
+        
         #modernProgressBar {
             border: none;
-            background-color: #f1f5f9;
-            border-radius: %2px;
+            background-color: #f3f4f6;
+            border-radius: 6px;
+            margin-left: 150px;
+            margin-right: 150px;
         }
         
         #modernProgressBar::chunk {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                 stop:0 #3b82f6, stop:0.5 #8b5cf6, stop:1 #6366f1);
-            border-radius: %2px;
+            border-radius: 6px;
         }
         
         #stepLabel {
             color: #9ca3af;
-            padding: %3px %4px;
-            border-radius: %5px;
+            padding: 4px 8px;
+            border-radius: 4px;
             background-color: transparent;
         }
         
         #stepLabel[active="true"] {
-            color: #3b82f6;
-            background-color: #dbeafe;
-            font-weight: 500;
+            color: #8b5cf6;
+            font-weight: 600;
+        }
+        
+        #debugButton {
+            background-color: transparent;
+            color: #6b7280;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-weight: 400;
+        }
+        
+        #debugButton:hover {
+            background-color: #f9fafb;
+            border-color: #9ca3af;
+        }
+        
+        #versionLabel {
+            color: #9ca3af;
         }
         
         #primaryButton {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #3b82f6, stop:1 #2563eb);
+                stop:0 #3b82f6, stop:1 #1d4ed8);
             color: white;
             border: none;
-            border-radius: %6px;
+            border-radius: 6px;
             font-weight: 500;
-            font-size: %7px;
         }
         
         #primaryButton:hover {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #2563eb, stop:1 #1d4ed8);
-        }
-        
-        #primaryButton:pressed {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #1d4ed8, stop:1 #1e40af);
+                stop:0 #2563eb, stop:1 #1e40af);
         }
         
         #secondaryButton {
             background-color: white;
             color: #374151;
             border: 1px solid #d1d5db;
-            border-radius: %6px;
+            border-radius: 6px;
             font-weight: 500;
-            font-size: %7px;
         }
         
         #secondaryButton:hover {
@@ -441,35 +511,14 @@ QString LoadingDialog::getModernStyleSheet() const
             border-color: #9ca3af;
         }
         
-        #secondaryButton:pressed {
-            background-color: #f3f4f6;
-        }
-        
         #detailsText {
             border: 1px solid #d1d5db;
-            border-radius: %8px;
+            border-radius: 8px;
             background-color: #f9fafb;
             color: #374151;
             selection-background-color: #dbeafe;
         }
-        
-        #footerLabel {
-            color: #9ca3af;
-            border-top: 1px solid #e5e7eb;
-            padding-top: %9px;
-            margin-top: %10px;
-        }
-    )")
-    .arg(scaledSize(12))  // dialog border-radius
-    .arg(scaledSize(6))   // progress bar border-radius
-    .arg(scaledSize(4))   // step label padding vertical
-    .arg(scaledSize(8))   // step label padding horizontal
-    .arg(scaledSize(4))   // step label border-radius
-    .arg(scaledSize(8))   // button border-radius
-    .arg(scaledFont(12))  // button font-size
-    .arg(scaledSize(6))   // details text border-radius
-    .arg(scaledSize(15))  // footer padding-top
-    .arg(scaledSize(15)); // footer margin-top
+    )");
 }
 
 // 继续实现其他方法...
@@ -525,20 +574,15 @@ void LoadingDialog::updateStateIcon()
 void LoadingDialog::updateProgressSteps()
 {
     for (int i = 0; i < m_stepLabels.size(); ++i) {
-        QLabel *dot = m_stepLabels[i];
+        QLabel *stepLabel = m_stepLabels[i];
         bool isActive = (i == static_cast<int>(m_currentState));
-        bool isCompleted = (i < static_cast<int>(m_currentState));
         
-        if (isActive) {
-            // 当前活动步骤：蓝色
-            dot->setStyleSheet("QLabel { background-color: #3b82f6; border-radius: 6px; }");
-        } else if (isCompleted) {
-            // 已完成步骤：绿色
-            dot->setStyleSheet("QLabel { background-color: #10b981; border-radius: 6px; }");
-        } else {
-            // 未开始步骤：灰色
-            dot->setStyleSheet("QLabel { background-color: #e5e7eb; border-radius: 6px; }");
-        }
+        stepLabel->setProperty("active", isActive);
+        
+        // 刷新样式表以应用新的active状态
+        stepLabel->style()->unpolish(stepLabel);
+        stepLabel->style()->polish(stepLabel);
+        stepLabel->update();
     }
 }
 
@@ -582,49 +626,31 @@ void LoadingDialog::animateStateTransition()
 
 QPixmap LoadingDialog::createStateIcon(LoadingState state) const
 {
-    int size = scaledSize(140);
+    int size = 140;  // 固定140px尺寸
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
     
-    QColor color = getStateColor(state);
-    QColor bgColor = color;
-    bgColor.setAlpha(15); // 更淡的背景色，符合现代UI和大尺寸
+    // 创建渐变背景
+    QRadialGradient gradient(size/2, size/2, size/2);
+    gradient.setColorAt(0, QColor(240, 240, 255, 50));  // 中心淡紫色
+    gradient.setColorAt(0.7, QColor(220, 220, 240, 30)); // 边缘更淡
+    gradient.setColorAt(1, QColor(200, 200, 230, 10));   // 外边缘几乎透明
     
     // 绘制背景圆
-    painter.setBrush(QBrush(bgColor));
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(0, 0, size, size);
+    painter.setBrush(QBrush(gradient));
+    painter.setPen(QPen(QColor(200, 200, 230, 80), 1));
+    painter.drawEllipse(10, 10, size - 20, size - 20);
     
-    // 绘制状态图标 - 适应更大的尺寸
-    painter.setPen(QPen(color, scaledSize(3)));
+    // 绘制WiFi图标 - 统一使用WiFi符号，体现网络检测主题
+    QColor iconColor = getStateColor(state);
+    painter.setPen(QPen(iconColor, 4));
     painter.translate(size/2, size/2);
     
-    switch (state) {
-        case Initializing:
-            drawGearIcon(&painter, scaledSize(35));
-            break;
-        case CheckingNetwork:
-            drawWifiIcon(&painter, scaledSize(35));
-            break;
-        case VerifyingCEF:
-            drawShieldIcon(&painter, scaledSize(35));
-            break;
-        case LoadingCEF:
-            drawGlobeIcon(&painter, scaledSize(35));
-            break;
-        case CreatingBrowser:
-            drawMonitorIcon(&painter, scaledSize(35));
-            break;
-        case Completed:
-            drawCheckIcon(&painter, scaledSize(35));
-            break;
-        case Failed:
-            drawExclamationIcon(&painter, scaledSize(35));
-            break;
-    }
+    // 绘制大尺寸WiFi图标
+    drawModernWifiIcon(&painter, 50);
     
     return pixmap;
 }
@@ -650,6 +676,31 @@ void LoadingDialog::drawWifiIcon(QPainter *painter, int size) const
         painter->drawArc(-radius, -radius/2, radius*2, radius*2, 0, 180*16);
     }
     painter->drawEllipse(-size/12, size/4, size/6, size/6);
+}
+
+void LoadingDialog::drawModernWifiIcon(QPainter *painter, int size) const
+{
+    QPen pen = painter->pen();
+    pen.setCapStyle(Qt::RoundCap);
+    painter->setPen(pen);
+    
+    // 绘制4层WiFi弧形，从内到外
+    for (int i = 1; i <= 4; ++i) {
+        int radius = size * i / 8;
+        int arcWidth = radius * 2;
+        int arcHeight = radius * 2;
+        
+        // 弧形的起始角度和跨度角度（在Qt中，角度以1/16度为单位）
+        int startAngle = 45 * 16;  // 45度
+        int spanAngle = 90 * 16;   // 90度弧形
+        
+        painter->drawArc(-radius, -radius, arcWidth, arcHeight, startAngle, spanAngle);
+    }
+    
+    // 绘制中心圆点
+    int dotSize = size / 8;
+    painter->setBrush(painter->pen().color());
+    painter->drawEllipse(-dotSize/2, size/3, dotSize, dotSize);
 }
 
 void LoadingDialog::drawShieldIcon(QPainter *painter, int size) const
@@ -743,8 +794,8 @@ void LoadingDialog::showError(const QString& error, const QString& details, bool
     
     showButtons(showRetry, true, !details.isEmpty());
     
-    // 调整窗口大小以容纳按钮 - 保持大窗口设计
-    resize(scaledWindowSize(720, 680));
+    // 全屏模式无需调整窗口大小
+    // resize(scaledWindowSize(720, 680)); // 已移除，保持全屏
     
     Logger::instance().errorEvent(QString("LoadingDialog: %1").arg(error));
     if (!details.isEmpty()) {
@@ -869,8 +920,8 @@ void LoadingDialog::onRetryClicked()
     // 从布局中移除按钮
     m_mainLayout->removeItem(m_buttonLayout);
     
-    // 恢复原始大窗口尺寸
-    resize(scaledWindowSize(720, 600));
+    // 全屏模式无需调整窗口大小
+    // resize(scaledWindowSize(720, 600)); // 已移除，保持全屏
     
     updateStateIcon();
     startLoadingAnimation();
@@ -896,13 +947,11 @@ void LoadingDialog::onDetailsToggled()
             m_mainLayout->insertWidget(m_mainLayout->count() - 1, m_detailsText);
         }
         m_detailsText->setVisible(true);
-        // 增加高度以容纳详细信息，保持大窗口设计
-        resize(scaledWindowSize(720, 800));
+        // 全屏模式无需调整窗口大小
     } else {
         m_detailsButton->setText("详细信息");
         m_detailsText->setVisible(false);
-        // 恢复错误状态的窗口尺寸
-        resize(scaledWindowSize(720, 680));
+        // 全屏模式无需调整窗口大小
     }
     
     emit detailsRequested();

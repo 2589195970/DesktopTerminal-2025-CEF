@@ -93,6 +93,7 @@ private:
     // 图标绘制辅助函数
     void drawGearIcon(QPainter *painter, int size) const;
     void drawWifiIcon(QPainter *painter, int size) const;
+    void drawModernWifiIcon(QPainter *painter, int size) const;
     void drawShieldIcon(QPainter *painter, int size) const;
     void drawGlobeIcon(QPainter *painter, int size) const;
     void drawMonitorIcon(QPainter *painter, int size) const;
