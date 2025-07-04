@@ -774,19 +774,16 @@ void Application::handleInitializationSuccess()
     if (createMainWindow()) {
         m_logger->appEvent("主窗口创建成功");
         
-        // 连接内容加载完成信号，等待真正的内容加载完成
-        connect(m_mainWindow, &SecureBrowser::contentLoadFinished,
-                this, [this]() {
-            m_logger->appEvent("收到内容加载完成信号，准备显示主窗口");
-            
-            // 确保主窗口已经准备好并且内容已加载
+        // 使用固定延时机制确保程序能正常启动（紧急修复）
+        QTimer::singleShot(1000, this, [this]() {
+            // 确保主窗口已经准备好
             if (m_mainWindow) {
                 // 先显示主窗口
                 m_mainWindow->show();
                 m_mainWindow->raise();
                 m_mainWindow->activateWindow();
                 
-                m_logger->appEvent("主窗口已显示，CEF内容应该已准备就绪");
+                m_logger->appEvent("主窗口已显示，使用固定延时机制");
                 
                 // 然后更新加载状态为完成并关闭对话框
                 m_loadingDialog->updateLoadingState(LoadingDialog::Completed, "启动完成！");

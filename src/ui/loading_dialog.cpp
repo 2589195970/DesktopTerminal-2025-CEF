@@ -56,9 +56,8 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     setWindowTitle("智多分机考桌面端 - 正在启动");
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     
-    // 智能尺寸计算：基础1200x800，根据DPI和屏幕尺寸调整
-    QSize optimalSize = calculateOptimalWindowSize();
-    setFixedSize(optimalSize);
+    // 固定大尺寸确保在任何显示器上都足够大
+    setFixedSize(1600, 1000);
     
     // 居中显示
     if (QWidget *parentWin = parentWidget()) {
@@ -95,10 +94,10 @@ void LoadingDialog::setupUI()
     // 顶部弹性空间
     m_mainLayout->addStretch(2);
     
-    // WiFi图标区域 - 自适应大小圆形背景
+    // WiFi图标区域 - 大窗口适配的图标尺寸
     m_iconLabel = new QLabel();
     m_iconLabel->setAlignment(Qt::AlignCenter);
-    int iconSize = scaledSize(200);  // 基础200px，支持DPI缩放
+    int iconSize = 300;  // 固定300px适应1600x1000窗口
     m_iconLabel->setFixedSize(iconSize, iconSize);
     m_iconLabel->setObjectName("iconLabel");
     m_mainLayout->addWidget(m_iconLabel);
@@ -109,7 +108,7 @@ void LoadingDialog::setupUI()
     m_titleLabel->setObjectName("mainTitle");
     m_titleLabel->setAlignment(Qt::AlignCenter);
     QFont titleFont = m_titleLabel->font();
-    titleFont.setPointSize(scaledFont(36));  // 基础36px，支持DPI缩放
+    titleFont.setPointSize(48);  // 固定48px适应大窗口
     titleFont.setWeight(QFont::Bold);
     m_titleLabel->setFont(titleFont);
     m_mainLayout->addWidget(m_titleLabel);
@@ -120,7 +119,7 @@ void LoadingDialog::setupUI()
     m_statusLabel->setObjectName("statusLabel");
     m_statusLabel->setAlignment(Qt::AlignCenter);
     QFont statusFont = m_statusLabel->font();
-    statusFont.setPointSize(scaledFont(22));  // 基础22px，支持DPI缩放
+    statusFont.setPointSize(28);  // 固定28px适应大窗口
     statusFont.setWeight(QFont::Medium);
     m_statusLabel->setFont(statusFont);
     m_mainLayout->addWidget(m_statusLabel);
@@ -668,7 +667,7 @@ void LoadingDialog::animateStateTransition()
 
 QPixmap LoadingDialog::createStateIcon(LoadingState state) const
 {
-    int size = scaledSize(200);  // 基础200px，支持DPI缩放
+    int size = 300;  // 固定300px适应大窗口
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     
@@ -691,8 +690,8 @@ QPixmap LoadingDialog::createStateIcon(LoadingState state) const
     painter.setPen(QPen(iconColor, 4));
     painter.translate(size/2, size/2);
     
-    // 绘制大尺寸WiFi图标
-    drawModernWifiIcon(&painter, 50);
+    // 绘制大尺寸WiFi图标，适应300px画布
+    drawModernWifiIcon(&painter, 80);
     
     return pixmap;
 }
