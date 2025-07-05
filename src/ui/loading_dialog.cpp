@@ -56,8 +56,10 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     setWindowTitle("智多分机考桌面端 - 正在启动");
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     
-    // 固定大尺寸确保在任何显示器上都足够大
-    setFixedSize(1600, 1000);
+    // 参照现代UI设计，设置简洁大方的尺寸
+    QSize windowSize = scaledWindowSize(1024, 683);
+    resize(windowSize);
+    setMinimumSize(scaledWindowSize(960, 640));
     
     // 居中显示
     if (QWidget *parentWin = parentWidget()) {
