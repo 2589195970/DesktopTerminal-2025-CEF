@@ -3,7 +3,6 @@
 #include "secure_browser.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
-#include "../ui/loading_dialog.h"
 #include "../network/network_checker.h"
 
 #include <QDir>
@@ -31,12 +30,9 @@ Application::Application(int &argc, char **argv)
     , m_mainWindow(nullptr)
     , m_logger(nullptr)
     , m_configManager(nullptr)
-    , m_loadingDialog(nullptr)
     , m_networkChecker(nullptr)
-    , m_initializationThread(nullptr)
     , m_initialized(false)
     , m_shutdownRequested(false)
-    , m_asyncInitialization(false)
 {
     // 设置应用程序信息
     setApplicationName("DesktopTerminal-CEF");
@@ -117,6 +113,11 @@ bool Application::startMainWindow()
     return true;
 }
 
+SecureBrowser* Application::getMainWindow() const
+{
+    return m_mainWindow;
+}
+
 void Application::shutdown()
 {
     if (m_shutdownRequested) {
@@ -129,26 +130,11 @@ void Application::shutdown()
         m_logger->appEvent("应用程序开始关闭...");
     }
 
-    // 关闭加载对话框
-    if (m_loadingDialog) {
-        m_loadingDialog->close();
-        delete m_loadingDialog;
-        m_loadingDialog = nullptr;
-    }
-
     // 停止网络检测
     if (m_networkChecker) {
         m_networkChecker->stopCheck();
         delete m_networkChecker;
         m_networkChecker = nullptr;
-    }
-
-    // 等待初始化线程结束
-    if (m_initializationThread) {
-        m_initializationThread->quit();
-        m_initializationThread->wait(3000); // 等待3秒
-        delete m_initializationThread;
-        m_initializationThread = nullptr;
     }
 
     // 关闭主窗口
@@ -653,238 +639,3 @@ void Application::applyWindows7Optimizations()
 }
 #endif
 
-// 异步初始化实现
-bool Application::initializeAsync()
-{
-    if (m_initialized) {
-        return true;
-    }
-
-    m_asyncInitialization = true;
-
-    // 1. 初始化日志系统
-    if (!initializeLogging()) {
-        return false;
-    }
-
-    m_logger->appEvent("开始异步初始化...");
-    logSystemInfo();
-
-    // 2. 检查系统要求
-    if (!checkSystemRequirements()) {
-        m_logger->errorEvent("系统要求检查失败");
-        QMessageBox::critical(nullptr, "系统要求不满足", 
-            getCompatibilityReport() + "\n\n应用程序将退出。");
-        return false;
-    }
-
-    // 3. 应用兼容性设置
-    applyCompatibilitySettings();
-
-    // 4. 初始化配置管理
-    if (!initializeConfiguration()) {
-        m_logger->errorEvent("配置初始化失败");
-        return false;
-    }
-
-    // 5. 创建并显示加载对话框
-    m_loadingDialog = new LoadingDialog();
-    
-    // 连接加载对话框信号
-    connect(m_loadingDialog, &LoadingDialog::retryRequested,
-            this, &Application::onLoadingDialogRetryRequested);
-    connect(m_loadingDialog, &LoadingDialog::cancelRequested,
-            this, &Application::onLoadingDialogCancelRequested);
-
-    // 显示加载对话框
-    m_loadingDialog->show();
-    m_loadingDialog->updateLoadingState(LoadingDialog::Initializing, "正在初始化应用程序...");
-
-    // 6. 开始异步初始化流程
-    startAsyncInitialization();
-
-    return true;
-}
-
-void Application::startAsyncInitialization()
-{
-    m_logger->appEvent("开始异步初始化流程");
-    
-    // 开始网络检测
-    performNetworkCheck();
-}
-
-void Application::performNetworkCheck()
-{
-    m_loadingDialog->updateLoadingState(LoadingDialog::CheckingNetwork, "正在检查网络连接...");
-    
-    // 创建网络检测器
-    m_networkChecker = new NetworkChecker(this);
-    
-    // 连接网络检测信号
-    connect(m_networkChecker, &NetworkChecker::checkCompleted,
-            this, [this](NetworkChecker::NetworkStatus status, const QString& details) {
-                onNetworkCheckCompleted(static_cast<int>(status), details);
-            });
-
-    // 开始网络检测
-    QString targetUrl = m_configManager->getUrl();
-    m_networkChecker->startCheck(targetUrl, 15000); // 15秒超时
-}
-
-void Application::performCEFInitialization()
-{
-    m_loadingDialog->updateLoadingState(LoadingDialog::VerifyingCEF, "正在验证CEF组件...");
-    
-    // 在新线程中执行CEF初始化
-    m_initializationThread = new QThread(this);
-    
-    // 创建CEF管理器但在子线程中初始化
-    m_cefManager = new CEFManager(this);
-    
-    // 使用QTimer在主线程中延迟执行CEF初始化
-    QTimer::singleShot(500, this, [this]() {
-        m_loadingDialog->updateLoadingState(LoadingDialog::LoadingCEF, "正在加载CEF浏览器引擎...");
-        
-        QTimer::singleShot(1000, this, [this]() {
-            // 执行CEF初始化
-            bool success = false;
-            try {
-                success = m_cefManager->initialize();
-            } catch (...) {
-                success = false;
-            }
-            
-            if (success) {
-                m_loadingDialog->updateLoadingState(LoadingDialog::CreatingBrowser, "正在创建浏览器实例...");
-                QTimer::singleShot(500, this, &Application::onCEFInitializationFinished);
-            } else {
-                handleInitializationFailure("CEF初始化失败", "无法初始化CEF浏览器引擎，请检查CEF组件是否完整。");
-            }
-        });
-    });
-}
-
-void Application::handleInitializationSuccess()
-{
-    m_initialized = true;
-    m_logger->appEvent("异步初始化完成");
-    
-    // 立即创建主窗口但不显示
-    if (createMainWindow()) {
-        m_logger->appEvent("主窗口创建成功");
-        
-        // 使用固定延时机制确保程序能正常启动（紧急修复）
-        QTimer::singleShot(1000, this, [this]() {
-            // 确保主窗口已经准备好
-            if (m_mainWindow) {
-                // 先显示主窗口
-                m_mainWindow->show();
-                m_mainWindow->raise();
-                m_mainWindow->activateWindow();
-                
-                m_logger->appEvent("主窗口已显示，使用固定延时机制");
-                
-                // 然后更新加载状态为完成并关闭对话框
-                m_loadingDialog->updateLoadingState(LoadingDialog::Completed, "启动完成！");
-                
-                // 短暂显示完成状态后关闭对话框
-                QTimer::singleShot(500, this, [this]() {
-                    if (m_loadingDialog) {
-                        m_loadingDialog->accept();
-                        m_logger->appEvent("LoadingDialog已关闭，应用程序完全就绪");
-                    }
-                });
-            }
-        });
-    } else {
-        handleInitializationFailure("主窗口创建失败", "无法创建应用程序主窗口。");
-    }
-}
-
-void Application::handleInitializationFailure(const QString& error, const QString& details)
-{
-    m_logger->errorEvent(QString("异步初始化失败: %1").arg(error));
-    
-    if (m_loadingDialog) {
-        m_loadingDialog->showError(error, details, true);
-    } else {
-        QMessageBox::critical(nullptr, "初始化失败", error + "\n\n" + details);
-        quit();
-    }
-}
-
-// 槽函数实现
-void Application::onNetworkCheckCompleted(int status, const QString& details)
-{
-    NetworkChecker::NetworkStatus networkStatus = static_cast<NetworkChecker::NetworkStatus>(status);
-    
-    m_logger->appEvent(QString("网络检测完成: %1 - %2")
-        .arg(static_cast<int>(networkStatus)).arg(details));
-    
-    if (networkStatus == NetworkChecker::Connected) {
-        // 网络连接正常，继续CEF初始化
-        performCEFInitialization();
-    } else {
-        // 网络连接有问题，但可以选择继续（离线模式）
-        QString networkError;
-        switch (networkStatus) {
-            case NetworkChecker::Disconnected:
-                networkError = "网络连接断开";
-                break;
-            case NetworkChecker::Timeout:
-                networkError = "网络连接超时";
-                break;
-            case NetworkChecker::DnsError:
-                networkError = "DNS解析失败";
-                break;
-            case NetworkChecker::ProxyError:
-                networkError = "代理配置错误";
-                break;
-            case NetworkChecker::SslError:
-                networkError = "SSL证书错误";
-                break;
-            default:
-                networkError = "网络状态异常";
-                break;
-        }
-        
-        // 显示网络错误，但允许用户选择继续
-        m_loadingDialog->showNetworkError(networkError);
-        
-        // 可以选择直接继续初始化CEF（离线模式）
-        // performCEFInitialization();
-    }
-}
-
-void Application::onCEFInitializationFinished()
-{
-    handleInitializationSuccess();
-}
-
-void Application::onLoadingDialogRetryRequested()
-{
-    m_logger->appEvent("用户请求重试初始化");
-    
-    // 重置状态
-    if (m_networkChecker) {
-        m_networkChecker->stopCheck();
-        delete m_networkChecker;
-        m_networkChecker = nullptr;
-    }
-    
-    if (m_cefManager) {
-        m_cefManager->shutdown();
-        delete m_cefManager;
-        m_cefManager = nullptr;
-    }
-    
-    // 重新开始初始化
-    startAsyncInitialization();
-}
-
-void Application::onLoadingDialogCancelRequested()
-{
-    m_logger->appEvent("用户取消初始化");
-    quit();
-}

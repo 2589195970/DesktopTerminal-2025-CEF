@@ -5,6 +5,7 @@
 #include <QTextCodec>
 
 #include "core/application.h"
+#include "core/secure_browser.h"
 #include "logging/logger.h"
 #include "config/config_manager.h"
 
@@ -233,12 +234,28 @@ int main(int argc, char *argv[])
         return -2;
     }
     
-    // 使用异步初始化（带加载动画）
-    if (!application.initializeAsync()) {
-        logger.errorEvent("应用程序异步初始化失败");
+    // 使用同步初始化（直接启动）
+    if (!application.initialize()) {
+        logger.errorEvent("应用程序初始化失败");
         QMessageBox::critical(nullptr, "初始化错误", 
-            "应用程序异步初始化失败。\\n\\n详细信息请查看日志文件。");
+            "应用程序初始化失败。\\n\\n详细信息请查看日志文件。");
         return -3;
+    }
+
+    // 启动主窗口
+    if (!application.startMainWindow()) {
+        logger.errorEvent("主窗口启动失败");
+        QMessageBox::critical(nullptr, "启动错误", 
+            "主窗口启动失败。\\n\\n详细信息请查看日志文件。");
+        return -4;
+    }
+
+    // 显示主窗口
+    if (auto* mainWindow = application.getMainWindow()) {
+        mainWindow->show();
+        mainWindow->raise();
+        mainWindow->activateWindow();
+        logger.appEvent("主窗口已显示");
     }
     
     logger.appEvent("应用程序启动完成，进入事件循环");

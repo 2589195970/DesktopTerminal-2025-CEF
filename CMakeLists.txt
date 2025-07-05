@@ -271,7 +271,6 @@ set(SOURCES
     src/logging/logger.cpp
     src/security/security_controller.cpp
     src/security/keyboard_filter.cpp
-    src/ui/loading_dialog.cpp
     src/network/network_checker.cpp
 )
 
@@ -287,7 +286,6 @@ set(HEADERS
     src/logging/logger.h
     src/security/security_controller.h
     src/security/keyboard_filter.h
-    src/ui/loading_dialog.h
     src/network/network_checker.h
 )
 
