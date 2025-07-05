@@ -298,16 +298,29 @@ void SecureBrowser::handleDevToolsHotkey()
 {
     m_needFocusCheck = false; // 暂时禁用焦点检查
     
-    QString password;
-    bool ok = m_logger->getPassword(this, "开发者工具", "请输入密码以开启/关闭开发者工具：", password);
-    QString exitPassword = m_configManager->getExitPassword();
+    m_logger->hotkeyEvent("F12开发者工具热键被触发");
     
-    if (ok && password == exitPassword) {
-        m_logger->hotkeyEvent("开发者工具密码正确");
-        toggleDevTools();
+    // 调试模式：暂时禁用密码验证以测试F12功能
+    // 用户可以通过配置文件控制是否需要密码
+    bool requirePassword = m_configManager->isStrictSecurityMode();
+    
+    if (requirePassword) {
+        QString password;
+        bool ok = m_logger->getPassword(this, "开发者工具", "请输入密码以开启/关闭开发者工具：", password);
+        QString exitPassword = m_configManager->getExitPassword();
+        
+        if (ok && password == exitPassword) {
+            m_logger->hotkeyEvent("开发者工具密码正确");
+            toggleDevTools();
+        } else {
+            m_logger->hotkeyEvent(ok ? "开发者工具密码错误" : "取消开发者工具");
+            m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
+            m_needFocusCheck = true; // 恢复焦点检查
+        }
     } else {
-        m_logger->hotkeyEvent(ok ? "开发者工具密码错误" : "取消开发者工具");
-        m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
+        // 调试模式：直接打开开发者工具
+        m_logger->hotkeyEvent("调试模式：直接开启开发者工具（无需密码）");
+        toggleDevTools();
         m_needFocusCheck = true; // 恢复焦点检查
     }
 }
@@ -428,9 +441,58 @@ void SecureBrowser::initializeHotkeys()
         connect(m_exitHotkeyBackslash, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
         connect(m_devToolsHotkeyF12, &QHotkey::activated, this, &SecureBrowser::handleDevToolsHotkey, Qt::QueuedConnection);
         
-        m_logger->appEvent("全局热键注册成功 (F10, \\, F12)");
+        // 检查每个热键的注册状态 - 修复F12无效的关键检查
+        QString registrationStatus;
+        bool allRegistered = true;
+        
+        if (m_exitHotkeyF10->isRegistered()) {
+            registrationStatus += "F10: ✓ ";
+        } else {
+            registrationStatus += "F10: ✗ ";
+            allRegistered = false;
+        }
+        
+        if (m_exitHotkeyBackslash->isRegistered()) {
+            registrationStatus += "\\: ✓ ";
+        } else {
+            registrationStatus += "\\: ✗ ";
+            allRegistered = false;
+        }
+        
+        if (m_devToolsHotkeyF12->isRegistered()) {
+            registrationStatus += "F12: ✓";
+        } else {
+            registrationStatus += "F12: ✗ (可能与系统DevTools冲突)";
+            allRegistered = false;
+            
+            // F12注册失败时，尝试使用备用热键
+            m_logger->appEvent("F12热键注册失败，尝试备用方案...");
+            
+            // 删除失败的F12热键
+            delete m_devToolsHotkeyF12;
+            m_devToolsHotkeyF12 = nullptr;
+            
+            // 尝试使用Ctrl+F12作为备用
+            m_devToolsHotkeyF12 = new QHotkey(QKeySequence("Ctrl+F12"), true, this);
+            connect(m_devToolsHotkeyF12, &QHotkey::activated, this, &SecureBrowser::handleDevToolsHotkey, Qt::QueuedConnection);
+            
+            if (m_devToolsHotkeyF12->isRegistered()) {
+                registrationStatus += " -> Ctrl+F12: ✓";
+                m_logger->appEvent("使用Ctrl+F12作为开发者工具热键");
+            } else {
+                registrationStatus += " -> Ctrl+F12: ✗";
+                m_logger->errorEvent("所有F12相关热键都注册失败");
+            }
+        }
+        
+        if (allRegistered) {
+            m_logger->appEvent(QString("全局热键注册成功: %1").arg(registrationStatus));
+        } else {
+            m_logger->appEvent(QString("全局热键部分注册失败: %1").arg(registrationStatus));
+        }
+        
     } catch (...) {
-        m_logger->errorEvent("全局热键注册失败");
+        m_logger->errorEvent("全局热键注册异常");
     }
 }
 

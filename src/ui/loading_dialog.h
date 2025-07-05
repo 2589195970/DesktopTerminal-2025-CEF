@@ -57,6 +57,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void onRetryClicked();
@@ -145,6 +146,9 @@ private:
     
     // 视觉效果
     QGraphicsDropShadowEffect *m_shadowEffect;
+    
+    // 窗口大小管理
+    QSize m_targetSize;
 };
 
 #endif // LOADING_DIALOG_H

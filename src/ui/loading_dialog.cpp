@@ -6,6 +6,7 @@
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QPaintEvent>
+#include <QShowEvent>
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
@@ -57,17 +58,15 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     
     // 参照现代UI设计，设置简洁大方的尺寸 - 修复大小设置无效问题
-    QSize windowSize = scaledWindowSize(1024, 683);
+    m_targetSize = scaledWindowSize(1024, 683);
     QSize minSize = scaledWindowSize(960, 640);
     
-    // 多重约束确保尺寸生效（解决DPI缩放和Layout冲突）
-    resize(windowSize);
-    setMinimumSize(minSize);
-    setMaximumSize(windowSize); // 固定大小
-    setFixedSize(windowSize);   // 强制固定尺寸
+    // 先重置所有大小约束 - 这是修复setFixedSize无效的关键步骤
+    setMinimumSize(0, 0);
+    setMaximumSize(QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX));
     
-    // 设置大小策略为Fixed
-    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // 在构造阶段不设置大小，等到showEvent中设置
+    // 这样可以避免与parent窗口状态和布局系统的冲突
     
     // 居中显示
     if (QWidget *parentWin = parentWidget()) {
@@ -1006,4 +1005,32 @@ void LoadingDialog::onDetailsToggled()
     }
     
     emit detailsRequested();
+}
+
+void LoadingDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    
+    // 在显示时设置窗口大小 - 这是修复setFixedSize无效的关键方法
+    if (!m_targetSize.isEmpty()) {
+        // 先调用showNormal()确保窗口处于正常状态
+        showNormal();
+        
+        // 设置固定大小
+        setFixedSize(m_targetSize);
+        
+        // 强制刷新窗口属性
+        adjustSize();
+        
+        // 重新居中显示
+        if (QWidget *parentWin = parentWidget()) {
+            QRect parentGeometry = parentWin->geometry();
+            move(parentGeometry.center() - rect().center());
+        } else {
+            if (QScreen *screen = QApplication::primaryScreen()) {
+                QRect screenGeometry = screen->geometry();
+                move(screenGeometry.center() - rect().center());
+            }
+        }
+    }
 }
