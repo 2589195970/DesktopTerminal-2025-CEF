@@ -177,6 +177,7 @@ private:
     MemoryProfile m_memoryProfile;
 
     CefRefPtr<CefApp> m_cefApp;
+    CefRefPtr<class CEFClient> m_cefClient; // CEF客户端实例（用于开发者工具管理）
     QString m_cefPath;
     QString m_cachePath;
     QString m_logPath;

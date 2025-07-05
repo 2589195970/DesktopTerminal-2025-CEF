@@ -65,14 +65,8 @@ void CEFClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFram
     if (frame->IsMain()) {
         m_logger->appEvent(QString("主框架地址变更: %1").arg(urlStr));
         
-        // 检测URL退出触发器（根据配置启用）
-        if (m_configManager->isUrlExitEnabled() && m_cefManager) {
-            QString exitPattern = m_configManager->getUrlExitPattern();
-            if (!exitPattern.isEmpty() && urlStr.contains(exitPattern, Qt::CaseInsensitive)) {
-                m_logger->appEvent(QString("检测到URL退出触发器 '%1' 在URL: %2").arg(exitPattern, urlStr));
-                m_cefManager->notifyUrlExitTriggered(urlStr);
-            }
-        }
+        // URL退出检测已移到OnBeforeBrowse方法中，避免JavaScript导航误触发（修复误检测logout问题）
+        // 这里只记录地址变更，不再检测退出模式
         
         // 验证URL是否被允许
         if (!isUrlAllowed(urlStr)) {
@@ -188,6 +182,19 @@ void CEFClient::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> f
 bool CEFClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect)
 {
     QString url = QString::fromStdString(request->GetURL().ToString());
+    
+    // 只在主框架中检测退出模式（修复误检测logout问题）
+    if (frame->IsMain() && user_gesture && !is_redirect) {
+        // 只检测用户手动导航，不检测JavaScript导航和重定向
+        if (m_configManager->isUrlExitEnabled() && m_cefManager) {
+            QString exitPattern = m_configManager->getUrlExitPattern();
+            if (!exitPattern.isEmpty() && url.contains(exitPattern, Qt::CaseInsensitive)) {
+                m_logger->appEvent(QString("检测到用户手动导航到退出模式 URL '%1': %2").arg(exitPattern, url));
+                m_cefManager->notifyUrlExitTriggered(url);
+                return true; // 阻止导航并退出
+            }
+        }
+    }
     
     // URL访问控制
     bool allowed = isUrlAllowed(url);

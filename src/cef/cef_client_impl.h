@@ -116,9 +116,12 @@ private:
     void logNavigationAttempt(const QString& url, bool allowed);
     void logKeyboardEvent(const CefKeyEvent& event, bool allowed);
 
-    // 开发者工具管理
+public:
+    // 开发者工具管理（修夏访问权限问题）
     void showDevTools();
     void closeDevTools();
+
+private:
 
     // Windows 7兼容性处理
     void applyWindows7Optimizations();

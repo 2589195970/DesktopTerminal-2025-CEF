@@ -28,6 +28,7 @@ CEFManager::CEFManager(Application* app, QObject* parent)
     , m_processMode(ProcessMode::SingleProcess)
     , m_memoryProfile(MemoryProfile::Minimal)
     , m_cefApp(nullptr)
+    , m_cefClient(nullptr)
     , m_maxRenderProcessCount(1)
     , m_cacheSizeMB(64)
     , m_hardwareAccelerationEnabled(false)
@@ -161,6 +162,7 @@ void CEFManager::shutdown()
     }
 
     m_cefApp = nullptr;
+    m_cefClient = nullptr; // 清理客户端引用
 }
 
 int CEFManager::createBrowser(void* parentWidget, const QString& url)
@@ -195,13 +197,13 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         browserSettings.javascript_access_clipboard = STATE_DISABLED;
         browserSettings.plugins = STATE_DISABLED;
 
-        // 创建CEF客户端
-        CefRefPtr<CEFClient> client = new CEFClient(this);
+        // 创建CEF客户端并保存引用（修夏开发者工具问题）
+        m_cefClient = new CEFClient(this);
 
         // 创建浏览器
         bool result = CefBrowserHost::CreateBrowser(
             windowInfo,
-            client,
+            m_cefClient,
             url.toStdString(),
             browserSettings,
             nullptr,
@@ -407,6 +409,10 @@ void CEFManager::buildCEFSettings(CefSettings& settings)
     settings.no_sandbox = true;
     settings.multi_threaded_message_loop = false;
     settings.log_severity = LOGSEVERITY_WARNING;
+    
+    // 启用远程调试功能以支持F12开发者工具（修复F12无效问题）
+    settings.remote_debugging_port = 9222;
+    m_logger->appEvent("CEF远程调试端口已启用: 9222 - F12开发者工具现在应该可以工作");
     
     // CEF 75版本兼容性设置
     // windowless_rendering_enabled 在CEF 75中可能不存在
@@ -630,10 +636,15 @@ bool CEFManager::showDevTools(int browserId)
         return false;
     }
     
-    // 注意：当前实现不支持通过ID获取浏览器实例
-    // 这是一个架构限制，需要重构来支持多浏览器管理
-    m_logger->errorEvent("开发者工具功能暂未实现：需要浏览器实例管理重构");
-    return false;
+    if (!m_cefClient) {
+        m_logger->errorEvent("开发者工具操作失败：CEF客户端未初始化");
+        return false;
+    }
+    
+    // 通过CEFClient实例显示开发者工具（修夏F12无效问题）
+    m_cefClient->showDevTools();
+    m_logger->appEvent("开发者工具已开启 - F12功能现在应该正常工作");
+    return true;
 }
 
 bool CEFManager::closeDevTools(int browserId)
@@ -643,10 +654,15 @@ bool CEFManager::closeDevTools(int browserId)
         return false;
     }
     
-    // 注意：当前实现不支持通过ID获取浏览器实例
-    // 这是一个架构限制，需要重构来支持多浏览器管理
-    m_logger->errorEvent("开发者工具功能暂未实现：需要浏览器实例管理重构");
-    return false;
+    if (!m_cefClient) {
+        m_logger->errorEvent("开发者工具操作失败：CEF客户端未初始化");
+        return false;
+    }
+    
+    // 通过CEFClient实例关闭开发者工具
+    m_cefClient->closeDevTools();
+    m_logger->appEvent("开发者工具已关闭");
+    return true;
 }
 
 void CEFManager::onApplicationShutdown()
