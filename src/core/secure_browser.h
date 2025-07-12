@@ -53,6 +53,16 @@ signals:
      * 当CEF浏览器完成初始页面加载时发出
      */
     void contentLoadFinished();
+    
+    /**
+     * @brief 页面加载开始信号
+     */
+    void pageLoadStarted();
+    
+    /**
+     * @brief 页面加载完成信号
+     */
+    void pageLoadFinished();
 
 protected:
     // 事件处理（保持与原项目相同的安全控制逻辑）

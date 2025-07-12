@@ -118,6 +118,7 @@ void SecureBrowser::load(const QUrl& url)
         // 这里需要通过CEF API导航到新URL
         // 由于CEF的异步特性，实际实现可能需要通过消息传递
         m_logger->appEvent("通过CEF导航到新URL");
+        emit pageLoadStarted();
     } else {
         // CEF浏览器还未创建，URL将在浏览器创建时加载
         m_logger->appEvent("CEF浏览器未创建，URL将在创建时加载");
@@ -395,6 +396,7 @@ void SecureBrowser::onBrowserCreated()
     
     // 如果有待加载的URL，现在加载它
     if (!m_currentUrl.isEmpty()) {
+        emit pageLoadStarted();
         load(m_currentUrl);
     }
     
@@ -402,6 +404,7 @@ void SecureBrowser::onBrowserCreated()
     QTimer::singleShot(1000, this, [this]() {
         m_logger->appEvent("发出内容加载完成信号");
         emit contentLoadFinished();
+        emit pageLoadFinished();
     });
 }
 

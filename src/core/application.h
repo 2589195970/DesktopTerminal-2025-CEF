@@ -94,6 +94,12 @@ public:
     static bool checkCEFCompatibility();
     static QString getCompatibilityReport();
 
+signals:
+    // 初始化进度信号
+    void initializationProgress(const QString& status);
+    void initializationError(const QString& error);
+    void initializationCompleted();
+
 private slots:
     void onAboutToQuit();
     

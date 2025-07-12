@@ -272,6 +272,7 @@ set(SOURCES
     src/security/security_controller.cpp
     src/security/keyboard_filter.cpp
     src/network/network_checker.cpp
+    src/ui/loading_dialog.cpp
 )
 
 # 头文件列表
@@ -287,6 +288,7 @@ set(HEADERS
     src/security/security_controller.h
     src/security/keyboard_filter.h
     src/network/network_checker.h
+    src/ui/loading_dialog.h
 )
 
 # QHotkey子项目

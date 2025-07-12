@@ -8,6 +8,7 @@
 #include "core/secure_browser.h"
 #include "logging/logger.h"
 #include "config/config_manager.h"
+#include "ui/loading_dialog.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -226,36 +227,82 @@ int main(int argc, char *argv[])
     // 创建应用程序实例
     Application application(argc, argv);
     
+    // 创建并显示加载对话框
+    LoadingDialog* loadingDialog = new LoadingDialog();
+    loadingDialog->startAnimation();
+    loadingDialog->show();
+    loadingDialog->raise();
+    loadingDialog->activateWindow();
+    logger.appEvent("显示加载对话框");
+    
+    // 连接初始化进度信号
+    QObject::connect(&application, &Application::initializationProgress,
+                     loadingDialog, &LoadingDialog::setStatus);
+    QObject::connect(&application, &Application::initializationError,
+                     loadingDialog, &LoadingDialog::setError);
+    
+    // 处理重试和取消
+    bool shouldExit = false;
+    QObject::connect(loadingDialog, &LoadingDialog::retryClicked, [&]() {
+        logger.appEvent("用户点击重试");
+        loadingDialog->startAnimation();
+        loadingDialog->setStatus("重新初始化...");
+        application.initialize();
+    });
+    
+    QObject::connect(loadingDialog, &LoadingDialog::cancelClicked, [&]() {
+        logger.appEvent("用户取消启动");
+        shouldExit = true;
+        QApplication::quit();
+    });
+    
     // 检查系统兼容性
     if (!Application::checkSystemRequirements()) {
         logger.errorEvent("系统兼容性检查失败");
-        QMessageBox::critical(nullptr, "系统兼容性错误", 
-            "当前系统不满足运行要求。\\n\\n详细信息请查看日志文件。");
+        loadingDialog->setError("系统兼容性检查失败\n" + Application::getCompatibilityReport());
         return -2;
     }
     
     // 使用同步初始化（直接启动）
     if (!application.initialize()) {
         logger.errorEvent("应用程序初始化失败");
-        QMessageBox::critical(nullptr, "初始化错误", 
-            "应用程序初始化失败。\\n\\n详细信息请查看日志文件。");
-        return -3;
+        // 错误已通过信号处理，等待用户操作
+        return app.exec(); // 等待用户点击重试或取消
     }
 
     // 启动主窗口
+    loadingDialog->setStatus("正在创建主窗口...");
     if (!application.startMainWindow()) {
         logger.errorEvent("主窗口启动失败");
-        QMessageBox::critical(nullptr, "启动错误", 
-            "主窗口启动失败。\\n\\n详细信息请查看日志文件。");
-        return -4;
+        loadingDialog->setError("主窗口启动失败\n请查看日志文件");
+        return app.exec();
     }
 
-    // 显示主窗口
+    // 获取主窗口并连接页面加载信号
     if (auto* mainWindow = application.getMainWindow()) {
-        mainWindow->show();
-        mainWindow->raise();
-        mainWindow->activateWindow();
-        logger.appEvent("主窗口已显示");
+        // 连接页面加载信号
+        QObject::connect(mainWindow, &SecureBrowser::pageLoadStarted, [loadingDialog, &logger]() {
+            if (loadingDialog) {
+                loadingDialog->setStatus("正在加载网页...");
+            }
+        });
+        
+        QObject::connect(mainWindow, &SecureBrowser::pageLoadFinished, [loadingDialog, mainWindow, &logger]() {
+            logger.appEvent("页面加载完成，关闭加载对话框");
+            if (loadingDialog) {
+                loadingDialog->close();
+                loadingDialog->deleteLater();
+            }
+            
+            // 显示主窗口
+            mainWindow->show();
+            mainWindow->raise();
+            mainWindow->activateWindow();
+            logger.appEvent("主窗口已显示");
+        });
+        
+        // 先隐藏主窗口，等待页面加载完成
+        mainWindow->hide();
     }
     
     logger.appEvent("应用程序启动完成，进入事件循环");

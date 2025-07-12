@@ -63,7 +63,9 @@ bool Application::initialize()
     }
 
     // 1. 初始化日志系统
+    emit initializationProgress("正在初始化日志系统...");
     if (!initializeLogging()) {
+        emit initializationError("日志系统初始化失败");
         return false;
     }
 
@@ -71,30 +73,38 @@ bool Application::initialize()
     logSystemInfo();
 
     // 2. 检查系统要求
+    emit initializationProgress("正在检查系统兼容性...");
     if (!checkSystemRequirements()) {
         m_logger->errorEvent("系统要求检查失败");
+        emit initializationError("系统兼容性检查失败\n" + getCompatibilityReport());
         QMessageBox::critical(nullptr, "系统要求不满足", 
             getCompatibilityReport() + "\n\n应用程序将退出。");
         return false;
     }
 
     // 3. 应用兼容性设置
+    emit initializationProgress("正在应用兼容性设置...");
     applyCompatibilitySettings();
 
     // 4. 初始化配置管理
+    emit initializationProgress("正在加载配置文件...");
     if (!initializeConfiguration()) {
         m_logger->errorEvent("配置初始化失败");
+        emit initializationError("配置文件加载失败");
         return false;
     }
 
     // 5. 初始化CEF
+    emit initializationProgress("正在加载CEF浏览器引擎...");
     if (!initializeCEF()) {
         m_logger->errorEvent("CEF初始化失败");
+        emit initializationError("CEF浏览器引擎初始化失败");
         return false;
     }
 
     m_initialized = true;
     m_logger->appEvent("应用程序初始化完成");
+    emit initializationCompleted();
     return true;
 }
 
