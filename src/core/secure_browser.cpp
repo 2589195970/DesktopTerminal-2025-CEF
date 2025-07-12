@@ -42,6 +42,23 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_cefMessageLoopLogCounter(0)
 {
     m_logger->appEvent("SecureBrowser创建开始");
+    
+    // 输出编译和运行时兼容性诊断信息
+    m_logger->appEvent("=== SecureBrowser兼容性诊断 ===");
+    m_logger->appEvent(QString("Qt编译版本: %1").arg(QT_VERSION_STR));
+    m_logger->appEvent(QString("Qt运行时版本: %1").arg(qVersion()));
+    
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
+    m_logger->errorEvent("警告：Qt版本过低，可能存在兼容性问题");
+#endif
+    
+    // 检查关键Qt组件可用性
+    try {
+        WId testId = winId();
+        m_logger->appEvent(QString("窗口系统兼容性检查 - WId类型: %1字节").arg(sizeof(WId)));
+    } catch (...) {
+        m_logger->errorEvent("窗口系统兼容性检查失败");
+    }
 
     // 从配置读取安全设置
     m_strictSecurityMode = m_configManager->isStrictSecurityMode();
@@ -166,18 +183,29 @@ void SecureBrowser::initializeCEFBrowser()
     
     // 在窗口显示后重新获取窗口句柄
     if (!m_windowHandle) {
+        try {
 #ifdef Q_OS_WIN
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
 #elif defined(Q_OS_MAC)
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
 #elif defined(Q_OS_LINUX)
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
+#else
+            m_logger->errorEvent("不支持的平台，无法获取窗口句柄");
+            return;
 #endif
-        
-        if (m_windowHandle) {
-            m_logger->appEvent("窗口句柄获取成功");
-        } else {
-            m_logger->errorEvent("窗口句柄获取失败");
+            
+            if (m_windowHandle) {
+                m_logger->appEvent(QString("窗口句柄获取成功: 0x%1").arg(reinterpret_cast<qulonglong>(m_windowHandle), 0, 16));
+            } else {
+                m_logger->errorEvent("窗口句柄获取失败：winId()返回0");
+                return;
+            }
+        } catch (const std::exception& e) {
+            m_logger->errorEvent(QString("窗口句柄获取异常: %1").arg(e.what()));
+            return;
+        } catch (...) {
+            m_logger->errorEvent("窗口句柄获取发生未知异常");
             return;
         }
     }
@@ -297,20 +325,29 @@ void SecureBrowser::showEvent(QShowEvent *event)
     if (!m_cefBrowserCreated && !m_windowHandle) {
         m_logger->appEvent("ShowEvent触发，重新获取窗口句柄");
         
-        // 重新获取窗口句柄
+        try {
+            // 重新获取窗口句柄
 #ifdef Q_OS_WIN
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
 #elif defined(Q_OS_MAC)
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
 #elif defined(Q_OS_LINUX)
-        m_windowHandle = reinterpret_cast<void*>(winId());
+            m_windowHandle = reinterpret_cast<void*>(winId());
+#else
+            m_logger->errorEvent("ShowEvent: 不支持的平台，无法获取窗口句柄");
+            return;
 #endif
-        
-        if (m_windowHandle) {
-            m_logger->appEvent("ShowEvent中窗口句柄获取成功");
-            createCEFBrowser();
-        } else {
-            m_logger->errorEvent("ShowEvent中窗口句柄获取失败");
+            
+            if (m_windowHandle) {
+                m_logger->appEvent(QString("ShowEvent中窗口句柄获取成功: 0x%1").arg(reinterpret_cast<qulonglong>(m_windowHandle), 0, 16));
+                createCEFBrowser();
+            } else {
+                m_logger->errorEvent("ShowEvent中窗口句柄获取失败：winId()返回0");
+            }
+        } catch (const std::exception& e) {
+            m_logger->errorEvent(QString("ShowEvent窗口句柄获取异常: %1").arg(e.what()));
+        } catch (...) {
+            m_logger->errorEvent("ShowEvent窗口句柄获取发生未知异常");
         }
     }
 }
@@ -583,9 +620,9 @@ void SecureBrowser::setupSecuritySettings()
     // 窗口句柄将在窗口完全显示后获取，避免早期获取无效句柄
     m_windowHandle = nullptr;
     
-    m_logger->appEvent(QString("安全设置配置完成 - 窗口状态: 可见=%1, 原生ID=%2")
+    m_logger->appEvent(QString("安全设置配置完成 - 窗口状态: 可见=%1, 原生ID=0x%2")
         .arg(isVisible() ? "是" : "否")
-        .arg(reinterpret_cast<quintptr>(winId()), 0, 16));
+        .arg(static_cast<qulonglong>(winId()), 0, 16));
 }
 
 void SecureBrowser::enforceFullscreen()
@@ -701,7 +738,7 @@ void SecureBrowser::createCEFBrowser()
         return;
     }
     
-    m_logger->appEvent(QString("开始创建CEF浏览器，窗口句柄: %1").arg(reinterpret_cast<quintptr>(m_windowHandle), 0, 16));
+    m_logger->appEvent(QString("开始创建CEF浏览器，窗口句柄: 0x%1").arg(reinterpret_cast<qulonglong>(m_windowHandle), 0, 16));
     
     QString initialUrl = m_currentUrl.isEmpty() ? m_configManager->getUrl() : m_currentUrl.toString();
     
@@ -718,6 +755,10 @@ void SecureBrowser::createCEFBrowser()
         
         // 调用CEF管理器创建浏览器
         m_logger->appEvent(QString("调用CEF管理器创建浏览器，URL: %1").arg(initialUrl));
+        
+        // 增强诊断：记录创建浏览器前的状态
+        m_logger->appEvent(QString("CEF管理器状态检查 - 已初始化: %1").arg(m_cefManager->isInitialized() ? "是" : "否"));
+        
         m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
         
         if (m_cefBrowserId > 0) {

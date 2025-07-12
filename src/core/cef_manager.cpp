@@ -16,12 +16,10 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <winsock2.h>
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
 #endif
+
+#include <QTcpSocket>
+#include <QHostAddress>
 
 CEFManager::CEFManager(Application* app, QObject* parent)
     : QObject(parent)
@@ -71,6 +69,29 @@ CEFManager::CEFManager(Application* app, QObject* parent)
     m_userAgent = QString("DesktopTerminal-CEF/%1 (%2)")
         .arg(QCoreApplication::applicationVersion())
         .arg(Application::getSystemDescription());
+
+    // 输出编译环境诊断信息（用于GitHub Actions调试）
+    m_logger->appEvent("=== CEFManager编译环境诊断 ===");
+    m_logger->appEvent(QString("Qt版本: %1").arg(QT_VERSION_STR));
+    m_logger->appEvent(QString("编译器: %1").arg(QString(__VERSION__)));
+    
+#ifdef Q_OS_WIN
+    m_logger->appEvent("平台: Windows");
+    #ifdef _WIN64
+        m_logger->appEvent("架构: 64位");
+    #else
+        m_logger->appEvent("架构: 32位");
+    #endif
+    #ifdef _MSC_VER
+        m_logger->appEvent(QString("MSVC版本: %1").arg(_MSC_VER));
+    #endif
+#elif defined(Q_OS_MAC)
+    m_logger->appEvent("平台: macOS");
+#elif defined(Q_OS_LINUX)
+    m_logger->appEvent("平台: Linux");
+#else
+    m_logger->appEvent("平台: 未知");
+#endif
 
     m_logger->appEvent("CEFManager创建完成");
 }
@@ -679,51 +700,31 @@ void CEFManager::onApplicationShutdown()
 
 int CEFManager::findAvailablePort(int startPort)
 {
+    // 使用Qt网络API替代原生socket，提供更好的跨平台兼容性
     for (int port = startPort; port <= startPort + 100; ++port) {
+        QTcpSocket testSocket;
         
-#ifdef Q_OS_WIN
-        SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == INVALID_SOCKET) {
-            continue;
-        }
+        // 尝试连接到本地端口，如果连接失败说明端口可用
+        testSocket.connectToHost(QHostAddress::LocalHost, static_cast<quint16>(port));
         
-        sockaddr_in addr;
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port = htons(port);
-        
-        int result = bind(sock, (sockaddr*)&addr, sizeof(addr));
-        closesocket(sock);
-        
-        if (result == 0) {
+        // 等待连接结果，超时时间设为100ms
+        if (!testSocket.waitForConnected(100)) {
+            // 连接失败，说明端口可用
             if (port != startPort) {
                 m_logger->appEvent(QString("端口 %1 被占用，使用备用端口 %2").arg(startPort).arg(port));
+            } else {
+                m_logger->appEvent(QString("端口 %1 可用").arg(port));
             }
             return port;
         }
-#else
-        int sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) {
-            continue;
+        
+        // 连接成功，说明端口被占用，断开连接
+        testSocket.disconnectFromHost();
+        if (testSocket.state() != QAbstractSocket::UnconnectedState) {
+            testSocket.waitForDisconnected(100);
         }
-        
-        sockaddr_in addr;
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port = htons(port);
-        
-        int result = bind(sock, (sockaddr*)&addr, sizeof(addr));
-        close(sock);
-        
-        if (result == 0) {
-            if (port != startPort) {
-                m_logger->appEvent(QString("端口 %1 被占用，使用备用端口 %2").arg(startPort).arg(port));
-            }
-            return port;
-        }
-#endif
     }
     
-    m_logger->errorEvent(QString("无法找到可用端口（尝试了 %1-%2）").arg(startPort).arg(startPort + 100));
+    m_logger->errorEvent(QString("无法找到可用端口（尝试了 %1-%2），回退到原始端口").arg(startPort).arg(startPort + 100));
     return startPort; // 回退到原始端口
 }
