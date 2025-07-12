@@ -113,13 +113,13 @@ void LoadingDialog::applyStyles()
         
         #loadingTitle {
             color: #333333;
-            font-size: 16px;
+            font-size: 24px;
             font-weight: bold;
         }
         
         #loadingStatus {
             color: #666666;
-            font-size: 12px;
+            font-size: 18px;
         }
         
         #loadingStatus[error="true"] {

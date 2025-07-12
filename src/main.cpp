@@ -301,10 +301,16 @@ int main(int argc, char *argv[])
             logger.appEvent("主窗口已显示");
         });
         
-        // 先隐藏主窗口，等待页面加载完成
+        // 先显示主窗口以确保窗口句柄有效
+        mainWindow->show();
+        
+        // 确保窗口完全显示和初始化
+        QApplication::processEvents();
+        
+        // 然后隐藏等待页面加载完成
         mainWindow->hide();
         
-        // 初始化CEF浏览器
+        // 初始化CEF浏览器（窗口句柄现在应该有效）
         loadingDialog->setStatus("正在初始化浏览器...");
         logger.appEvent("开始初始化CEF浏览器");
         mainWindow->initializeCEFBrowser();

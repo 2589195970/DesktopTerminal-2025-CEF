@@ -16,6 +16,11 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
 #endif
 
 CEFManager::CEFManager(Application* app, QObject* parent)
@@ -411,8 +416,10 @@ void CEFManager::buildCEFSettings(CefSettings& settings)
     settings.log_severity = LOGSEVERITY_WARNING;
     
     // 启用远程调试功能以支持F12开发者工具（修复F12无效问题）
-    settings.remote_debugging_port = 9222;
-    m_logger->appEvent("CEF远程调试端口已启用: 9222 - F12开发者工具现在应该可以工作");
+    // 动态分配端口以避免冲突
+    int debugPort = findAvailablePort(9222);
+    settings.remote_debugging_port = debugPort;
+    m_logger->appEvent(QString("CEF远程调试端口已启用: %1 - F12开发者工具现在应该可以工作").arg(debugPort));
     
     // CEF 75版本兼容性设置
     // windowless_rendering_enabled 在CEF 75中可能不存在
@@ -668,4 +675,55 @@ bool CEFManager::closeDevTools(int browserId)
 void CEFManager::onApplicationShutdown()
 {
     shutdown();
+}
+
+int CEFManager::findAvailablePort(int startPort)
+{
+    for (int port = startPort; port <= startPort + 100; ++port) {
+        
+#ifdef Q_OS_WIN
+        SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock == INVALID_SOCKET) {
+            continue;
+        }
+        
+        sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(port);
+        
+        int result = bind(sock, (sockaddr*)&addr, sizeof(addr));
+        closesocket(sock);
+        
+        if (result == 0) {
+            if (port != startPort) {
+                m_logger->appEvent(QString("端口 %1 被占用，使用备用端口 %2").arg(startPort).arg(port));
+            }
+            return port;
+        }
+#else
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) {
+            continue;
+        }
+        
+        sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(port);
+        
+        int result = bind(sock, (sockaddr*)&addr, sizeof(addr));
+        close(sock);
+        
+        if (result == 0) {
+            if (port != startPort) {
+                m_logger->appEvent(QString("端口 %1 被占用，使用备用端口 %2").arg(startPort).arg(port));
+            }
+            return port;
+        }
+#endif
+    }
+    
+    m_logger->errorEvent(QString("无法找到可用端口（尝试了 %1-%2）").arg(startPort).arg(startPort + 100));
+    return startPort; // 回退到原始端口
 }

@@ -141,6 +141,9 @@ private:
     bool checkCEFDependencies();
     void checkOptionalFiles(const QStringList& optionalFiles, const QString& cefDir);
     QString checkCrashpadStatus();
+    
+    // 端口管理
+    int findAvailablePort(int startPort);
 
 signals:
     /**

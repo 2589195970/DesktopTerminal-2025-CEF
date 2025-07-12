@@ -158,10 +158,28 @@ void SecureBrowser::initializeCEFBrowser()
     
     m_logger->appEvent("开始初始化CEF浏览器");
     
-    // 确保窗口已创建
+    // 确保窗口已显示并获取有效窗口句柄
     if (!isVisible()) {
         m_logger->errorEvent("窗口未显示，无法初始化CEF浏览器");
         return;
+    }
+    
+    // 在窗口显示后重新获取窗口句柄
+    if (!m_windowHandle) {
+#ifdef Q_OS_WIN
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#elif defined(Q_OS_MAC)
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#elif defined(Q_OS_LINUX)
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#endif
+        
+        if (m_windowHandle) {
+            m_logger->appEvent("窗口句柄获取成功");
+        } else {
+            m_logger->errorEvent("窗口句柄获取失败");
+            return;
+        }
     }
     
     // 创建CEF浏览器
@@ -275,9 +293,25 @@ void SecureBrowser::showEvent(QShowEvent *event)
     // 确保全屏模式
     setFullscreenMode();
     
-    // 创建CEF浏览器（如果还未创建）
-    if (!m_cefBrowserCreated) {
-        createCEFBrowser();
+    // 只有在窗口句柄无效时才重新获取（避免重复调用冲突）
+    if (!m_cefBrowserCreated && !m_windowHandle) {
+        m_logger->appEvent("ShowEvent触发，重新获取窗口句柄");
+        
+        // 重新获取窗口句柄
+#ifdef Q_OS_WIN
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#elif defined(Q_OS_MAC)
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#elif defined(Q_OS_LINUX)
+        m_windowHandle = reinterpret_cast<void*>(winId());
+#endif
+        
+        if (m_windowHandle) {
+            m_logger->appEvent("ShowEvent中窗口句柄获取成功");
+            createCEFBrowser();
+        } else {
+            m_logger->errorEvent("ShowEvent中窗口句柄获取失败");
+        }
     }
 }
 
@@ -546,16 +580,12 @@ void SecureBrowser::setupSecuritySettings()
     // 设置安全相关的属性
     setAttribute(Qt::WA_DeleteOnClose, false); // 防止意外关闭
     
-    // 获取窗口句柄用于CEF集成
-#ifdef Q_OS_WIN
-    m_windowHandle = reinterpret_cast<void*>(winId());
-#elif defined(Q_OS_MAC)
-    m_windowHandle = reinterpret_cast<void*>(winId());
-#elif defined(Q_OS_LINUX)
-    m_windowHandle = reinterpret_cast<void*>(winId());
-#endif
+    // 窗口句柄将在窗口完全显示后获取，避免早期获取无效句柄
+    m_windowHandle = nullptr;
     
-    m_logger->appEvent("安全设置配置完成");
+    m_logger->appEvent(QString("安全设置配置完成 - 窗口状态: 可见=%1, 原生ID=%2")
+        .arg(isVisible() ? "是" : "否")
+        .arg(reinterpret_cast<quintptr>(winId()), 0, 16));
 }
 
 void SecureBrowser::enforceFullscreen()
@@ -661,14 +691,18 @@ void SecureBrowser::disableWindowControls()
 
 void SecureBrowser::createCEFBrowser()
 {
-    if (m_cefBrowserCreated || !m_windowHandle) {
+    if (m_cefBrowserCreated) {
+        m_logger->appEvent("CEF浏览器已创建，跳过重复创建");
         return;
     }
     
-    m_logger->appEvent("开始创建CEF浏览器");
+    if (!m_windowHandle) {
+        m_logger->errorEvent("窗口句柄无效，无法创建CEF浏览器");
+        return;
+    }
     
-    // 获取CEF管理器实例（需要从Application获取）
-    // 这里暂时使用占位符逻辑
+    m_logger->appEvent(QString("开始创建CEF浏览器，窗口句柄: %1").arg(reinterpret_cast<quintptr>(m_windowHandle), 0, 16));
+    
     QString initialUrl = m_currentUrl.isEmpty() ? m_configManager->getUrl() : m_currentUrl.toString();
     
     try {
@@ -677,16 +711,25 @@ void SecureBrowser::createCEFBrowser()
             return;
         }
         
+        if (!m_cefManager->isInitialized()) {
+            handleBrowserError("CEF尚未完成初始化");
+            return;
+        }
+        
         // 调用CEF管理器创建浏览器
+        m_logger->appEvent(QString("调用CEF管理器创建浏览器，URL: %1").arg(initialUrl));
         m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
         
         if (m_cefBrowserId > 0) {
+            m_logger->appEvent(QString("CEF浏览器创建成功，ID: %1").arg(m_cefBrowserId));
             onBrowserCreated();
         } else {
-            handleBrowserError("CEF浏览器创建失败");
+            handleBrowserError("CEF浏览器创建失败 - createBrowser返回0");
         }
+    } catch (const std::exception& e) {
+        handleBrowserError(QString("CEF浏览器创建异常: %1").arg(e.what()));
     } catch (...) {
-        handleBrowserError("CEF浏览器创建异常");
+        handleBrowserError("CEF浏览器创建发生未知异常");
     }
 }
 
