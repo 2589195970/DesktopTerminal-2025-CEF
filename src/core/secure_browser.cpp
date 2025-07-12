@@ -43,22 +43,8 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
 {
     m_logger->appEvent("SecureBrowser创建开始");
     
-    // 输出编译和运行时兼容性诊断信息
-    m_logger->appEvent("=== SecureBrowser兼容性诊断 ===");
-    m_logger->appEvent(QString("Qt编译版本: %1").arg(QT_VERSION_STR));
-    m_logger->appEvent(QString("Qt运行时版本: %1").arg(qVersion()));
-    
-#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
-    m_logger->errorEvent("警告：Qt版本过低，可能存在兼容性问题");
-#endif
-    
-    // 检查关键Qt组件可用性
-    try {
-        WId testId = winId();
-        m_logger->appEvent(QString("窗口系统兼容性检查 - WId类型: %1字节").arg(sizeof(WId)));
-    } catch (...) {
-        m_logger->errorEvent("窗口系统兼容性检查失败");
-    }
+    // 基础兼容性检查（移除可能导致链接错误的诊断代码）
+    m_logger->appEvent("SecureBrowser兼容性: 窗口系统初始化");
 
     // 从配置读取安全设置
     m_strictSecurityMode = m_configManager->isStrictSecurityMode();
