@@ -47,6 +47,12 @@ public:
      */
     void setWindowTitle(const QString& title);
 
+    /**
+     * @brief 初始化CEF浏览器
+     * 必须在窗口创建后调用
+     */
+    void initializeCEFBrowser();
+
 signals:
     /**
      * @brief 内容加载完成信号

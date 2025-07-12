@@ -149,6 +149,25 @@ void SecureBrowser::setWindowTitle(const QString& title)
     m_logger->appEvent(QString("窗口标题设置为: %1").arg(title));
 }
 
+void SecureBrowser::initializeCEFBrowser()
+{
+    if (m_cefBrowserCreated) {
+        m_logger->appEvent("CEF浏览器已初始化，跳过重复初始化");
+        return;
+    }
+    
+    m_logger->appEvent("开始初始化CEF浏览器");
+    
+    // 确保窗口已创建
+    if (!isVisible()) {
+        m_logger->errorEvent("窗口未显示，无法初始化CEF浏览器");
+        return;
+    }
+    
+    // 创建CEF浏览器
+    createCEFBrowser();
+}
+
 bool SecureBrowser::event(QEvent *event)
 {
     if (event->type() == QEvent::ShortcutOverride) {

@@ -303,6 +303,11 @@ int main(int argc, char *argv[])
         
         // 先隐藏主窗口，等待页面加载完成
         mainWindow->hide();
+        
+        // 初始化CEF浏览器
+        loadingDialog->setStatus("正在初始化浏览器...");
+        logger.appEvent("开始初始化CEF浏览器");
+        mainWindow->initializeCEFBrowser();
     }
     
     logger.appEvent("应用程序启动完成，进入事件循环");

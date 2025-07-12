@@ -74,8 +74,8 @@ private:
     int m_progressMax;
     
     // 样式常量
-    static const int DIALOG_WIDTH = 400;
-    static const int DIALOG_HEIGHT = 200;
+    static const int DIALOG_WIDTH = 800;
+    static const int DIALOG_HEIGHT = 600;
     static const int ICON_SIZE = 48;
     static const int ANIMATION_DURATION = 1000;
 };
