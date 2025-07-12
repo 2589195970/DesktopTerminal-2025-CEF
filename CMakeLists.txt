@@ -265,6 +265,7 @@ set(SOURCES
     src/core/cef_manager.cpp
     src/core/secure_browser.cpp
     src/core/window_manager.cpp
+    src/core/system_checker.cpp
     src/cef/cef_client_impl.cpp
     src/cef/cef_app_impl.cpp
     src/config/config_manager.cpp
@@ -281,6 +282,7 @@ set(HEADERS
     src/core/cef_manager.h
     src/core/secure_browser.h
     src/core/window_manager.h
+    src/core/system_checker.h
     src/cef/cef_client_impl.h
     src/cef/cef_app_impl.h
     src/config/config_manager.h

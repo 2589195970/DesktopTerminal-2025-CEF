@@ -1,5 +1,6 @@
 #include "loading_dialog.h"
 #include "../logging/logger.h"
+#include "../core/system_checker.h"
 
 #include <QLabel>
 #include <QPushButton>
@@ -13,6 +14,12 @@
 #include <QScreen>
 #include <QStyle>
 #include <QtMath>
+#include <QProgressBar>
+#include <QTextEdit>
+#include <QScrollArea>
+#include <QSplitter>
+#include <QGroupBox>
+#include <QFrame>
 
 LoadingDialog::LoadingDialog(QWidget *parent)
     : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
@@ -20,16 +27,27 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     , m_statusLabel(nullptr)
     , m_retryButton(nullptr)
     , m_cancelButton(nullptr)
+    , m_progressBar(nullptr)
+    , m_progressLabel(nullptr)
+    , m_errorDetailsText(nullptr)
+    , m_detailsButton(nullptr)
+    , m_autoFixButton(nullptr)
+    , m_systemChecker(nullptr)
     , m_animationTimer(nullptr)
     , m_rotationAnimation(nullptr)
     , m_rotation(0.0)
     , m_isError(false)
+    , m_systemCheckInProgress(false)
+    , m_showingDetails(false)
     , m_progressValue(0)
     , m_progressMax(100)
 {
     setupUI();
     applyStyles();
     createRotationAnimation();
+    
+    // 初始化SystemChecker
+    initializeSystemChecker();
     
     // 设置窗口属性
     setAttribute(Qt::WA_TranslucentBackground);
@@ -75,6 +93,29 @@ void LoadingDialog::setupUI()
     m_statusLabel->setWordWrap(true);
     mainLayout->addWidget(m_statusLabel);
     
+    // 进度条
+    m_progressBar = new QProgressBar(this);
+    m_progressBar->setVisible(false);
+    m_progressBar->setMinimum(0);
+    m_progressBar->setMaximum(100);
+    m_progressBar->setObjectName("systemProgressBar");
+    mainLayout->addWidget(m_progressBar);
+    
+    // 进度标签
+    m_progressLabel = new QLabel("", this);
+    m_progressLabel->setAlignment(Qt::AlignCenter);
+    m_progressLabel->setObjectName("progressLabel");
+    m_progressLabel->setVisible(false);
+    mainLayout->addWidget(m_progressLabel);
+    
+    // 错误详情显示区域
+    m_errorDetailsText = new QTextEdit(this);
+    m_errorDetailsText->setObjectName("errorDetails");
+    m_errorDetailsText->setReadOnly(true);
+    m_errorDetailsText->setVisible(false);
+    m_errorDetailsText->setMaximumHeight(150);
+    mainLayout->addWidget(m_errorDetailsText);
+    
     mainLayout->addStretch();
     
     // 按钮布局
@@ -97,6 +138,21 @@ void LoadingDialog::setupUI()
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::cancelClicked);
     buttonLayout->addWidget(m_cancelButton);
     
+    // 详情按钮（初始隐藏）
+    m_detailsButton = new QPushButton("显示详情", this);
+    m_detailsButton->setObjectName("detailsButton");
+    m_detailsButton->setVisible(false);
+    m_detailsButton->setMinimumWidth(80);
+    connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onShowErrorDetails);
+    buttonLayout->addWidget(m_detailsButton);
+    
+    // 自动修复按钮（初始隐藏）
+    m_autoFixButton = new QPushButton("自动修复", this);
+    m_autoFixButton->setObjectName("autoFixButton");
+    m_autoFixButton->setVisible(false);
+    m_autoFixButton->setMinimumWidth(80);
+    buttonLayout->addWidget(m_autoFixButton);
+    
     buttonLayout->addStretch();
     mainLayout->addLayout(buttonLayout);
 }
@@ -113,13 +169,13 @@ void LoadingDialog::applyStyles()
         
         #loadingTitle {
             color: #333333;
-            font-size: 24px;
+            font-size: 36px;
             font-weight: bold;
         }
         
         #loadingStatus {
             color: #666666;
-            font-size: 18px;
+            font-size: 28px;
         }
         
         #loadingStatus[error="true"] {
@@ -309,4 +365,421 @@ void LoadingDialog::keyPressEvent(QKeyEvent *event)
     }
     
     QDialog::keyPressEvent(event);
+}
+
+// SystemChecker集成实现
+
+void LoadingDialog::initializeSystemChecker()
+{
+    // 创建SystemChecker实例
+    m_systemChecker = new SystemChecker(this);
+    
+    // 连接SystemChecker信号到LoadingDialog槽函数
+    connect(m_systemChecker, &SystemChecker::checkProgress,
+            this, &LoadingDialog::onCheckProgress);
+    connect(m_systemChecker, &SystemChecker::checkItemCompleted,
+            this, &LoadingDialog::onCheckItemCompleted);
+    connect(m_systemChecker, &SystemChecker::checkCompleted,
+            this, &LoadingDialog::onCheckCompleted);
+    connect(m_systemChecker, &SystemChecker::autoFixCompleted,
+            this, &LoadingDialog::onAutoFixCompleted);
+    
+    // 连接自动修复按钮
+    connect(m_autoFixButton, &QPushButton::clicked, [this]() {
+        if (m_systemChecker) {
+            m_systemChecker->attemptAutoFix();
+        }
+    });
+    
+    // 连接重试按钮到系统检测
+    connect(m_retryButton, &QPushButton::clicked, this, &LoadingDialog::onRetrySystemCheck);
+    
+    Logger::instance().appEvent("LoadingDialog SystemChecker初始化完成");
+}
+
+void LoadingDialog::onCheckProgress(int current, int total, const QString& message)
+{
+    if (!m_progressBar || !m_progressLabel || !m_statusLabel) {
+        return;
+    }
+    
+    // 显示进度条和进度标签
+    m_progressBar->setVisible(true);
+    m_progressLabel->setVisible(true);
+    
+    // 更新进度
+    int progressPercent = (current * 100) / total;
+    m_progressBar->setValue(progressPercent);
+    
+    // 更新状态标签
+    m_statusLabel->setText(message);
+    
+    // 更新进度标签
+    m_progressLabel->setText(QString("正在执行: %1/%2").arg(current).arg(total));
+    
+    Logger::instance().appEvent(QString("检测进度: %1/%2 - %3").arg(current).arg(total).arg(message));
+}
+
+void LoadingDialog::onCheckItemCompleted(const SystemChecker::CheckResult& result)
+{
+    // 记录检测结果
+    m_checkResults.append(result);
+    
+    // 根据检测结果级别更新界面
+    QString levelText;
+    switch (result.level) {
+        case SystemChecker::LEVEL_OK:
+            levelText = "✓ 正常";
+            break;
+        case SystemChecker::LEVEL_WARNING:
+            levelText = "⚠ 警告";
+            break;
+        case SystemChecker::LEVEL_ERROR:
+            levelText = "✗ 错误";
+            break;
+        case SystemChecker::LEVEL_FATAL:
+            levelText = "✗ 致命错误";
+            break;
+    }
+    
+    QString statusText = QString("%1: %2 - %3").arg(result.title).arg(levelText).arg(result.message);
+    
+    if (m_statusLabel) {
+        m_statusLabel->setText(statusText);
+    }
+    
+    // 如果是错误或警告，准备显示详情
+    if (result.level >= SystemChecker::LEVEL_WARNING) {
+        updateErrorDisplay();
+    }
+    
+    Logger::instance().appEvent(QString("检测项目完成: %1 - 级别: %2").arg(result.title).arg(levelText));
+}
+
+void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::CheckResult>& results)
+{
+    m_systemCheckInProgress = false;
+    m_checkResults = results;
+    
+    // 停止动画
+    stopAnimation();
+    
+    if (success) {
+        // 所有检测通过，准备启动应用程序
+        if (m_statusLabel) {
+            m_statusLabel->setText("系统检测完成，正在启动应用程序...");
+        }
+        
+        if (m_progressBar) {
+            m_progressBar->setValue(100);
+        }
+        
+        // 隐藏错误相关按钮
+        if (m_retryButton) m_retryButton->setVisible(false);
+        if (m_cancelButton) m_cancelButton->setVisible(false);
+        if (m_detailsButton) m_detailsButton->setVisible(false);
+        if (m_autoFixButton) m_autoFixButton->setVisible(false);
+        
+        Logger::instance().appEvent("系统检测成功完成，准备启动应用程序");
+        
+        // 发射信号通知系统检测完成
+        emit systemCheckCompleted(true);
+        emit readyToStartApplication();
+        
+    } else {
+        // 检测失败，显示错误信息
+        m_isError = true;
+        
+        // 计算错误统计
+        int fatalCount = 0, errorCount = 0, warningCount = 0;
+        for (const auto& result : results) {
+            switch (result.level) {
+                case SystemChecker::LEVEL_FATAL: fatalCount++; break;
+                case SystemChecker::LEVEL_ERROR: errorCount++; break;
+                case SystemChecker::LEVEL_WARNING: warningCount++; break;
+                default: break;
+            }
+        }
+        
+        QString errorSummary = QString("系统检测失败: 致命错误%1个，错误%2个，警告%3个")
+                              .arg(fatalCount).arg(errorCount).arg(warningCount);
+        
+        if (m_statusLabel) {
+            m_statusLabel->setText(errorSummary);
+            m_statusLabel->setProperty("error", true);
+            m_statusLabel->style()->polish(m_statusLabel);
+        }
+        
+        // 显示操作按钮
+        if (m_retryButton) m_retryButton->setVisible(true);
+        if (m_cancelButton) m_cancelButton->setVisible(true);
+        if (m_detailsButton) m_detailsButton->setVisible(true);
+        
+        // 检查是否有可自动修复的问题
+        bool hasAutoFixable = false;
+        for (const auto& result : results) {
+            if (result.autoFixable && result.level != SystemChecker::LEVEL_OK) {
+                hasAutoFixable = true;
+                break;
+            }
+        }
+        
+        if (hasAutoFixable && m_autoFixButton) {
+            m_autoFixButton->setVisible(true);
+        }
+        
+        // 更新错误详情显示
+        updateErrorDisplay();
+        
+        Logger::instance().errorEvent(errorSummary);
+        
+        // 发射信号通知系统检测失败
+        emit systemCheckCompleted(false);
+    }
+}
+
+void LoadingDialog::onAutoFixCompleted(int fixed)
+{
+    QString message = QString("自动修复完成，已修复%1个问题").arg(fixed);
+    
+    if (m_statusLabel) {
+        m_statusLabel->setText(message);
+    }
+    
+    Logger::instance().appEvent(message);
+    
+    // 如果有问题被修复，可以重新开始检测
+    if (fixed > 0) {
+        // 短暂延迟后重新检测
+        QTimer::singleShot(1000, this, &LoadingDialog::onRetrySystemCheck);
+    }
+}
+
+void LoadingDialog::onRetrySystemCheck()
+{
+    if (m_systemCheckInProgress) {
+        return;
+    }
+    
+    // 重置界面状态
+    m_isError = false;
+    m_checkResults.clear();
+    
+    // 隐藏错误相关UI
+    if (m_errorDetailsText) {
+        m_errorDetailsText->setVisible(false);
+    }
+    
+    if (m_retryButton) m_retryButton->setVisible(false);
+    if (m_cancelButton) m_cancelButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setVisible(false);
+    if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    
+    // 重置状态标签样式
+    if (m_statusLabel) {
+        m_statusLabel->setProperty("error", false);
+        m_statusLabel->style()->polish(m_statusLabel);
+        m_statusLabel->setText("重新开始系统检测...");
+    }
+    
+    // 重置进度条
+    if (m_progressBar) {
+        m_progressBar->setValue(0);
+        m_progressBar->setVisible(true);
+    }
+    
+    if (m_progressLabel) {
+        m_progressLabel->setText("");
+        m_progressLabel->setVisible(true);
+    }
+    
+    // 重新启动动画
+    startAnimation();
+    
+    // 开始系统检测
+    startSystemCheck();
+    
+    Logger::instance().appEvent("用户触发重试系统检测");
+}
+
+void LoadingDialog::onShowErrorDetails()
+{
+    if (!m_errorDetailsText || !m_detailsButton) {
+        return;
+    }
+    
+    m_showingDetails = !m_showingDetails;
+    
+    if (m_showingDetails) {
+        // 显示详细错误信息
+        m_errorDetailsText->setVisible(true);
+        m_detailsButton->setText("隐藏详情");
+        
+        // 填充错误详情内容
+        displayCheckResults();
+        
+        Logger::instance().appEvent("用户查看详细错误信息");
+    } else {
+        // 隐藏详细错误信息
+        m_errorDetailsText->setVisible(false);
+        m_detailsButton->setText("显示详情");
+        
+        Logger::instance().appEvent("用户隐藏详细错误信息");
+    }
+}
+
+// 公共方法实现
+
+void LoadingDialog::startSystemCheck()
+{
+    if (m_systemCheckInProgress || !m_systemChecker) {
+        return;
+    }
+    
+    m_systemCheckInProgress = true;
+    m_isError = false;
+    m_checkResults.clear();
+    
+    // 更新界面
+    if (m_titleLabel) {
+        m_titleLabel->setText("系统检测中");
+    }
+    
+    if (m_statusLabel) {
+        m_statusLabel->setText("正在开始系统检测...");
+        m_statusLabel->setProperty("error", false);
+        m_statusLabel->style()->polish(m_statusLabel);
+    }
+    
+    // 显示进度控件
+    if (m_progressBar) {
+        m_progressBar->setVisible(true);
+        m_progressBar->setValue(0);
+    }
+    
+    if (m_progressLabel) {
+        m_progressLabel->setVisible(true);
+        m_progressLabel->setText("准备检测...");
+    }
+    
+    // 隐藏按钮
+    if (m_retryButton) m_retryButton->setVisible(false);
+    if (m_cancelButton) m_cancelButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setVisible(false);
+    if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    
+    // 启动动画
+    startAnimation();
+    
+    // 开始检测
+    m_systemChecker->startSystemCheck();
+    
+    Logger::instance().appEvent("开始系统检测流程");
+}
+
+void LoadingDialog::startApplicationLoad()
+{
+    if (m_titleLabel) {
+        m_titleLabel->setText("启动应用程序");
+    }
+    
+    if (m_statusLabel) {
+        m_statusLabel->setText("正在加载应用程序组件...");
+    }
+    
+    // 隐藏检测相关UI
+    if (m_progressBar) m_progressBar->setVisible(false);
+    if (m_progressLabel) m_progressLabel->setVisible(false);
+    if (m_errorDetailsText) m_errorDetailsText->setVisible(false);
+    
+    // 启动动画
+    startAnimation();
+    
+    Logger::instance().appEvent("开始应用程序加载流程");
+}
+
+// 辅助方法实现
+
+void LoadingDialog::updateErrorDisplay()
+{
+    if (!m_errorDetailsText) {
+        return;
+    }
+    
+    // 检查是否有错误或警告
+    bool hasIssues = false;
+    for (const auto& result : m_checkResults) {
+        if (result.level >= SystemChecker::LEVEL_WARNING) {
+            hasIssues = true;
+            break;
+        }
+    }
+    
+    if (hasIssues && m_detailsButton) {
+        m_detailsButton->setVisible(true);
+    }
+}
+
+void LoadingDialog::displayCheckResults()
+{
+    if (!m_errorDetailsText) {
+        return;
+    }
+    
+    QString detailsText;
+    
+    for (const auto& result : m_checkResults) {
+        detailsText += formatCheckResult(result) + "\n\n";
+    }
+    
+    m_errorDetailsText->setPlainText(detailsText);
+}
+
+QString LoadingDialog::formatCheckResult(const SystemChecker::CheckResult& result)
+{
+    QString formatted;
+    
+    // 标题和级别
+    QString levelText;
+    switch (result.level) {
+        case SystemChecker::LEVEL_OK:
+            levelText = "✓ 正常";
+            break;
+        case SystemChecker::LEVEL_WARNING:
+            levelText = "⚠ 警告";
+            break;
+        case SystemChecker::LEVEL_ERROR:
+            levelText = "✗ 错误";
+            break;
+        case SystemChecker::LEVEL_FATAL:
+            levelText = "✗ 致命错误";
+            break;
+    }
+    
+    formatted += QString("[%1] %2\n").arg(levelText).arg(result.title);
+    formatted += QString("状态: %1\n").arg(result.message);
+    
+    // 详细信息
+    if (!result.details.isEmpty()) {
+        formatted += "详细信息:\n";
+        for (const QString& detail : result.details) {
+            formatted += QString("  • %1\n").arg(detail);
+        }
+    }
+    
+    // 解决方案
+    if (!result.solution.isEmpty()) {
+        formatted += QString("建议解决方案: %1\n").arg(result.solution);
+    }
+    
+    // 操作提示
+    if (result.canRetry) {
+        formatted += "可重试检测此项目\n";
+    }
+    
+    if (result.autoFixable) {
+        formatted += "可尝试自动修复\n";
+    }
+    
+    return formatted;
 }
