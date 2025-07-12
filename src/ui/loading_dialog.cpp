@@ -11,6 +11,7 @@
 #include <QPropertyAnimation>
 #include <QApplication>
 #include <QScreen>
+#include <QStyle>
 #include <QtMath>
 
 LoadingDialog::LoadingDialog(QWidget *parent)
