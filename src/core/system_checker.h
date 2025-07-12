@@ -5,8 +5,9 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
-#include <QNetworkInformation>
 #include <QNetworkInterface>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 
 class Logger;
 class ConfigManager;
@@ -168,7 +169,7 @@ private:
     ConfigManager* m_configManager;
     QList<CheckResult> m_results;
     QTimer* m_networkTimeout;
-    QNetworkInformation* m_networkInfo;
+    QNetworkAccessManager* m_networkManager;
     
     int m_currentCheck;
     int m_totalChecks;

@@ -17,6 +17,8 @@
 #include <QUrl>
 #include <QTimer>
 #include <QThread>
+#include <QHostAddress>
+#include <QNetworkAddressEntry>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -28,7 +30,7 @@ SystemChecker::SystemChecker(QObject *parent)
     , m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
     , m_networkTimeout(nullptr)
-    , m_networkInfo(nullptr)
+    , m_networkManager(nullptr)
     , m_currentCheck(0)
     , m_totalChecks(5)
     , m_checkInProgress(false)
@@ -36,8 +38,9 @@ SystemChecker::SystemChecker(QObject *parent)
     // 注册自定义类型用于信号槽
     qRegisterMetaType<SystemChecker::CheckResult>("SystemChecker::CheckResult");
     
-    // 初始化网络信息
-    m_networkInfo = QNetworkInformation::instance();
+    // 初始化网络管理器
+    m_networkManager = new QNetworkAccessManager(this);
+    m_logger->appEvent("网络管理器已初始化");
     
     m_logger->appEvent("SystemChecker初始化完成");
 }
@@ -205,35 +208,55 @@ SystemChecker::CheckResult SystemChecker::checkNetworkConnection()
 
     if (!hasActiveInterface) {
         issues << "未检测到活动的网络接口";
-        maxLevel = LEVEL_WARNING;
+        maxLevel = LEVEL_ERROR;
+        
+        // 如果没有活动接口，尝试检查更多信息
+        bool hasAnyInterface = false;
+        for (const QNetworkInterface &interface : interfaces) {
+            if (!(interface.flags() & QNetworkInterface::IsLoopBack)) {
+                hasAnyInterface = true;
+                m_logger->appEvent(QString("发现网络接口 %1，但未激活").arg(interface.name()));
+            }
+        }
+        
+        if (!hasAnyInterface) {
+            issues << "系统中没有发现任何网络适配器";
+            maxLevel = LEVEL_FATAL;
+            result.solution = "请检查：\n1. 网络适配器是否已启用\n2. 网络驱动程序是否正常\n3. 硬件连接是否正确";
+        }
     }
 
-    // 检查网络连接状态
-    if (m_networkInfo) {
-        QNetworkInformation::Reachability reachability = m_networkInfo->reachability();
-        switch (reachability) {
-            case QNetworkInformation::Reachability::Unknown:
-                issues << "网络连接状态未知";
-                maxLevel = qMax(maxLevel, LEVEL_WARNING);
-                break;
-            case QNetworkInformation::Reachability::Disconnected:
-                issues << "网络连接已断开";
-                maxLevel = qMax(maxLevel, LEVEL_ERROR);
-                break;
-            case QNetworkInformation::Reachability::Local:
-                issues << "仅本地网络连接，无法访问互联网";
-                maxLevel = qMax(maxLevel, LEVEL_WARNING);
-                break;
-            case QNetworkInformation::Reachability::Site:
-            case QNetworkInformation::Reachability::Online:
-                // 网络连接正常
-                break;
+    // 基于Qt 5的网络检测
+    if (!hasActiveInterface) {
+        // 未检测到活动的网络接口
+        issues << "未检测到活动的网络连接";
+        maxLevel = LEVEL_FATAL;
+        result.solution = "网络连接完全断开，请检查：\n1. 网络电缆连接\n2. WiFi开关状态\n3. 网络适配器状态\n4. 联系网络管理员";
+    } else {
+        // 有活动接口，进一步检查网络连通性
+        // 检查是否只有本地连接
+        bool hasInternetCapability = false;
+        for (const QNetworkInterface &interface : interfaces) {
+            if (interface.flags() & QNetworkInterface::IsUp && 
+                interface.flags() & QNetworkInterface::IsRunning &&
+                !(interface.flags() & QNetworkInterface::IsLoopBack)) {
+                
+                // 检查是否有非本地IP地址
+                QList<QNetworkAddressEntry> entries = interface.addressEntries();
+                for (const QNetworkAddressEntry &entry : entries) {
+                    QHostAddress addr = entry.ip();
+                    if (!addr.isLoopback() && !addr.isLinkLocal()) {
+                        hasInternetCapability = true;
+                        break;
+                    }
+                }
+            }
         }
-
-        // 检查是否为计量连接
-        if (m_networkInfo->isMetered()) {
-            issues << "当前使用计量网络连接，可能影响数据传输";
-            maxLevel = qMax(maxLevel, LEVEL_WARNING);
+        
+        if (!hasInternetCapability) {
+            issues << "仅本地网络连接，无法访问互联网";
+            maxLevel = qMax(maxLevel, LEVEL_ERROR);
+            result.solution = "请检查：\n1. 路由器互联网连接\n2. DNS设置\n3. 代理服务器设置";
         }
     }
 
@@ -244,10 +267,17 @@ SystemChecker::CheckResult SystemChecker::checkNetworkConnection()
         result.message = "网络连接正常";
     } else if (maxLevel == LEVEL_WARNING) {
         result.message = "网络连接存在一些问题，但可以继续使用";
-        result.solution = "检查网络设置或切换到更稳定的网络连接";
-    } else {
-        result.message = "网络连接严重问题";
-        result.solution = "请检查网络连接并重试";
+        if (result.solution.isEmpty()) {
+            result.solution = "检查网络设置或切换到更稳定的网络连接";
+        }
+    } else if (maxLevel == LEVEL_ERROR) {
+        result.message = "网络连接存在严重问题";
+        if (result.solution.isEmpty()) {
+            result.solution = "请检查网络连接并重试";
+        }
+    } else if (maxLevel == LEVEL_FATAL) {
+        result.message = "网络连接完全断开，无法继续";
+        // solution已在上面设置
     }
 
     return result;
@@ -328,7 +358,10 @@ SystemChecker::CheckResult SystemChecker::checkConfigPermissions()
     CheckLevel maxLevel = LEVEL_OK;
 
     // 检查配置文件
-    QString configPath = m_configManager->getConfigFilePath();
+    QString configPath = m_configManager->getActualConfigPath();
+    if (configPath.isEmpty()) {
+        configPath = "resources/config.json";
+    }
     QFileInfo configInfo(configPath);
     
     if (!configInfo.exists()) {
@@ -402,7 +435,7 @@ SystemChecker::CheckResult SystemChecker::preloadComponents()
 
     try {
         // 预加载配置管理器
-        bool configLoaded = m_configManager->isValid();
+        bool configLoaded = m_configManager->isLoaded();
         if (configLoaded) {
             loadedComponents << "配置管理器";
         } else {
@@ -456,7 +489,8 @@ void SystemChecker::attemptAutoFix()
             // 尝试自动修复
             if (result.type == CHECK_CONFIG_PERMISSIONS) {
                 // 尝试创建默认配置文件
-                if (m_configManager->createDefaultConfig()) {
+                QString defaultPath = QCoreApplication::applicationDirPath() + "/config.json";
+                if (m_configManager->createDefaultConfig(defaultPath)) {
                     result.level = LEVEL_OK;
                     result.message = "已自动创建默认配置文件";
                     fixedCount++;

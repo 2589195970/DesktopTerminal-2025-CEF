@@ -8,11 +8,11 @@
 #include <QTextEdit>
 #include <QScrollArea>
 #include <QVBoxLayout>
+#include "../core/system_checker.h"
 
 class QLabel;
 class QPushButton;
 class QPropertyAnimation;
-class SystemChecker;
 
 /**
  * @brief 智能加载对话框类

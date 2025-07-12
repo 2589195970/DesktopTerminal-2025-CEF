@@ -84,6 +84,9 @@ void LoadingDialog::setupUI()
     m_titleLabel = new QLabel("正在启动应用程序", this);
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->setObjectName("loadingTitle");
+    // 直接设置字体大小，确保在高DPI屏幕上也能正确显示
+    QFont titleFont("Microsoft YaHei", 32, QFont::Bold);
+    m_titleLabel->setFont(titleFont);
     mainLayout->addWidget(m_titleLabel);
     
     // 状态标签
@@ -91,6 +94,9 @@ void LoadingDialog::setupUI()
     m_statusLabel->setAlignment(Qt::AlignCenter);
     m_statusLabel->setObjectName("loadingStatus");
     m_statusLabel->setWordWrap(true);
+    // 直接设置字体大小
+    QFont statusFont("Microsoft YaHei", 24);
+    m_statusLabel->setFont(statusFont);
     mainLayout->addWidget(m_statusLabel);
     
     // 进度条
@@ -106,6 +112,9 @@ void LoadingDialog::setupUI()
     m_progressLabel->setAlignment(Qt::AlignCenter);
     m_progressLabel->setObjectName("progressLabel");
     m_progressLabel->setVisible(false);
+    // 设置进度标签字体
+    QFont progressFont("Microsoft YaHei", 16);
+    m_progressLabel->setFont(progressFont);
     mainLayout->addWidget(m_progressLabel);
     
     // 错误详情显示区域
@@ -114,6 +123,9 @@ void LoadingDialog::setupUI()
     m_errorDetailsText->setReadOnly(true);
     m_errorDetailsText->setVisible(false);
     m_errorDetailsText->setMaximumHeight(150);
+    // 设置错误详情字体
+    QFont detailsFont("Microsoft YaHei", 12);
+    m_errorDetailsText->setFont(detailsFont);
     mainLayout->addWidget(m_errorDetailsText);
     
     mainLayout->addStretch();
@@ -126,7 +138,11 @@ void LoadingDialog::setupUI()
     m_retryButton = new QPushButton("重试", this);
     m_retryButton->setObjectName("retryButton");
     m_retryButton->setVisible(false);
-    m_retryButton->setMinimumWidth(80);
+    m_retryButton->setMinimumWidth(100);
+    m_retryButton->setMinimumHeight(40);
+    // 设置按钮字体
+    QFont buttonFont("Microsoft YaHei", 14);
+    m_retryButton->setFont(buttonFont);
     connect(m_retryButton, &QPushButton::clicked, this, &LoadingDialog::retryClicked);
     buttonLayout->addWidget(m_retryButton);
     
@@ -134,7 +150,9 @@ void LoadingDialog::setupUI()
     m_cancelButton = new QPushButton("取消", this);
     m_cancelButton->setObjectName("cancelButton");
     m_cancelButton->setVisible(false);
-    m_cancelButton->setMinimumWidth(80);
+    m_cancelButton->setMinimumWidth(100);
+    m_cancelButton->setMinimumHeight(40);
+    m_cancelButton->setFont(buttonFont);
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::cancelClicked);
     buttonLayout->addWidget(m_cancelButton);
     
@@ -142,7 +160,9 @@ void LoadingDialog::setupUI()
     m_detailsButton = new QPushButton("显示详情", this);
     m_detailsButton->setObjectName("detailsButton");
     m_detailsButton->setVisible(false);
-    m_detailsButton->setMinimumWidth(80);
+    m_detailsButton->setMinimumWidth(100);
+    m_detailsButton->setMinimumHeight(40);
+    m_detailsButton->setFont(buttonFont);
     connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onShowErrorDetails);
     buttonLayout->addWidget(m_detailsButton);
     
@@ -150,7 +170,9 @@ void LoadingDialog::setupUI()
     m_autoFixButton = new QPushButton("自动修复", this);
     m_autoFixButton->setObjectName("autoFixButton");
     m_autoFixButton->setVisible(false);
-    m_autoFixButton->setMinimumWidth(80);
+    m_autoFixButton->setMinimumWidth(100);
+    m_autoFixButton->setMinimumHeight(40);
+    m_autoFixButton->setFont(buttonFont);
     buttonLayout->addWidget(m_autoFixButton);
     
     buttonLayout->addStretch();
@@ -167,15 +189,12 @@ void LoadingDialog::applyStyles()
             border-radius: 8px;
         }
         
-        #loadingTitle {
+        QLabel#loadingTitle {
             color: #333333;
-            font-size: 36px;
-            font-weight: bold;
         }
         
-        #loadingStatus {
+        QLabel#loadingStatus {
             color: #666666;
-            font-size: 28px;
         }
         
         #loadingStatus[error="true"] {
