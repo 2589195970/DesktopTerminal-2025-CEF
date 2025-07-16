@@ -38,7 +38,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_keyboardFilterEnabled(true)
     , m_contextMenuEnabled(false)
     , m_devToolsOpen(false)
-    , m_windowHandle(nullptr)
+    , m_keyboardFilter(nullptr) // 初始化为空指针
     , m_cefMessageLoopLogCounter(0)
 {
     m_logger->appEvent("SecureBrowser创建开始");
@@ -789,6 +789,17 @@ void SecureBrowser::handleBrowserError(const QString& error)
         QString("浏览器初始化失败：\n%1\n\n请检查CEF安装是否完整。").arg(error));
 }
 
+void SecureBrowser::setKeyboardFilter(KeyboardFilter* filter)
+{
+    m_keyboardFilter = filter;
+    if (m_keyboardFilter) {
+        // 根据配置初始化开发者模式
+        bool devMode = m_configManager->isDeveloperModeEnabled();
+        m_keyboardFilter->setDeveloperModeEnabled(devMode);
+        m_logger->appEvent(QString("键盘过滤器已设置，开发者模式: %1").arg(devMode ? "启用" : "禁用"));
+    }
+}
+
 void SecureBrowser::toggleDevTools()
 {
     if (!m_cefManager || !m_cefBrowserCreated) {
@@ -805,7 +816,9 @@ void SecureBrowser::toggleDevTools()
             m_logger->showMessage(this, "开发者工具", "开发者工具已关闭");
             
             // 通知键盘过滤器禁用开发者模式
-            // TODO: 集成KeyboardFilter实例并调用setDeveloperModeEnabled(false)
+            if (m_keyboardFilter) {
+                m_keyboardFilter->setDeveloperModeEnabled(false);
+            }
         }
     } else {
         // 开启开发者工具
@@ -815,7 +828,9 @@ void SecureBrowser::toggleDevTools()
             m_logger->showMessage(this, "开发者工具", "开发者工具已开启");
             
             // 通知键盘过滤器启用开发者模式
-            // TODO: 集成KeyboardFilter实例并调用setDeveloperModeEnabled(true)
+            if (m_keyboardFilter) {
+                m_keyboardFilter->setDeveloperModeEnabled(true);
+            }
         }
     }
     

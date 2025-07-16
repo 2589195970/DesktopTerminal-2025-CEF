@@ -8,6 +8,8 @@
 #include <QFocusEvent>
 #include <QWindowStateChangeEvent>
 
+#include "../security/keyboard_filter.h"
+
 class QHotkey;
 class CEFManager;
 class Logger;
@@ -52,6 +54,11 @@ public:
      * 必须在窗口创建后调用
      */
     void initializeCEFBrowser();
+
+    /**
+     * @brief 设置键盘过滤器实例
+     */
+    void setKeyboardFilter(KeyboardFilter* filter);
 
 signals:
     /**
@@ -154,6 +161,7 @@ private:
     CEFManager* m_cefManager;
     Logger* m_logger;
     ConfigManager* m_configManager;
+    KeyboardFilter* m_keyboardFilter; // 添加键盘过滤器指针
 
     // 热键管理
     QHotkey* m_exitHotkeyF10;

@@ -84,9 +84,6 @@ void LoadingDialog::setupUI()
     m_titleLabel = new QLabel("正在启动应用程序", this);
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->setObjectName("loadingTitle");
-    // 直接设置字体大小，确保在高DPI屏幕上也能正确显示
-    QFont titleFont("Microsoft YaHei", 32, QFont::Bold);
-    m_titleLabel->setFont(titleFont);
     mainLayout->addWidget(m_titleLabel);
     
     // 状态标签
@@ -94,9 +91,6 @@ void LoadingDialog::setupUI()
     m_statusLabel->setAlignment(Qt::AlignCenter);
     m_statusLabel->setObjectName("loadingStatus");
     m_statusLabel->setWordWrap(true);
-    // 直接设置字体大小
-    QFont statusFont("Microsoft YaHei", 24);
-    m_statusLabel->setFont(statusFont);
     mainLayout->addWidget(m_statusLabel);
     
     // 进度条
@@ -112,9 +106,6 @@ void LoadingDialog::setupUI()
     m_progressLabel->setAlignment(Qt::AlignCenter);
     m_progressLabel->setObjectName("progressLabel");
     m_progressLabel->setVisible(false);
-    // 设置进度标签字体
-    QFont progressFont("Microsoft YaHei", 16);
-    m_progressLabel->setFont(progressFont);
     mainLayout->addWidget(m_progressLabel);
     
     // 错误详情显示区域
@@ -123,9 +114,6 @@ void LoadingDialog::setupUI()
     m_errorDetailsText->setReadOnly(true);
     m_errorDetailsText->setVisible(false);
     m_errorDetailsText->setMaximumHeight(150);
-    // 设置错误详情字体
-    QFont detailsFont("Microsoft YaHei", 12);
-    m_errorDetailsText->setFont(detailsFont);
     mainLayout->addWidget(m_errorDetailsText);
     
     mainLayout->addStretch();
@@ -140,9 +128,6 @@ void LoadingDialog::setupUI()
     m_retryButton->setVisible(false);
     m_retryButton->setMinimumWidth(100);
     m_retryButton->setMinimumHeight(40);
-    // 设置按钮字体
-    QFont buttonFont("Microsoft YaHei", 14);
-    m_retryButton->setFont(buttonFont);
     connect(m_retryButton, &QPushButton::clicked, this, &LoadingDialog::retryClicked);
     buttonLayout->addWidget(m_retryButton);
     
@@ -181,46 +166,14 @@ void LoadingDialog::setupUI()
 
 void LoadingDialog::applyStyles()
 {
-    // 应用样式表
-    QString styleSheet = R"(
-        LoadingDialog {
-            background-color: rgba(240, 240, 240, 250);
-            border: 2px solid #cccccc;
-            border-radius: 8px;
-        }
-        
-        QLabel#loadingTitle {
-            color: #333333;
-        }
-        
-        QLabel#loadingStatus {
-            color: #666666;
-        }
-        
-        #loadingStatus[error="true"] {
-            color: #f44336;
-            font-weight: bold;
-        }
-        
-        QPushButton {
-            background-color: #ffffff;
-            border: 1px solid #cccccc;
-            border-radius: 4px;
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-        
-        QPushButton:hover {
-            background-color: #f5f5f5;
-            border-color: #999999;
-        }
-        
-        QPushButton:pressed {
-            background-color: #e0e0e0;
-        }
-    )";
-    
-    setStyleSheet(styleSheet);
+    // 从文件加载样式表
+    QFile file(":/resources/loading_animation.css");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        setStyleSheet(file.readAll());
+        file.close();
+    } else {
+        Logger::instance().errorEvent("无法加载loading_animation.css");
+    }
 }
 
 void LoadingDialog::createRotationAnimation()
@@ -305,71 +258,46 @@ void LoadingDialog::setRotation(qreal rotation)
 
 void LoadingDialog::paintEvent(QPaintEvent *event)
 {
-    Q_UNUSED(event);
+    // 背景绘制现在由样式表处理
+    QDialog::paintEvent(event);
     
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    
-    // 绘制背景
-    painter.setBrush(QColor(240, 240, 240, 250));
-    painter.setPen(QPen(QColor(204, 204, 204), 2));
-    painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 8, 8);
-    
-    // 如果不是错误状态，绘制加载图标
-    if (!m_isError) {
+    // 如果系统检测正在进行，绘制加载动画
+    if (m_systemCheckInProgress) {
+        QPainter painter(this);
         drawLoadingIcon(painter);
-    }
-    
-    // 绘制进度条（如果有进度值）
-    if (m_progressMax > 0 && m_progressValue >= 0) {
-        int barWidth = width() - 40;
-        int barHeight = 4;
-        int barX = 20;
-        int barY = height() - 50;
-        
-        // 背景
-        painter.setBrush(QColor(220, 220, 220));
-        painter.setPen(Qt::NoPen);
-        painter.drawRoundedRect(barX, barY, barWidth, barHeight, 2, 2);
-        
-        // 进度
-        if (m_progressValue > 0) {
-            int progressWidth = (barWidth * m_progressValue) / m_progressMax;
-            painter.setBrush(QColor(76, 175, 80));
-            painter.drawRoundedRect(barX, barY, progressWidth, barHeight, 2, 2);
-        }
     }
 }
 
 void LoadingDialog::drawLoadingIcon(QPainter& painter)
 {
-    // 保存画家状态
+    // 设置渲染提示
+    painter.setRenderHint(QPainter::Antialiasing);
+    
+    // 计算图标绘制位置 (在状态文本上方)
+    int iconSize = 32;
+    int x = (width() - iconSize) / 2;
+    int y = height() / 2 - 60; // 在中心上方一点
+    
+    // 保存当前变换状态
     painter.save();
     
-    // 移动到图标中心位置
-    int centerX = width() / 2;
-    int centerY = 40;
-    painter.translate(centerX, centerY);
-    
-    // 应用旋转
+    // 设置旋转中心并旋转
+    painter.translate(x + iconSize / 2, y + iconSize / 2);
     painter.rotate(m_rotation);
     
-    // 绘制旋转的圆形加载图标
-    int radius = ICON_SIZE / 2;
-    int arcLength = 270; // 弧长（度）
-    
-    // 绘制圆弧
-    QPen pen(QColor(76, 175, 80), 4);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
+    // 绘制简单的旋转加载图标
+    painter.setPen(QPen(QColor(64, 128, 255), 3)); // 蓝色笔触
     painter.setBrush(Qt::NoBrush);
     
-    QRectF rect(-radius, -radius, ICON_SIZE, ICON_SIZE);
-    painter.drawArc(rect, 0, arcLength * 16); // Qt使用1/16度为单位
+    // 绘制圆弧表示加载
+    QRect iconRect(-iconSize / 2, -iconSize / 2, iconSize, iconSize);
+    painter.drawArc(iconRect, 0, 270 * 16); // 绘制3/4圆弧
     
-    // 恢复画家状态
+    // 恢复变换状态
     painter.restore();
 }
+
+
 
 void LoadingDialog::keyPressEvent(QKeyEvent *event)
 {

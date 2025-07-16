@@ -27,10 +27,7 @@ NetworkChecker::NetworkChecker(QObject *parent)
     connect(m_timeoutTimer, &QTimer::timeout, this, &NetworkChecker::onCheckTimeout);
     
     // 设置默认检测URL列表
-    m_checkUrls << "https://www.baidu.com"
-                << "https://www.qq.com"
-                << "http://www.163.com"
-                << "https://httpbin.org/get";
+    m_checkUrls << "https://www.baidu.com";
     
     detectNetworkConfiguration();
     

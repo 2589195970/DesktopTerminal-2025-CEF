@@ -6,6 +6,8 @@
 #include <QVersionNumber>
 #include <QThread>
 
+#include "../security/keyboard_filter.h"
+
 class CEFManager;
 class SecureBrowser;
 class Logger;
@@ -109,6 +111,7 @@ private:
     bool initializeLogging();
     bool initializeConfiguration();
     bool initializeCEF();
+    bool checkNetworkConnection();
     bool createMainWindow();
     
 
@@ -133,6 +136,9 @@ private:
     
     // 网络检测器
     NetworkChecker* m_networkChecker;
+
+    // 键盘过滤器
+    KeyboardFilter* m_keyboardFilter;
 
     // 系统信息
     static ArchType s_architecture;

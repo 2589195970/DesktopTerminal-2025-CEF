@@ -115,11 +115,6 @@ bool KeyboardFilter::isSecurityExitHotkey(QKeyEvent* event)
         return true;
     }
     
-    // 反斜杠单独按下
-    if (key == Qt::Key_Backslash && modifiers == Qt::NoModifier) {
-        return true;
-    }
-    
     return false;
 }
 
@@ -263,7 +258,7 @@ void KeyboardFilter::initializeFilterRules()
     
     // 安全退出热键
     m_exitHotkeys.clear();
-    m_exitHotkeys << "F10" << "\\";
+    m_exitHotkeys << "F10";
     
     m_logger->appEvent(QString("键盘过滤规则初始化完成，危险组合: %1个").arg(m_dangerousKeyCombos.size()));
 }

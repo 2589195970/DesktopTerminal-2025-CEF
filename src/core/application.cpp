@@ -31,6 +31,7 @@ Application::Application(int &argc, char **argv)
     , m_logger(nullptr)
     , m_configManager(nullptr)
     , m_networkChecker(nullptr)
+    , m_keyboardFilter(nullptr) // 初始化
     , m_initialized(false)
     , m_shutdownRequested(false)
 {
@@ -94,7 +95,16 @@ bool Application::initialize()
         return false;
     }
 
-    // 5. 初始化CEF
+    // 5. 网络连接检查
+    emit initializationProgress("正在检查网络连接...");
+    if (!checkNetworkConnection()) {
+        m_logger->errorEvent("网络检查失败");
+        emit initializationError("网络连接失败，请检查网络设置");
+        QMessageBox::critical(nullptr, "网络错误", "无法连接到指定服务器，请检查您的网络连接。");
+        return false;
+    }
+
+    // 6. 初始化CEF
     emit initializationProgress("正在加载CEF浏览器引擎...");
     if (!initializeCEF()) {
         m_logger->errorEvent("CEF初始化失败");
@@ -145,6 +155,12 @@ void Application::shutdown()
         m_networkChecker->stopCheck();
         delete m_networkChecker;
         m_networkChecker = nullptr;
+    }
+
+    // 销毁键盘过滤器
+    if (m_keyboardFilter) {
+        delete m_keyboardFilter;
+        m_keyboardFilter = nullptr;
     }
 
     // 关闭主窗口
@@ -385,10 +401,45 @@ bool Application::initializeCEF()
     }
 }
 
+#include <QEventLoop>
+bool Application::checkNetworkConnection()
+{
+    m_networkChecker = new NetworkChecker(this);
+
+    // 从配置中获取检测URL
+    QString checkUrl = m_configManager->getCheckUrl();
+    QStringList backupUrls = m_configManager->getBackupCheckUrls();
+    int timeout = m_configManager->getNetworkCheckTimeout();
+
+    m_networkChecker->setCheckUrls(backupUrls);
+
+    QEventLoop loop;
+    connect(m_networkChecker, &NetworkChecker::checkCompleted, &loop, &QEventLoop::quit);
+
+    m_networkChecker->startCheck(checkUrl, timeout);
+    loop.exec(); // 等待网络检测完成
+
+    NetworkChecker::NetworkStatus status = m_networkChecker->getNetworkStatus();
+    
+    if (status != NetworkChecker::Connected) {
+        m_logger->errorEvent(QString("网络检查失败: %1").arg(m_networkChecker->getStatusDescription()));
+        return false;
+    }
+
+    m_logger->appEvent("网络连接正常");
+    return true;
+}
+
 bool Application::createMainWindow()
 {
     try {
         m_mainWindow = new SecureBrowser(m_cefManager);
+
+        // 创建并设置键盘过滤器
+        m_keyboardFilter = new KeyboardFilter(this);
+        m_keyboardFilter->initialize();
+        m_mainWindow->setKeyboardFilter(m_keyboardFilter);
+
         // 不在这里立即显示窗口，由调用者控制显示时机
         return true;
     } catch (...) {

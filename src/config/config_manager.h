@@ -72,10 +72,18 @@ public:
     bool isContextMenuEnabled() const;
     bool isDownloadEnabled() const;
     bool isJavaScriptDialogEnabled() const;
+
+    // 开发者模式配置
+    bool isDeveloperModeEnabled() const;
     
     // URL退出配置（新增）
     bool isUrlExitEnabled() const;
     QString getUrlExitPattern() const;
+
+    // 网络检查配置
+    QString getCheckUrl() const;
+    QStringList getBackupCheckUrls() const;
+    int getNetworkCheckTimeout() const;
 
     // 架构和兼容性配置（新增）
     bool isAutoArchDetectionEnabled() const;

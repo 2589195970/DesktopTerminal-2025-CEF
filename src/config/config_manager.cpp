@@ -120,6 +120,8 @@ bool ConfigManager::createDefaultConfig(const QString &path)
     defaultConfig["contextMenuEnabled"] = false;
     defaultConfig["downloadEnabled"] = false;
     defaultConfig["javascriptDialogEnabled"] = false;
+    defaultConfig["developerModeEnabled"] = true; // 默认开启开发者模式
+    defaultConfig["developerModeEnabled"] = true; // 默认开启开发者模式
     
     // 架构和兼容性配置
     defaultConfig["autoArchDetection"] = true;
@@ -131,6 +133,11 @@ bool ConfigManager::createDefaultConfig(const QString &path)
     defaultConfig["logLevel"] = "INFO";
     defaultConfig["logBufferingEnabled"] = true;
     defaultConfig["logFlushIntervalSeconds"] = 5;
+
+    // 网络检查配置
+    defaultConfig["checkUrl"] = "http://www.baidu.com";
+    defaultConfig["backupCheckUrls"] = QJsonArray::fromStringList({"http://www.bing.com"});
+    defaultConfig["networkCheckTimeout"] = 5000; // 5秒
 
     // 确保目录存在
     QFileInfo fileInfo(path);
@@ -245,6 +252,12 @@ bool ConfigManager::isJavaScriptDialogEnabled() const
     return config.value("javascriptDialogEnabled").toBool(false);
 }
 
+// 开发者模式配置
+bool ConfigManager::isDeveloperModeEnabled() const
+{
+    return config.value("developerModeEnabled").toBool(false);
+}
+
 bool ConfigManager::isUrlExitEnabled() const
 {
     return config.value("urlExitEnabled").toBool(true);
@@ -290,4 +303,25 @@ bool ConfigManager::isLogBufferingEnabled() const
 int ConfigManager::getLogFlushIntervalSeconds() const
 {
     return config.value("logFlushIntervalSeconds").toInt(5);
+}
+
+// 网络检查配置
+QString ConfigManager::getCheckUrl() const
+{
+    return config.value("checkUrl").toString("http://www.baidu.com");
+}
+
+QStringList ConfigManager::getBackupCheckUrls() const
+{
+    QStringList urls;
+    QJsonArray array = config.value("backupCheckUrls").toArray();
+    for (const QJsonValue &value : array) {
+        urls.append(value.toString());
+    }
+    return urls;
+}
+
+int ConfigManager::getNetworkCheckTimeout() const
+{
+    return config.value("networkCheckTimeout").toInt(5000);
 }

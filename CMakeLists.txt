@@ -274,6 +274,7 @@ set(SOURCES
     src/security/keyboard_filter.cpp
     src/network/network_checker.cpp
     src/ui/loading_dialog.cpp
+    resources/resources.qrc
 )
 
 # 头文件列表

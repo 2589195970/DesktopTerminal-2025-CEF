@@ -1,220 +1,97 @@
-/* 加载动画样式文件 */
-/* 这个文件作为UI主题参考，实际动画通过Qt代码实现 */
-
-/* 主对话框样式 */
-.loading-dialog {
-    background-color: #f0f0f0;
-    border: 2px solid #cccccc;
-    border-radius: 8px;
-    font-family: "Microsoft YaHei", "SimHei", sans-serif;
+/* General Dialog Styling */
+LoadingDialog {
+    background-color: rgba(255, 255, 255, 0.95); /* Slightly transparent white */
+    border: 1px solid #dcdcdc;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* 标题样式 */
-.loading-title {
-    color: #333333;
-    font-size: 16px;
-    font-weight: bold;
-    margin: 10px 0px;
-    text-align: center;
+/* Title Label */
+QLabel#loadingTitle {
+    font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-size: 2em; /* Use relative unit */
+    font-weight: 600;
+    color: #2c3e50; /* Dark blue-gray */
+    padding-top: 60px; /* Space for spinner */
 }
 
-/* 状态文本样式 */
-.loading-status {
-    color: #666666;
-    font-size: 12px;
-    margin: 5px 0px;
-    text-align: center;
+/* Status Label */
+QLabel#loadingStatus {
+    font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-size: 1.2em; /* Use relative unit */
+    color: #7f8c8d; /* Gray */
+    padding: 0 20px;
 }
 
-/* 错误状态样式 */
-.loading-error {
-    color: #f44336;
-    font-weight: bold;
+/* Error Status Styling */
+#loadingStatus[error="true"] {
+    color: #e74c3c; /* Red for errors */
+    font-weight: 500;
 }
 
-/* 成功状态样式 */
-.loading-success {
-    color: #4CAF50;
-    font-weight: bold;
-}
-
-/* 进度条样式 */
-.loading-progress {
-    border: 2px solid #cccccc;
+/* Progress Bar */
+QProgressBar#systemProgressBar {
+    border: none;
+    background-color: #ecf0f1; /* Light gray background */
     border-radius: 5px;
-    background-color: #ffffff;
-    height: 20px;
+    text-align: center;
+    height: 10px;
 }
 
-.loading-progress-chunk {
-    background-color: #4CAF50;
-    border-radius: 3px;
+QProgressBar#systemProgressBar::chunk {
+    background-color: #3498db; /* Blue for progress */
+    border-radius: 5px;
 }
 
-/* 按钮样式 */
-.loading-button {
-    background-color: #ffffff;
-    border: 1px solid #cccccc;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-size: 12px;
-    min-width: 70px;
-    cursor: pointer;
+/* Progress Label */
+QLabel#progressLabel {
+    font-size: 0.9em;
+    color: #95a5a6; /* Lighter gray */
 }
 
-.loading-button:hover {
-    background-color: #f5f5f5;
-    border-color: #999999;
-}
-
-.loading-button:pressed {
-    background-color: #e0e0e0;
-}
-
-/* 详细信息文本框样式 */
-.loading-details {
-    border: 1px solid #cccccc;
-    border-radius: 4px;
-    background-color: #ffffff;
-    font-family: "Consolas", "Courier New", monospace;
-    font-size: 10px;
-    padding: 5px;
-}
-
-/* 旋转动画关键帧 */
-@keyframes rotate {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-/* 加载图标动画 */
-.loading-icon {
-    animation: rotate 1s linear infinite;
-    width: 48px;
-    height: 48px;
-}
-
-/* 脉冲动画 */
-@keyframes pulse {
-    0% {
-        opacity: 0.6;
-    }
-    50% {
-        opacity: 1.0;
-    }
-    100% {
-        opacity: 0.6;
-    }
-}
-
-.loading-pulse {
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* 渐变动画 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.loading-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-}
-
-/* 滑入动画 */
-@keyframes slideIn {
-    from {
-        transform: translateY(-10px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-.loading-slide-in {
-    animation: slideIn 0.3s ease-out;
-}
-
-/* 响应式设计 */
-@media (max-width: 480px) {
-    .loading-dialog {
-        width: 90%;
-        max-width: 350px;
-    }
-    
-    .loading-title {
-        font-size: 14px;
-    }
-    
-    .loading-status {
-        font-size: 11px;
-    }
-}
-
-/* 高对比度主题 */
-@media (prefers-contrast: high) {
-    .loading-dialog {
-        background-color: #ffffff;
-        border: 3px solid #000000;
-    }
-    
-    .loading-title {
-        color: #000000;
-    }
-    
-    .loading-status {
-        color: #333333;
-    }
-    
-    .loading-button {
-        border: 2px solid #000000;
-        background-color: #ffffff;
-        color: #000000;
-    }
-}
-
-/* 暗色主题 */
-.loading-dialog.dark-theme {
-    background-color: #2d2d2d;
-    border-color: #555555;
+/* Buttons */
+QPushButton {
+    font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-size: 1em;
+    font-weight: 500;
     color: #ffffff;
+    background-color: #3498db; /* Blue */
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    min-width: 120px;
 }
 
-.loading-dialog.dark-theme .loading-title {
-    color: #ffffff;
+QPushButton:hover {
+    background-color: #2980b9; /* Darker blue */
 }
 
-.loading-dialog.dark-theme .loading-status {
-    color: #cccccc;
+QPushButton:pressed {
+    background-color: #1f618d;
 }
 
-.loading-dialog.dark-theme .loading-button {
-    background-color: #3d3d3d;
-    border-color: #555555;
-    color: #ffffff;
+QPushButton#cancelButton {
+    background-color: #bdc3c7; /* Gray for cancel */
 }
 
-.loading-dialog.dark-theme .loading-button:hover {
-    background-color: #4d4d4d;
+QPushButton#cancelButton:hover {
+    background-color: #95a5a6;
 }
 
-.loading-dialog.dark-theme .loading-progress {
-    background-color: #3d3d3d;
-    border-color: #555555;
+/* Details Button */
+QPushButton#detailsButton {
+    background-color: #f1c40f; /* Yellow for details */
+}
+QPushButton#detailsButton:hover {
+    background-color: #f39c12;
 }
 
-.loading-dialog.dark-theme .loading-details {
-    background-color: #1e1e1e;
-    border-color: #555555;
-    color: #ffffff;
+/* Error Details Text Area */
+QTextEdit#errorDetails {
+    background-color: #ecf0f1;
+    border: 1px solid #dcdcdc;
+    border-radius: 5px;
+    font-family: "Courier New", "Lucida Console", monospace;
+    font-size: 0.9em;
+    color: #34495e;
 }
