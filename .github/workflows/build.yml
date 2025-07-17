@@ -414,8 +414,7 @@ jobs:
             -DCEF_VERSION="${{ matrix.cef_version }}" ^
             -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
             -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5" ^
-            -DCMAKE_SYSTEM_VERSION=7.1 ^
-            -DCMAKE_VERBOSE_MAKEFILE=ON
+            -DCMAKE_SYSTEM_VERSION=7.1
         ) else (
           echo "配置Windows 10+ 64位构建..."
           cmake .. ^
@@ -423,8 +422,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
             -DCEF_VERSION="${{ matrix.cef_version }}" ^
             -DCMAKE_PREFIX_PATH="%Qt5_Dir%" ^
-            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5" ^
-            -DCMAKE_VERBOSE_MAKEFILE=ON
+            -DQt5_DIR="%Qt5_Dir%/lib/cmake/Qt5"
         )
         
         if %errorlevel% neq 0 (
@@ -529,10 +527,10 @@ jobs:
         echo "目标平台: ${{ matrix.platform }}"
         
         echo "[BUILD] 执行构建命令..."
-        echo "命令: cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose"
+        echo "命令: cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS%"
         
-        REM 设置详细输出以便诊断链接错误
-        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS% --verbose
+        REM 精简输出，仅显示关键错误信息
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel %NUMBER_OF_PROCESSORS%
         
         set "BUILD_RESULT=%errorlevel%"
         echo "构建命令完成，返回码: %BUILD_RESULT%"

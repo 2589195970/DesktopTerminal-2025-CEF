@@ -20,6 +20,7 @@
 #include <QSplitter>
 #include <QGroupBox>
 #include <QFrame>
+#include <QFont>
 
 LoadingDialog::LoadingDialog(QWidget *parent)
     : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
@@ -72,6 +73,11 @@ LoadingDialog::~LoadingDialog()
 
 void LoadingDialog::setupUI()
 {
+    // 定义按钮字体
+    QFont buttonFont;
+    buttonFont.setPointSize(10);
+    buttonFont.setWeight(QFont::Normal);
+    
     // 主布局
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(20, 20, 20, 20);
@@ -137,6 +143,7 @@ void LoadingDialog::setupUI()
     m_cancelButton->setVisible(false);
     m_cancelButton->setMinimumWidth(100);
     m_cancelButton->setMinimumHeight(40);
+    m_cancelButton->setFont(buttonFont);
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::cancelClicked);
     buttonLayout->addWidget(m_cancelButton);
     
@@ -146,6 +153,7 @@ void LoadingDialog::setupUI()
     m_detailsButton->setVisible(false);
     m_detailsButton->setMinimumWidth(100);
     m_detailsButton->setMinimumHeight(40);
+    m_detailsButton->setFont(buttonFont);
     connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onShowErrorDetails);
     buttonLayout->addWidget(m_detailsButton);
     
@@ -155,6 +163,7 @@ void LoadingDialog::setupUI()
     m_autoFixButton->setVisible(false);
     m_autoFixButton->setMinimumWidth(100);
     m_autoFixButton->setMinimumHeight(40);
+    m_autoFixButton->setFont(buttonFont);
     buttonLayout->addWidget(m_autoFixButton);
     
     buttonLayout->addStretch();
