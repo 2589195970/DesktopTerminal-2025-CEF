@@ -19,3 +19,13 @@ Thumbs.db
 
 # 日志文件
 log/*.log
+
+# 构建测试目录
+build-test/
+
+# 文档临时文件
+CHANGES.md
+GEMINI.md
+
+# CMake相关
+compile_commands.json

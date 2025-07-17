@@ -33,7 +33,7 @@ public:
     };
 
     explicit NetworkChecker(QObject *parent = nullptr);
-    ~NetworkChecker();
+    ~NetworkChecker() override;
 
     /**
      * @brief 开始网络检测
