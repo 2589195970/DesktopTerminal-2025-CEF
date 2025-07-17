@@ -137,7 +137,6 @@ void LoadingDialog::setupUI()
     m_cancelButton->setVisible(false);
     m_cancelButton->setMinimumWidth(100);
     m_cancelButton->setMinimumHeight(40);
-    m_cancelButton->setFont(buttonFont);
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::cancelClicked);
     buttonLayout->addWidget(m_cancelButton);
     
@@ -147,7 +146,6 @@ void LoadingDialog::setupUI()
     m_detailsButton->setVisible(false);
     m_detailsButton->setMinimumWidth(100);
     m_detailsButton->setMinimumHeight(40);
-    m_detailsButton->setFont(buttonFont);
     connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onShowErrorDetails);
     buttonLayout->addWidget(m_detailsButton);
     
@@ -157,7 +155,6 @@ void LoadingDialog::setupUI()
     m_autoFixButton->setVisible(false);
     m_autoFixButton->setMinimumWidth(100);
     m_autoFixButton->setMinimumHeight(40);
-    m_autoFixButton->setFont(buttonFont);
     buttonLayout->addWidget(m_autoFixButton);
     
     buttonLayout->addStretch();
