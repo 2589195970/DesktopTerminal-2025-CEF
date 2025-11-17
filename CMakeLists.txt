@@ -648,6 +648,19 @@ if(WIN32)
             /DELAYLOAD:libcef.dll
         )
     endif()
+
+    # 在Windows上为CEF创建一个备用子进程可执行文件
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(CEF_SUBPROCESS_NAME "cef_subprocess_win64.exe")
+    else()
+        set(CEF_SUBPROCESS_NAME "cef_subprocess_win32.exe")
+    endif()
+
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${PROJECT_NAME}>"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${CEF_SUBPROCESS_NAME}"
+        COMMENT "生成CEF子进程占位文件: ${CEF_SUBPROCESS_NAME}")
 endif()
 
 # 编译器特定设置
