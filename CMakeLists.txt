@@ -648,19 +648,39 @@ if(WIN32)
             /DELAYLOAD:libcef.dll
         )
     endif()
+endif()
 
-    # 在Windows上为CEF创建一个备用子进程可执行文件
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(CEF_SUBPROCESS_NAME "cef_subprocess_win64.exe")
-    else()
-        set(CEF_SUBPROCESS_NAME "cef_subprocess_win32.exe")
+# 构建CEF子进程可执行文件
+if(CEF_FOUND)
+    set(CEF_SUBPROCESS_TARGET cef_subprocess)
+    set(CEF_SUBPROCESS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/cef/cef_subprocess_main.cpp")
+    if(EXISTS ${CEF_SUBPROCESS_SOURCE})
+        add_executable(${CEF_SUBPROCESS_TARGET} ${CEF_SUBPROCESS_SOURCE})
+        target_include_directories(${CEF_SUBPROCESS_TARGET} PRIVATE
+            ${CEF_INCLUDE_PATH}
+            ${CEF_INCLUDE_PATH}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        target_link_libraries(${CEF_SUBPROCESS_TARGET} PRIVATE cef_dll_wrapper)
+        if(CEF_LIBRARIES AND NOT CEF_LIBRARIES STREQUAL "# CEF库将在链接时自动发现")
+            target_link_libraries(${CEF_SUBPROCESS_TARGET} PRIVATE ${CEF_LIBRARIES})
+        endif()
+        if(WIN32)
+            if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+                set(CEF_SUBPROCESS_NAME "cef_subprocess_win64")
+            else()
+                set(CEF_SUBPROCESS_NAME "cef_subprocess_win32")
+            endif()
+            set_target_properties(${CEF_SUBPROCESS_TARGET} PROPERTIES
+                OUTPUT_NAME "${CEF_SUBPROCESS_NAME}"
+                RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+            )
+            if(MSVC)
+                target_link_options(${CEF_SUBPROCESS_TARGET} PRIVATE /SUBSYSTEM:WINDOWS)
+            endif()
+        endif()
+        add_dependencies(${CEF_SUBPROCESS_TARGET} ${PROJECT_NAME})
     endif()
-
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:${PROJECT_NAME}>"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${CEF_SUBPROCESS_NAME}"
-        COMMENT "生成CEF子进程占位文件: ${CEF_SUBPROCESS_NAME}")
 endif()
 
 # 编译器特定设置
