@@ -13,6 +13,7 @@
 class QLabel;
 class QPushButton;
 class QPropertyAnimation;
+class QFrame;
 
 /**
  * @brief 智能加载对话框类
@@ -93,6 +94,11 @@ private:
     // 基础UI组件
     QLabel* m_titleLabel;
     QLabel* m_statusLabel;
+    QLabel* m_brandLabel;
+    QLabel* m_subtitleLabel;
+    QLabel* m_summaryLabel;
+    QFrame* m_backgroundFrame;
+    QFrame* m_contentCard;
     QPushButton* m_retryButton;
     QPushButton* m_cancelButton;
     

@@ -21,11 +21,17 @@
 #include <QGroupBox>
 #include <QFrame>
 #include <QFont>
+#include <QPixmap>
 
 LoadingDialog::LoadingDialog(QWidget *parent)
     : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , m_titleLabel(nullptr)
     , m_statusLabel(nullptr)
+    , m_brandLabel(nullptr)
+    , m_subtitleLabel(nullptr)
+    , m_summaryLabel(nullptr)
+    , m_backgroundFrame(nullptr)
+    , m_contentCard(nullptr)
     , m_retryButton(nullptr)
     , m_cancelButton(nullptr)
     , m_progressBar(nullptr)
@@ -50,9 +56,9 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     // 初始化SystemChecker
     initializeSystemChecker();
     
-    // 设置窗口属性
-    setAttribute(Qt::WA_TranslucentBackground);
+    // 设置窗口属性，保持独立的背景绘制
     setAttribute(Qt::WA_ShowWithoutActivating);
+    setAttribute(Qt::WA_StyledBackground);
     
     // 居中显示
     if (QScreen *screen = QApplication::primaryScreen()) {
@@ -73,101 +79,133 @@ LoadingDialog::~LoadingDialog()
 
 void LoadingDialog::setupUI()
 {
-    // 定义按钮字体
+    setObjectName("loadingDialogRoot");
+
     QFont buttonFont;
     buttonFont.setPointSize(10);
-    buttonFont.setWeight(QFont::Normal);
-    
-    // 主布局
-    auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(15);
-    
-    // 留出空间给自定义绘制的加载图标
-    mainLayout->addSpacing(ICON_SIZE + 20);
-    
-    // 标题标签
-    m_titleLabel = new QLabel("正在启动应用程序", this);
-    m_titleLabel->setAlignment(Qt::AlignCenter);
+    buttonFont.setWeight(QFont::Medium);
+
+    auto* outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
+
+    m_backgroundFrame = new QFrame(this);
+    m_backgroundFrame->setObjectName("backgroundFrame");
+    outerLayout->addWidget(m_backgroundFrame);
+
+    auto* backgroundLayout = new QVBoxLayout(m_backgroundFrame);
+    backgroundLayout->setContentsMargins(36, 36, 36, 36);
+    backgroundLayout->setSpacing(24);
+
+    // 顶部品牌信息
+    auto* headerLayout = new QHBoxLayout();
+    headerLayout->setSpacing(12);
+
+    auto* logoLabel = new QLabel(m_backgroundFrame);
+    logoLabel->setObjectName("brandIcon");
+    QPixmap logoPixmap(":/resources/logo-neutral.png");
+    if (!logoPixmap.isNull()) {
+        logoLabel->setPixmap(logoPixmap.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        logoLabel->setText("DT");
+    }
+    headerLayout->addWidget(logoLabel, 0, Qt::AlignVCenter);
+
+    m_brandLabel = new QLabel("Desktop Terminal", m_backgroundFrame);
+    m_brandLabel->setObjectName("brandLabel");
+    headerLayout->addWidget(m_brandLabel, 0, Qt::AlignVCenter);
+
+    headerLayout->addStretch();
+
+    m_subtitleLabel = new QLabel("环境安全检测进行中", m_backgroundFrame);
+    m_subtitleLabel->setObjectName("loadingSubtitle");
+    m_subtitleLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    headerLayout->addWidget(m_subtitleLabel, 0, Qt::AlignVCenter);
+
+    backgroundLayout->addLayout(headerLayout);
+
+    // 核心内容卡片
+    m_contentCard = new QFrame(m_backgroundFrame);
+    m_contentCard->setObjectName("loadingCard");
+    auto* cardLayout = new QVBoxLayout(m_contentCard);
+    cardLayout->setContentsMargins(32, 32, 32, 32);
+    cardLayout->setSpacing(16);
+
+    m_titleLabel = new QLabel("环境检测引擎", m_contentCard);
+    m_titleLabel->setAlignment(Qt::AlignLeft);
     m_titleLabel->setObjectName("loadingTitle");
-    mainLayout->addWidget(m_titleLabel);
-    
-    // 状态标签
-    m_statusLabel = new QLabel("正在初始化...", this);
-    m_statusLabel->setAlignment(Qt::AlignCenter);
-    m_statusLabel->setObjectName("loadingStatus");
+    cardLayout->addWidget(m_titleLabel);
+
+    m_statusLabel = new QLabel("正在初始化...", m_contentCard);
+    m_statusLabel->setAlignment(Qt::AlignLeft);
     m_statusLabel->setWordWrap(true);
-    mainLayout->addWidget(m_statusLabel);
-    
-    // 进度条
-    m_progressBar = new QProgressBar(this);
+    m_statusLabel->setObjectName("loadingStatus");
+    cardLayout->addWidget(m_statusLabel);
+
+    m_summaryLabel = new QLabel("系统兼容性 · 网络连通性 · 浏览器组件完整性", m_contentCard);
+    m_summaryLabel->setWordWrap(true);
+    m_summaryLabel->setObjectName("summaryLabel");
+    cardLayout->addWidget(m_summaryLabel);
+
+    m_progressBar = new QProgressBar(m_contentCard);
     m_progressBar->setVisible(false);
     m_progressBar->setMinimum(0);
     m_progressBar->setMaximum(100);
     m_progressBar->setObjectName("systemProgressBar");
-    mainLayout->addWidget(m_progressBar);
-    
-    // 进度标签
-    m_progressLabel = new QLabel("", this);
-    m_progressLabel->setAlignment(Qt::AlignCenter);
+    cardLayout->addWidget(m_progressBar);
+
+    m_progressLabel = new QLabel("", m_contentCard);
+    m_progressLabel->setAlignment(Qt::AlignLeft);
     m_progressLabel->setObjectName("progressLabel");
     m_progressLabel->setVisible(false);
-    mainLayout->addWidget(m_progressLabel);
-    
-    // 错误详情显示区域
-    m_errorDetailsText = new QTextEdit(this);
+    cardLayout->addWidget(m_progressLabel);
+
+    m_errorDetailsText = new QTextEdit(m_contentCard);
     m_errorDetailsText->setObjectName("errorDetails");
     m_errorDetailsText->setReadOnly(true);
     m_errorDetailsText->setVisible(false);
-    m_errorDetailsText->setMaximumHeight(150);
-    mainLayout->addWidget(m_errorDetailsText);
-    
-    mainLayout->addStretch();
-    
-    // 按钮布局
+    m_errorDetailsText->setMaximumHeight(160);
+    cardLayout->addWidget(m_errorDetailsText);
+
     auto* buttonLayout = new QHBoxLayout();
-    buttonLayout->setSpacing(10);
-    
-    // 重试按钮（初始隐藏）
-    m_retryButton = new QPushButton("重试", this);
+    buttonLayout->setSpacing(12);
+
+    m_retryButton = new QPushButton("重试", m_contentCard);
     m_retryButton->setObjectName("retryButton");
     m_retryButton->setVisible(false);
-    m_retryButton->setMinimumWidth(100);
-    m_retryButton->setMinimumHeight(40);
+    m_retryButton->setMinimumSize(120, 40);
+    m_retryButton->setFont(buttonFont);
     connect(m_retryButton, &QPushButton::clicked, this, &LoadingDialog::retryClicked);
     buttonLayout->addWidget(m_retryButton);
-    
-    // 取消按钮（初始隐藏）
-    m_cancelButton = new QPushButton("取消", this);
+
+    m_cancelButton = new QPushButton("取消", m_contentCard);
     m_cancelButton->setObjectName("cancelButton");
     m_cancelButton->setVisible(false);
-    m_cancelButton->setMinimumWidth(100);
-    m_cancelButton->setMinimumHeight(40);
+    m_cancelButton->setMinimumSize(120, 40);
     m_cancelButton->setFont(buttonFont);
     connect(m_cancelButton, &QPushButton::clicked, this, &LoadingDialog::cancelClicked);
     buttonLayout->addWidget(m_cancelButton);
-    
-    // 详情按钮（初始隐藏）
-    m_detailsButton = new QPushButton("显示详情", this);
+
+    m_detailsButton = new QPushButton("显示详情", m_contentCard);
     m_detailsButton->setObjectName("detailsButton");
     m_detailsButton->setVisible(false);
-    m_detailsButton->setMinimumWidth(100);
-    m_detailsButton->setMinimumHeight(40);
+    m_detailsButton->setMinimumSize(120, 40);
     m_detailsButton->setFont(buttonFont);
     connect(m_detailsButton, &QPushButton::clicked, this, &LoadingDialog::onShowErrorDetails);
     buttonLayout->addWidget(m_detailsButton);
-    
-    // 自动修复按钮（初始隐藏）
-    m_autoFixButton = new QPushButton("自动修复", this);
+
+    m_autoFixButton = new QPushButton("自动修复", m_contentCard);
     m_autoFixButton->setObjectName("autoFixButton");
     m_autoFixButton->setVisible(false);
-    m_autoFixButton->setMinimumWidth(100);
-    m_autoFixButton->setMinimumHeight(40);
+    m_autoFixButton->setMinimumSize(120, 40);
     m_autoFixButton->setFont(buttonFont);
     buttonLayout->addWidget(m_autoFixButton);
-    
+
     buttonLayout->addStretch();
-    mainLayout->addLayout(buttonLayout);
+    cardLayout->addLayout(buttonLayout);
+
+    backgroundLayout->addWidget(m_contentCard);
+    backgroundLayout->addStretch();
 }
 
 void LoadingDialog::applyStyles()
@@ -279,10 +317,15 @@ void LoadingDialog::drawLoadingIcon(QPainter& painter)
     // 设置渲染提示
     painter.setRenderHint(QPainter::Antialiasing);
     
-    // 计算图标绘制位置 (在状态文本上方)
-    int iconSize = 32;
+    // 计算图标绘制位置（靠近内容卡片右上角）
+    const int iconSize = 36;
     int x = (width() - iconSize) / 2;
-    int y = height() / 2 - 60; // 在中心上方一点
+    int y = height() / 2 - 60;
+    if (m_contentCard) {
+        QPoint cardTopRight = m_contentCard->mapTo(this, QPoint(m_contentCard->width(), 0));
+        x = cardTopRight.x() - iconSize - 12;
+        y = cardTopRight.y() + 12;
+    }
     
     // 保存当前变换状态
     painter.save();
@@ -292,7 +335,7 @@ void LoadingDialog::drawLoadingIcon(QPainter& painter)
     painter.rotate(m_rotation);
     
     // 绘制简单的旋转加载图标
-    painter.setPen(QPen(QColor(64, 128, 255), 3)); // 蓝色笔触
+    painter.setPen(QPen(QColor(37, 99, 235), 3));
     painter.setBrush(Qt::NoBrush);
     
     // 绘制圆弧表示加载
@@ -369,6 +412,10 @@ void LoadingDialog::onCheckProgress(int current, int total, const QString& messa
     
     // 更新进度标签
     m_progressLabel->setText(QString("正在执行: %1/%2").arg(current).arg(total));
+
+    if (m_summaryLabel) {
+        m_summaryLabel->setText(QString("第%1/%2项 · %3").arg(current).arg(total).arg(message));
+    }
     
     Logger::instance().appEvent(QString("检测进度: %1/%2 - %3").arg(current).arg(total).arg(message));
 }
@@ -422,6 +469,14 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
         if (m_statusLabel) {
             m_statusLabel->setText("系统检测完成，正在启动应用程序...");
         }
+
+        if (m_subtitleLabel) {
+            m_subtitleLabel->setText("检测完成 · 准备启动");
+        }
+        
+        if (m_summaryLabel) {
+            m_summaryLabel->setText("所有检测项通过");
+        }
         
         if (m_progressBar) {
             m_progressBar->setValue(100);
@@ -461,6 +516,14 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
             m_statusLabel->setText(errorSummary);
             m_statusLabel->setProperty("error", true);
             m_statusLabel->style()->polish(m_statusLabel);
+        }
+
+        if (m_subtitleLabel) {
+            m_subtitleLabel->setText("检测失败 · 请处理提示");
+        }
+
+        if (m_summaryLabel) {
+            m_summaryLabel->setText("存在阻塞项 · 查看详情或尝试自动修复");
         }
         
         // 显示操作按钮
@@ -597,11 +660,19 @@ void LoadingDialog::startSystemCheck()
     if (m_titleLabel) {
         m_titleLabel->setText("系统检测中");
     }
-    
+
+    if (m_subtitleLabel) {
+        m_subtitleLabel->setText("环境安全检测进行中");
+    }
+
     if (m_statusLabel) {
         m_statusLabel->setText("正在开始系统检测...");
         m_statusLabel->setProperty("error", false);
         m_statusLabel->style()->polish(m_statusLabel);
+    }
+
+    if (m_summaryLabel) {
+        m_summaryLabel->setText("系统兼容性 · 网络连通性 · 浏览器组件完整性");
     }
     
     // 显示进度控件
@@ -638,6 +709,10 @@ void LoadingDialog::startApplicationLoad()
     
     if (m_statusLabel) {
         m_statusLabel->setText("正在加载应用程序组件...");
+    }
+
+    if (m_subtitleLabel) {
+        m_subtitleLabel->setText("正在启动考试终端");
     }
     
     // 隐藏检测相关UI

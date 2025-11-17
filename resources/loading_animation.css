@@ -1,97 +1,141 @@
-/* General Dialog Styling */
-LoadingDialog {
-    background-color: rgba(255, 255, 255, 0.95); /* Slightly transparent white */
-    border: 1px solid #dcdcdc;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+/* 根窗口与背景 */
+LoadingDialog#loadingDialogRoot {
+    background-color: #020617;
+    border: none;
 }
 
-/* Title Label */
+QFrame#backgroundFrame {
+    border-radius: 28px;
+    background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #0f172a, stop:1 #1d2b53);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    box-shadow: 0 30px 80px rgba(2, 6, 23, 0.65);
+}
+
+QFrame#loadingCard {
+    background-color: rgba(255, 255, 255, 0.98);
+    border-radius: 24px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+QLabel#brandIcon {
+    min-width: 56px;
+    min-height: 56px;
+    border-radius: 16px;
+    background: rgba(226, 232, 240, 0.15);
+    padding: 8px;
+}
+
+/* 品牌与标题 */
+QLabel#brandLabel {
+    font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: #e2e8f0;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+QLabel#loadingSubtitle {
+    font-size: 0.95em;
+    color: rgba(226, 232, 240, 0.8);
+}
+
 QLabel#loadingTitle {
     font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
-    font-size: 2em; /* Use relative unit */
+    font-size: 1.8em;
     font-weight: 600;
-    color: #2c3e50; /* Dark blue-gray */
-    padding-top: 60px; /* Space for spinner */
+    color: #0f172a;
 }
 
-/* Status Label */
 QLabel#loadingStatus {
-    font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
-    font-size: 1.2em; /* Use relative unit */
-    color: #7f8c8d; /* Gray */
-    padding: 0 20px;
+    font-size: 1.1em;
+    color: #475467;
+    line-height: 1.5em;
 }
 
-/* Error Status Styling */
 #loadingStatus[error="true"] {
-    color: #e74c3c; /* Red for errors */
-    font-weight: 500;
+    color: #d92d20;
+    font-weight: 600;
 }
 
-/* Progress Bar */
+QLabel#summaryLabel {
+    font-size: 0.95em;
+    color: #98a2b3;
+    letter-spacing: 0.05em;
+}
+
+/* 进度组件 */
 QProgressBar#systemProgressBar {
     border: none;
-    background-color: #ecf0f1; /* Light gray background */
-    border-radius: 5px;
-    text-align: center;
-    height: 10px;
+    background-color: #e4e7ec;
+    border-radius: 6px;
+    height: 12px;
 }
 
 QProgressBar#systemProgressBar::chunk {
-    background-color: #3498db; /* Blue for progress */
-    border-radius: 5px;
+    background-color: #2563eb;
+    border-radius: 6px;
 }
 
-/* Progress Label */
 QLabel#progressLabel {
     font-size: 0.9em;
-    color: #95a5a6; /* Lighter gray */
+    color: #475467;
 }
 
-/* Buttons */
+/* 按钮样式 */
 QPushButton {
     font-family: "Segoe UI", "Microsoft YaHei", "Helvetica Neue", sans-serif;
     font-size: 1em;
-    font-weight: 500;
-    color: #ffffff;
-    background-color: #3498db; /* Blue */
+    font-weight: 600;
+    color: #0f172a;
+    background-color: #e2e8f0;
     border: none;
-    border-radius: 5px;
-    padding: 10px 20px;
-    min-width: 120px;
+    border-radius: 10px;
+    padding: 10px 24px;
 }
 
 QPushButton:hover {
-    background-color: #2980b9; /* Darker blue */
+    background-color: #cbd5f5;
 }
 
 QPushButton:pressed {
-    background-color: #1f618d;
+    background-color: #b4c2eb;
+}
+
+QPushButton#retryButton,
+QPushButton#autoFixButton {
+    color: #ffffff;
+    background-color: #2563eb;
+}
+
+QPushButton#retryButton:hover,
+QPushButton#autoFixButton:hover {
+    background-color: #1d4ed8;
+}
+
+QPushButton#retryButton:pressed,
+QPushButton#autoFixButton:pressed {
+    background-color: #1e3a8a;
 }
 
 QPushButton#cancelButton {
-    background-color: #bdc3c7; /* Gray for cancel */
+    background-color: #e4e7ec;
+    color: #475467;
 }
 
-QPushButton#cancelButton:hover {
-    background-color: #95a5a6;
-}
-
-/* Details Button */
 QPushButton#detailsButton {
-    background-color: #f1c40f; /* Yellow for details */
-}
-QPushButton#detailsButton:hover {
-    background-color: #f39c12;
+    background-color: #facc15;
+    color: #713f12;
 }
 
-/* Error Details Text Area */
+/* 错误详情 */
 QTextEdit#errorDetails {
-    background-color: #ecf0f1;
-    border: 1px solid #dcdcdc;
-    border-radius: 5px;
-    font-family: "Courier New", "Lucida Console", monospace;
+    background-color: #f8fafc;
+    border: 1px solid #e4e7ec;
+    border-radius: 12px;
+    font-family: "JetBrains Mono", "Courier New", monospace;
     font-size: 0.9em;
-    color: #34495e;
+    color: #0f172a;
+    padding: 12px;
 }
