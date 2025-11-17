@@ -1221,6 +1221,28 @@ jobs:
         setlocal enabledelayedexpansion
         echo "=== 安装NSIS ==="
         choco install nsis -y
+        if errorlevel 1 (
+          echo "[ERROR] Chocolatey安装NSIS失败"
+          exit /b 1
+        )
+
+        echo "=== 检查makensis可用性 ==="
+        set "NSIS_EXE=%ProgramFiles(x86)%\NSIS\makensis.exe"
+        if not exist "%NSIS_EXE%" set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
+        if not exist "%NSIS_EXE%" set "NSIS_EXE=%ChocolateyInstall%\bin\makensis.exe"
+        if not exist "%NSIS_EXE%" (
+          for %%I in (makensis.exe) do (
+            if not "%%~$PATH:I"=="" (
+              set "NSIS_EXE=%%~$PATH:I"
+            )
+          )
+        )
+        if not exist "%NSIS_EXE%" (
+          echo "[ERROR] makensis未安装到任何已知路径"
+          where makensis || echo "PATH中未找到makensis可执行文件"
+          exit /b 1
+        )
+        echo "makensis路径: %NSIS_EXE%"
         
         echo "=== 生成${{ matrix.arch }}位CEF安装包 ==="
         mkdir Output 2>nul
@@ -1272,7 +1294,7 @@ jobs:
         for /f "tokens=1 delims=." %%a in ("!cef_version_full!") do set "cef_major=%%a"
         
         echo "生成CEF ${{ matrix.arch }}位安装包 (CEF !cef_major!)..."
-        makensis -DARCH=${{ matrix.arch }} -DCEF_VERSION=!cef_major! installer.nsi
+        "%NSIS_EXE%" -DARCH=${{ matrix.arch }} -DCEF_VERSION=!cef_major! installer.nsi
         if %errorlevel% neq 0 (
           echo 生成${{ matrix.arch }}位安装包失败
           exit /b 1
