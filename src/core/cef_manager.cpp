@@ -529,8 +529,8 @@ bool CEFManager::verifyCEFInstallation()
     // CEF子进程文件（仅在多进程模式下需要）
     // 注意：32位系统使用单进程模式，不需要subprocess文件
     if (!Application::is32BitSystem()) {
-        // 64位系统使用多进程模式，需要子进程文件
-        requiredFiles << "cef_subprocess_win64.exe";
+        // 64位系统暂时使用单进程模式
+        // 多进程模式的subprocess支持待完善
     } else {
         // 32位系统使用单进程模式，添加额外的DLL依赖
         requiredFiles << "d3dcompiler_47.dll";

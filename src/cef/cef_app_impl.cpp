@@ -55,8 +55,13 @@ void CEFApp::OnBeforeCommandLineProcessing(const CefString& process_type, CefRef
     // 32位系统特殊优化
     if (Application::is32BitSystem()) {
         apply32BitOptimizations(command_line);
+    } else {
+        // 64位系统：暂时强制使用单进程模式
+        // 直到多进程subprocess支持完善
+        command_line->AppendSwitch("--single-process");
+        m_logger->appEvent("64位系统：启用单进程模式（subprocess支持待完善）");
     }
-    
+
     // Windows 7特殊标志
     if (m_windows7CompatibilityMode) {
         applyWindows7Flags(command_line);
