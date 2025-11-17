@@ -19,6 +19,9 @@
 #include <QThread>
 #include <QHostAddress>
 #include <QNetworkAddressEntry>
+#include <QLibrary>
+#include <QProcess>
+#include <QSysInfo>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -32,7 +35,7 @@ SystemChecker::SystemChecker(QObject *parent)
     , m_networkTimeout(nullptr)
     , m_networkManager(nullptr)
     , m_currentCheck(0)
-    , m_totalChecks(5)
+    , m_totalChecks(6)
     , m_checkInProgress(false)
 {
     // 注册自定义类型用于信号槽
@@ -70,6 +73,7 @@ void SystemChecker::startSystemCheck()
     QStringList checkNames = {
         "系统兼容性检测",
         "网络连接检测", 
+        "运行库依赖检查",
         "CEF依赖检查",
         "配置权限验证",
         "组件预加载"
@@ -83,9 +87,10 @@ void SystemChecker::startSystemCheck()
         switch (i) {
             case 0: result = checkSystemCompatibility(); break;
             case 1: result = checkNetworkConnection(); break;
-            case 2: result = checkCEFDependencies(); break;
-            case 3: result = checkConfigPermissions(); break;
-            case 4: result = preloadComponents(); break;
+            case 2: result = checkRuntimeDependencies(); break;
+            case 3: result = checkCEFDependencies(); break;
+            case 4: result = checkConfigPermissions(); break;
+            case 5: result = preloadComponents(); break;
         }
         
         m_results.append(result);
@@ -347,6 +352,47 @@ SystemChecker::CheckResult SystemChecker::checkCEFDependencies()
     return result;
 }
 
+SystemChecker::CheckResult SystemChecker::checkRuntimeDependencies()
+{
+    CheckResult result;
+    result.type = CHECK_RUNTIME_DEPENDENCIES;
+    result.title = "运行库依赖检查";
+    result.autoFixable = true;
+    
+    QStringList issues;
+    CheckLevel maxLevel = LEVEL_OK;
+
+#ifdef Q_OS_WIN
+    QStringList requiredDlls = { "vcruntime140", "vcruntime140_1", "msvcp140" };
+    for (const QString &dll : requiredDlls) {
+        QLibrary lib(dll);
+        if (!lib.load()) {
+            issues << QString("%1.dll 未正确安装").arg(dll);
+            maxLevel = qMax(maxLevel, LEVEL_ERROR);
+            result.solution = "请运行自动修复以安装VC++运行库，或重新执行安装程序。";
+        } else {
+            lib.unload();
+        }
+    }
+#else
+    result.level = LEVEL_OK;
+    result.message = "当前平台无需运行库检查";
+    result.canRetry = false;
+    return result;
+#endif
+
+    result.level = maxLevel;
+    result.details = issues;
+    
+    if (maxLevel == LEVEL_OK) {
+        result.message = "运行库依赖完整";
+    } else {
+        result.message = QString("发现%1个运行库问题").arg(issues.size());
+    }
+
+    return result;
+}
+
 SystemChecker::CheckResult SystemChecker::checkConfigPermissions()
 {
     CheckResult result;
@@ -482,20 +528,32 @@ QList<SystemChecker::CheckResult> SystemChecker::getFatalErrors() const
 
 void SystemChecker::attemptAutoFix()
 {
+    QList<CheckType> pendingFixes;
+    for (const CheckResult &result : m_results) {
+        if (result.autoFixable && result.level != LEVEL_OK) {
+            pendingFixes.append(result.type);
+        }
+    }
+    
     int fixedCount = 0;
     
-    for (CheckResult &result : m_results) {
-        if (result.autoFixable && result.level != LEVEL_OK) {
-            // 尝试自动修复
-            if (result.type == CHECK_CONFIG_PERMISSIONS) {
-                // 尝试创建默认配置文件
-                QString defaultPath = QCoreApplication::applicationDirPath() + "/config.json";
-                if (m_configManager->createDefaultConfig(defaultPath)) {
-                    result.level = LEVEL_OK;
-                    result.message = "已自动创建默认配置文件";
-                    fixedCount++;
-                }
+    for (CheckType type : pendingFixes) {
+        bool fixed = false;
+        if (type == CHECK_CONFIG_PERMISSIONS) {
+            QString defaultPath = QCoreApplication::applicationDirPath() + "/config.json";
+            if (m_configManager->createDefaultConfig(defaultPath)) {
+                m_logger->appEvent("自动修复：已重新生成默认配置文件");
+                fixed = true;
+            } else {
+                m_logger->errorEvent("自动修复失败：无法创建默认配置文件");
             }
+        } else if (type == CHECK_RUNTIME_DEPENDENCIES) {
+            fixed = installVCRuntimePackage();
+        }
+        
+        if (fixed) {
+            retryCheck(type);
+            fixedCount++;
         }
     }
     
@@ -529,6 +587,54 @@ QString SystemChecker::formatFileSize(qint64 bytes)
     return QString("%1 GB").arg(bytes / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1);
 }
 
+bool SystemChecker::installVCRuntimePackage()
+{
+#ifdef Q_OS_WIN
+    QString depDir = QCoreApplication::applicationDirPath() + "/resources/dependencies";
+    bool is64Bit = QSysInfo::currentCpuArchitecture().contains("64", Qt::CaseInsensitive);
+    QStringList candidates;
+    if (is64Bit) {
+        candidates << QDir(depDir).absoluteFilePath("VC_redist.x64.exe");
+    }
+    candidates << QDir(depDir).absoluteFilePath("VC_redist.x86.exe");
+    
+    QString installerPath;
+    for (const QString &candidate : candidates) {
+        if (QFileInfo::exists(candidate)) {
+            installerPath = candidate;
+            break;
+        }
+    }
+    
+    if (installerPath.isEmpty()) {
+        m_logger->errorEvent("未找到离线VC++运行库安装包，无法自动修复运行库问题");
+        return false;
+    }
+    
+    QStringList args = { "/install", "/quiet", "/norestart" };
+    QProcess process;
+    process.start(installerPath, args);
+    if (!process.waitForFinished(5 * 60 * 1000)) {
+        process.kill();
+        process.waitForFinished(1000);
+        m_logger->errorEvent("VC++运行库自动安装超时");
+        return false;
+    }
+    
+    int exitCode = process.exitCode();
+    if (exitCode == 0 || exitCode == 1638 || exitCode == 3010) {
+        m_logger->appEvent(QString("VC++运行库安装完成，退出码%1").arg(exitCode));
+        return true;
+    }
+    
+    m_logger->errorEvent(QString("VC++运行库安装失败，退出码%1").arg(exitCode));
+    return false;
+#else
+    m_logger->appEvent("非Windows平台无需自动安装VC++运行库");
+    return false;
+#endif
+}
+
 void SystemChecker::retryCheck(CheckType type)
 {
     m_logger->appEvent(QString("重试检测项目: %1").arg(static_cast<int>(type)));
@@ -538,6 +644,7 @@ void SystemChecker::retryCheck(CheckType type)
         case CHECK_SYSTEM_COMPATIBILITY: result = checkSystemCompatibility(); break;
         case CHECK_NETWORK_CONNECTION: result = checkNetworkConnection(); break;
         case CHECK_CEF_DEPENDENCIES: result = checkCEFDependencies(); break;
+        case CHECK_RUNTIME_DEPENDENCIES: result = checkRuntimeDependencies(); break;
         case CHECK_CONFIG_PERMISSIONS: result = checkConfigPermissions(); break;
         case CHECK_PRELOAD_COMPONENTS: result = preloadComponents(); break;
     }

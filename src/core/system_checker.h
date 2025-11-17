@@ -43,6 +43,7 @@ public:
         CHECK_SYSTEM_COMPATIBILITY,  // 系统兼容性
         CHECK_NETWORK_CONNECTION,    // 网络连接
         CHECK_CEF_DEPENDENCIES,      // CEF依赖
+        CHECK_RUNTIME_DEPENDENCIES,  // 运行时依赖
         CHECK_CONFIG_PERMISSIONS,    // 配置和权限
         CHECK_PRELOAD_COMPONENTS     // 预加载组件
     };
@@ -147,6 +148,7 @@ private:
     CheckResult checkTargetReachability();
 
     CheckResult checkCEFDependencies();
+    CheckResult checkRuntimeDependencies();
     CheckResult checkCEFFiles();
     CheckResult checkCEFVersionCompatibility();
     CheckResult checkCEFIntegrity();
@@ -163,6 +165,7 @@ private:
     bool isAdministrator();
     qint64 getAvailableDiskSpace(const QString& path);
     QString getSystemDescription();
+    bool installVCRuntimePackage();
 
 private:
     Logger* m_logger;

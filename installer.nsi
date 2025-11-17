@@ -63,6 +63,9 @@ RequestExecutionLevel admin
 LangString MSG_InstallDone ${LANG_SIMPCHINESE} "安装完成！桌面快捷方式已创建。"
 LangString MSG_UninstallDone ${LANG_SIMPCHINESE} "卸载完成，相关文件已全部移除。"
 
+Var /GLOBAL VerificationErrors
+Var /GLOBAL VCInstallerPath
+
 ; ─────────────────────────────────────────────
 ; 安装前检查
 ; ─────────────────────────────────────────────
@@ -175,7 +178,6 @@ Section "主程序" SecMain
     DetailPrint "正在验证安装结果..."
     
     ; 初始化验证错误变量
-    Var /GLOBAL VerificationErrors
     StrCpy $VerificationErrors ""
     
     ; 检查主程序文件是否成功安装
@@ -286,12 +288,22 @@ Section "主程序" SecMain
         DetailPrint "警告：未找到应用图标文件"
     ${EndIf}
     
-    ; 复制VC++ Redistributable安装包（用于自动安装）
-    ${If} ${FileExists} "resources\VC_redist.x86.exe"
-        File /oname=resources\VC_redist.x86.exe "resources\VC_redist.x86.exe"
-        DetailPrint "已复制VC++ Redistributable安装包"
+    ; 复制离线运行时安装包（用于自动修复/安装）
+    CreateDirectory "$INSTDIR\resources\dependencies"
+    ${If} ${FileExists} "resources\dependencies\VC_redist.x86.exe"
+        File /oname=resources\dependencies\VC_redist.x86.exe "resources\dependencies\VC_redist.x86.exe"
+        DetailPrint "已复制VC++ Redistributable x86 安装包"
     ${Else}
-        DetailPrint "警告：未找到VC++ Redistributable安装包"
+        DetailPrint "警告：未找到VC++ Redistributable x86 安装包"
+    ${EndIf}
+    ${If} ${FileExists} "resources\dependencies\VC_redist.x64.exe"
+        File /oname=resources\dependencies\VC_redist.x64.exe "resources\dependencies\VC_redist.x64.exe"
+        DetailPrint "已复制VC++ Redistributable x64 安装包"
+    ${Else}
+        DetailPrint "警告：未找到VC++ Redistributable x64 安装包"
+    ${EndIf}
+    ${If} ${FileExists} "resources\dependencies\manifest.json"
+        File /oname=resources\dependencies\manifest.json "resources\dependencies\manifest.json"
     ${EndIf}
 
     ; 注册表写入（适配CEF版本）
@@ -408,18 +420,25 @@ Section "主程序" SecMain
         ${If} ${Errors}
             DetailPrint "未检测到Visual C++ Redistributable，正在自动安装..."
             
-            ; 检查VC++ Redistributable安装包是否存在
-            ${If} ${FileExists} "$INSTDIR\resources\VC_redist.x86.exe"
+            StrCpy $VCInstallerPath ""
+            ${If} "${ARCH}" == "x64"
+                ${If} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x64.exe"
+                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x64.exe"
+                ${ElseIf} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
+                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
+                ${EndIf}
+            ${Else}
+                ${If} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
+                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
+                ${EndIf}
+            ${EndIf}
+            
+            ${If} $VCInstallerPath != ""
                 DetailPrint "开始静默安装VC++ Redistributable..."
+                ExecWait '"$VCInstallerPath" /install /quiet /norestart' $R1
                 
-                ; 执行静默安装
-                ExecWait '"$INSTDIR\resources\VC_redist.x86.exe" /install /quiet /norestart' $R1
-                
-                ; 检查安装结果
                 ${If} $R1 == 0
                     DetailPrint "✓ VC++ Redistributable安装成功"
-                    
-                    ; 重新检查注册表确认安装
                     ClearErrors
                     ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
                     ${If} ${Errors}
@@ -434,8 +453,6 @@ Section "主程序" SecMain
                     MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。"
                 ${Else}
                     DetailPrint "❌ VC++ Redistributable安装失败，返回码：$R1"
-                    
-                    ; 安装失败时提供手动下载选项
                     MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" IDYES manual_vc_download IDNO skip_manual_vc_download
                     manual_vc_download:
                         ${If} "${ARCH}" == "x64"
@@ -445,14 +462,9 @@ Section "主程序" SecMain
                         ${EndIf}
                     skip_manual_vc_download:
                 ${EndIf}
-                
-                ; 清理临时文件（可选，保留供用户手动重试）
-                ; Delete "$INSTDIR\resources\VC_redist.x86.exe"
-                
             ${Else}
-                ; VC++安装包不存在时的fallback
                 DetailPrint "❌ 未找到VC++ Redistributable安装包"
-                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" IDYES fallback_vc_download IDNO skip_fallback_vc_download
+                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且离线安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" IDYES fallback_vc_download IDNO skip_fallback_vc_download
                 fallback_vc_download:
                     ${If} "${ARCH}" == "x64"
                         ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
