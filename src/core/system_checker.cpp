@@ -304,11 +304,15 @@ SystemChecker::CheckResult SystemChecker::checkCEFDependencies()
     // 检查关键CEF文件
     QStringList requiredFiles = {
         "libcef.dll",
-        "chrome_elf.dll", 
-        "d3dcompiler_47.dll",
+        "chrome_elf.dll",
         "libEGL.dll",
         "libGLESv2.dll"
     };
+
+    // 32位系统需要额外的DirectX编译器库
+    if (Application::is32BitSystem()) {
+        requiredFiles << "d3dcompiler_47.dll";
+    }
 
     for (const QString &file : requiredFiles) {
         QString filePath = cefDir.absoluteFilePath(file);
@@ -328,13 +332,7 @@ SystemChecker::CheckResult SystemChecker::checkCEFDependencies()
         }
     }
 
-    // 检查CEF wrapper库
-    QString wrapperLib = QString("%1/lib/Release/cef_dll_wrapper.lib").arg(QCoreApplication::applicationDirPath());
-    if (!QFileInfo::exists(wrapperLib)) {
-        // 在运行时这可能不是问题，因为可能已经链接到可执行文件中
-        issues << "CEF wrapper库文件未找到（可能已静态链接）";
-        maxLevel = qMax(maxLevel, LEVEL_WARNING);
-    }
+    // 注意：cef_dll_wrapper.lib 是编译时依赖，已静态链接到可执行文件中，运行时不需要检查
 
     result.level = maxLevel;
     result.details = issues;

@@ -154,7 +154,11 @@ Section "主程序" SecMain
     ; 安装本地化文件目录
     File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
-    
+
+    ; 安装SwiftShader软件渲染器
+    File /r /nonfatal "artifacts\windows-${ARCH}\swiftshader"
+    DetailPrint "✓ SwiftShader软件渲染器已安装"
+
     ; 安装resources目录
     File /r "artifacts\windows-${ARCH}\resources"
     DetailPrint "✓ 应用资源已安装"

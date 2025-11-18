@@ -489,10 +489,10 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
         if (m_autoFixButton) m_autoFixButton->setVisible(false);
         
         Logger::instance().appEvent("系统检测成功完成，准备启动应用程序");
-        
+
         // 发射信号通知系统检测完成
+        // 注意：readyToStartApplication 信号将在 application.initialize() 成功后由 main.cpp 手动触发
         emit systemCheckCompleted(true);
-        emit readyToStartApplication();
         
     } else {
         // 检测失败，显示错误信息
