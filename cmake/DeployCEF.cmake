@@ -246,12 +246,11 @@ function(deploy_cef_linux TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     set(CEF_RESOURCE_PATH "${CEF_ROOT}/Resources")
     
     # CEF共享库
+    # 注意：CEF 75 不包含 swiftshader 目录
     set(CEF_LIBRARIES
         "libcef.so"
         "libEGL.so"
         "libGLESv2.so"
-        "swiftshader/libEGL.so"
-        "swiftshader/libGLESv2.so"
     )
     
     # CEF可执行文件

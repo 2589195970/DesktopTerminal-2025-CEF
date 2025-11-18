@@ -288,19 +288,9 @@ function(force_deploy_cef_files TARGET_NAME)
             COMMENT "强制复制CEF本地化文件")
         message(STATUS "[COPY] 将复制locales目录")
     endif()
-    
-    # 复制swiftshader目录（如果存在）
-    set(swiftshader_src "${CEF_BINARY_DIR}/swiftshader")
-    set(swiftshader_dst "${OUTPUT_DIR}/swiftshader")
-    
-    if(EXISTS "${swiftshader_src}")
-        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${swiftshader_src}" "${swiftshader_dst}"
-            COMMENT "强制复制SwiftShader文件")
-        message(STATUS "[COPY] 将复制swiftshader目录")
-    endif()
-    
+
+    # 注意：CEF 75 不包含 swiftshader 目录，已移除相关复制逻辑
+
     # 创建验证目标
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "[SUCCESS] CEF文件强制部署完成"
