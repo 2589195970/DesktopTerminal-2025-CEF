@@ -1,4 +1,5 @@
 #include "system_checker.h"
+#include "application.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 
