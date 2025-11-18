@@ -99,14 +99,9 @@ function(deploy_cef_windows TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
         "chrome_crashpad_handler.exe"
         "crashpad_handler.exe"
     )
-    
-    # 根据架构选择子进程文件
-    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-        list(APPEND CEF_EXECUTABLES "cef_subprocess_win32.exe")
-    else()
-        list(APPEND CEF_EXECUTABLES "cef_subprocess_win64.exe")
-    endif()
-    
+
+    # CEF 75 单进程模式：无需 subprocess 文件
+
     # 复制核心DLL文件
     foreach(dll ${CEF_DLLS})
         if(EXISTS "${CEF_BINARY_PATH}/${dll}")

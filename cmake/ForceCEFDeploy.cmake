@@ -120,14 +120,9 @@ function(force_deploy_cef_files TARGET_NAME)
         set(CEF_EXECUTABLES
             # "crashpad_handler.exe"  # 移至可选文件列表
         )
-        
-        # 根据架构添加子进程可执行文件
-        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-            list(APPEND CEF_EXECUTABLES "cef_subprocess_win64.exe")
-        else()
-            list(APPEND CEF_EXECUTABLES "cef_subprocess_win32.exe")
-        endif()
-        
+
+        # CEF 75 单进程模式：无需 subprocess 文件
+
         # 可选文件列表（缺失时不影响核心功能）
         set(CEF_OPTIONAL_EXECUTABLES
             "crashpad_handler.exe"
@@ -196,35 +191,20 @@ function(force_deploy_cef_files TARGET_NAME)
                     COMMENT "强制复制CEF可执行文件: ${exe}")
                 message(STATUS "[COPY] 将复制: ${exe} 从 ${actual_src_file}")
             else()
-                # 对于关键的CEF子进程文件，启用全局搜索作为最后手段
-                if(exe STREQUAL "crashpad_handler.exe" OR 
-                   exe STREQUAL "cef_subprocess_win32.exe" OR 
-                   exe STREQUAL "cef_subprocess_win64.exe")
-                   
-                    message(STATUS "[SEARCH] 在CEF根目录中全局搜索关键文件: ${exe}")
+                # 对于可选的 crashpad 文件，启用全局搜索
+                if(exe STREQUAL "crashpad_handler.exe")
+                    message(STATUS "[SEARCH] 在CEF根目录中全局搜索可选文件: ${exe}")
                     file(GLOB_RECURSE GLOBAL_SEARCH_RESULTS "${CEF_ROOT_DIR}/**/${exe}")
-                    
+
                     if(GLOBAL_SEARCH_RESULTS)
                         list(GET GLOBAL_SEARCH_RESULTS 0 global_found_file)
                         add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
                             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                             "${global_found_file}" "${dst_file}"
-                            COMMENT "全局搜索复制CEF关键文件: ${exe}")
+                            COMMENT "全局搜索复制CEF可选文件: ${exe}")
                         message(STATUS "[GLOBAL_FOUND] ${exe} 位于 ${global_found_file}")
                     else()
-                        message(FATAL_ERROR "[CRITICAL ERROR] 全局搜索后仍未找到关键CEF文件: ${exe}
-
-这是一个严重错误，将导致CEF无法正常工作！
-
-已搜索的路径包括：
-- ${CEF_BINARY_DIR}
-- ${CEF_ROOT_DIR}
-- 以及所有子目录
-
-解决方案：
-1. 重新下载CEF: scripts/download-cef.bat x86 75
-2. 检查CEF包完整性
-3. 确保CEF版本正确")
+                        message(STATUS "[INFO] 可选文件未找到: ${exe}（不影响核心功能）")
                     endif()
                 else()
                     message(WARNING "[WARNING] CEF可选文件未找到: ${exe}")

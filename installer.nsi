@@ -136,16 +136,6 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Network.dll"
     DetailPrint "✓ Qt5运行时库已安装"
     
-    ; 安装CEF子进程文件（架构特定处理）
-    ${If} "${ARCH}" == "x86"
-        ; 32位系统使用单进程模式，不需要subprocess文件
-        DetailPrint "ℹ 32位系统：CEF单进程模式，无需子进程文件"
-    ${Else}
-        ; 64位系统使用多进程模式，需要subprocess文件
-        ; 注意：CEF 75 x86构建不包含子进程文件，使用单进程模式
-        DetailPrint "ℹ CEF 75：使用单进程模式，无需子进程文件"
-    ${EndIf}
-    
     ; 安装CEF数据文件（根据实际构建输出调整）
     File /nonfatal "artifacts\windows-${ARCH}\icudtl.dat"
     File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
@@ -202,23 +192,19 @@ Section "主程序" SecMain
         DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
-    ; 检查CEF子进程文件（仅在多进程模式下需要）
+    ; CEF 75 单进程模式：验证架构特定的依赖文件
     ${If} "${ARCH}" == "x86"
-        ; 32位系统使用单进程模式，不需要subprocess文件
-        DetailPrint "ℹ 32位系统：使用CEF单进程模式，无需子进程文件"
-        ; 检查32位特有的DLL依赖
         ${If} ${FileExists} "$INSTDIR\d3dcompiler_47.dll"
             DetailPrint "✓ DirectX编译器库安装成功"
         ${Else}
             DetailPrint "⚠ DirectX编译器库缺失，可能影响渲染效果"
         ${EndIf}
     ${Else}
-        ; 64位系统使用多进程模式，需要子进程文件
-        ${If} ${FileExists} "$INSTDIR\cef_subprocess_win64.exe"
-            DetailPrint "✓ CEF 64位子进程安装成功"
+        ${If} ${FileExists} "$INSTDIR\libcef.dll"
+            DetailPrint "✓ CEF核心库验证通过"
         ${Else}
-            DetailPrint "❌ CEF 64位子进程缺失，程序无法运行"
-            StrCpy $VerificationErrors "$VerificationErrors• CEF子进程 cef_subprocess_win64.exe 缺失$\\n"
+            DetailPrint "❌ CEF核心库缺失"
+            StrCpy $VerificationErrors "$VerificationErrors• CEF核心库 libcef.dll 缺失$\n"
         ${EndIf}
     ${EndIf}
     

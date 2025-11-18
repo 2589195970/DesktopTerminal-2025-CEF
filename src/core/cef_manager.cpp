@@ -245,18 +245,9 @@ void CEFManager::doMessageLoopWork()
 
 CEFManager::ProcessMode CEFManager::selectOptimalProcessMode()
 {
-    // 32位系统强制使用单进程模式以节省内存
-    if (Application::is32BitSystem()) {
-        return ProcessMode::SingleProcess;
-    }
-
-    // Windows 7系统优先使用单进程模式以提高兼容性
-    if (Application::isWindows7SP1()) {
-        return ProcessMode::SingleProcess;
-    }
-
-    // 其他情况使用多进程模式
-    return ProcessMode::MultiProcess;
+    // CEF 75 所有架构使用单进程模式
+    // subprocess支持已移除以简化部署
+    return ProcessMode::SingleProcess;
 }
 
 CEFManager::MemoryProfile CEFManager::selectOptimalMemoryProfile()
@@ -424,15 +415,9 @@ void CEFManager::buildCEFSettings(CefSettings& settings)
     int debugPort = findAvailablePort(9222);
     settings.remote_debugging_port = debugPort;
     m_logger->appEvent(QString("CEF远程调试端口已启用: %1 - F12开发者工具现在应该可以工作").arg(debugPort));
-    
+
     // CEF 75版本兼容性设置
     // windowless_rendering_enabled 在CEF 75中可能不存在
-    
-    // 进程限制
-    if (m_processMode == ProcessMode::MultiProcess) {
-        // 使用默认的子进程路径
-        // settings.browser_subprocess_path = CefString();
-    }
 }
 
 void CEFManager::applyMemoryOptimizations(CefSettings& settings)
