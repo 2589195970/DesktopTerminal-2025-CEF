@@ -324,7 +324,8 @@ SystemChecker::CheckResult SystemChecker::checkCEFDependencies()
     }
 
     // 检查CEF资源目录
-    QStringList resourceDirs = { "locales", "swiftshader" };
+    // 注意：CEF 75 不包含 swiftshader 目录，仅检查 locales
+    QStringList resourceDirs = { "locales" };
     for (const QString &dir : resourceDirs) {
         QString dirPath = cefDir.absoluteFilePath(dir);
         if (!QDir(dirPath).exists()) {
