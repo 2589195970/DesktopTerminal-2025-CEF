@@ -233,16 +233,12 @@ int main(int argc, char *argv[])
     loadingDialog->raise();
     loadingDialog->activateWindow();
     logger.appEvent("显示加载对话框");
-    
-    // 首先进行系统检测
-    logger.appEvent("开始系统检测流程");
-    loadingDialog->startSystemCheck();
-    
+
     // 标记应用程序初始化状态
     bool applicationInitialized = false;
     bool shouldExit = false;
-    
-    // 连接系统检测完成信号
+
+    // 连接系统检测完成信号（必须在startSystemCheck之前连接）
     QObject::connect(loadingDialog, &LoadingDialog::systemCheckCompleted, 
                      [&](bool checkSuccess) {
         if (checkSuccess) {
@@ -338,7 +334,11 @@ int main(int argc, char *argv[])
             mainWindow->initializeCEFBrowser();
         }
     });
-    
+
+    // 所有信号连接完成后，开始系统检测
+    logger.appEvent("开始系统检测流程");
+    loadingDialog->startSystemCheck();
+
     logger.appEvent("应用程序启动完成，进入事件循环");
     
     // 启动性能监控
