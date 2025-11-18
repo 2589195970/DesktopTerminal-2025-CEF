@@ -3,6 +3,7 @@
 #include <QStandardPaths>
 #include <QMessageBox>
 #include <QTextCodec>
+#include <QMetaObject>
 
 #include "core/application.h"
 #include "core/secure_browser.h"
@@ -259,7 +260,7 @@ int main(int argc, char *argv[])
                 // 初始化成功后，触发主窗口启动
                 // 注意：不能直接调用 startMainWindow()，因为需要通过 readyToStartApplication 信号
                 // 来确保所有相关的信号连接都已建立
-                emit loadingDialog->readyToStartApplication();
+                QMetaObject::invokeMethod(loadingDialog, "readyToStartApplication", Qt::QueuedConnection);
             } else {
                 logger.errorEvent("应用程序初始化失败");
                 loadingDialog->setError("应用程序初始化失败\n请查看日志文件");
