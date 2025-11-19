@@ -98,7 +98,7 @@ public:
     static QString getCompatibilityReport();
 
     void setSharedCEFApp(CefRefPtr<CEFApp> cefApp);
-    CefRefPtr<CEFApp> sharedCEFApp() const { return m_sharedCefApp; }
+    CefRefPtr<CEFApp> sharedCEFApp() const { return m_sharedCEFApp; }
     int getOriginalArgc() const { return m_originalArgc; }
     char** getOriginalArgv() const { return m_originalArgv; }
 
