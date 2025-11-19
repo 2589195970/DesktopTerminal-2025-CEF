@@ -7,6 +7,7 @@
 #include <QThread>
 
 #include "../security/keyboard_filter.h"
+#include "../cef/cef_app_impl.h"
 
 class CEFManager;
 class SecureBrowser;
@@ -55,7 +56,7 @@ public:
         OptimalSystem   // 最新系统，支持所有功能
     };
 
-    Application(int &argc, char **argv);
+    Application(int &argc, char **argv, int originalArgc, char **originalArgv);
     ~Application();
 
     /**
@@ -95,6 +96,11 @@ public:
     static bool checkSystemRequirements();
     static bool checkCEFCompatibility();
     static QString getCompatibilityReport();
+
+    void setSharedCEFApp(CefRefPtr<CEFApp> cefApp);
+    CefRefPtr<CEFApp> sharedCEFApp() const { return m_sharedCefApp; }
+    int getOriginalArgc() const { return m_originalArgc; }
+    char** getOriginalArgv() const { return m_originalArgv; }
 
 signals:
     // 初始化进度信号
@@ -149,6 +155,9 @@ private:
 
     bool m_initialized;
     bool m_shutdownRequested;
+    CefRefPtr<CEFApp> m_sharedCEFApp;
+    int m_originalArgc;
+    char** m_originalArgv;
 };
 
 #endif // APPLICATION_H

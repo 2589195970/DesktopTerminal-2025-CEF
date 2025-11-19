@@ -52,14 +52,11 @@ void CEFApp::OnBeforeCommandLineProcessing(const CefString& process_type, CefRef
     // 应用兼容性标志
     applyCompatibilityFlags(command_line);
     
-    // 32位系统特殊优化
-    if (Application::is32BitSystem()) {
+    // 32位或Windows 7系统继续采用兼容模式
+    if (Application::is32BitSystem() || Application::isWindows7SP1()) {
         apply32BitOptimizations(command_line);
-    } else {
-        // 64位系统：暂时强制使用单进程模式
-        // 直到多进程subprocess支持完善
-        command_line->AppendSwitch("--single-process");
-        m_logger->appEvent("64位系统：启用单进程模式（subprocess支持待完善）");
+    } else if (!m_reduceLogging) {
+        m_logger->appEvent("64位系统：启用多进程模式");
     }
 
     // Windows 7特殊标志

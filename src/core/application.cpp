@@ -24,7 +24,7 @@ Application::CompatibilityLevel Application::s_compatibility = Application::Comp
 QString Application::s_systemDescription;
 bool Application::s_systemInfoDetected = false;
 
-Application::Application(int &argc, char **argv)
+Application::Application(int &argc, char **argv, int originalArgc, char **originalArgv)
     : QApplication(argc, argv)
     , m_cefManager(nullptr)
     , m_mainWindow(nullptr)
@@ -34,6 +34,9 @@ Application::Application(int &argc, char **argv)
     , m_keyboardFilter(nullptr) // 初始化
     , m_initialized(false)
     , m_shutdownRequested(false)
+    , m_sharedCEFApp(nullptr)
+    , m_originalArgc(originalArgc)
+    , m_originalArgv(originalArgv)
 {
     // 设置应用程序信息
     setApplicationName("DesktopTerminal-CEF");
@@ -55,6 +58,11 @@ Application::Application(int &argc, char **argv)
 Application::~Application()
 {
     shutdown();
+}
+
+void Application::setSharedCEFApp(CefRefPtr<CEFApp> cefApp)
+{
+    m_sharedCEFApp = cefApp;
 }
 
 bool Application::initialize()
@@ -391,7 +399,7 @@ bool Application::initializeConfiguration()
 bool Application::initializeCEF()
 {
     try {
-        m_cefManager = new CEFManager(this);
+        m_cefManager = new CEFManager(this, m_sharedCEFApp);
         return m_cefManager->initialize();
     } catch (...) {
         if (m_logger) {
@@ -699,4 +707,3 @@ void Application::applyWindows7Optimizations()
     }
 }
 #endif
-

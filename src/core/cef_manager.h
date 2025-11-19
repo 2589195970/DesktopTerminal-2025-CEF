@@ -39,7 +39,7 @@ public:
         Performance // 性能模式（高端64位系统）
     };
 
-    explicit CEFManager(Application* app, QObject* parent = nullptr);
+    explicit CEFManager(Application* app, CefRefPtr<CEFApp> sharedApp = nullptr, QObject* parent = nullptr);
     ~CEFManager();
 
     /**

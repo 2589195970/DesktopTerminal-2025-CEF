@@ -18,7 +18,7 @@
 #include <windows.h>
 #endif
 
-CEFManager::CEFManager(Application* app, QObject* parent)
+CEFManager::CEFManager(Application* app, CefRefPtr<CEFApp> sharedApp, QObject* parent)
     : QObject(parent)
     , m_application(app)
     , m_logger(&Logger::instance())
@@ -27,7 +27,7 @@ CEFManager::CEFManager(Application* app, QObject* parent)
     , m_shutdownRequested(false)
     , m_processMode(ProcessMode::SingleProcess)
     , m_memoryProfile(MemoryProfile::Minimal)
-    , m_cefApp(nullptr)
+    , m_cefApp(sharedApp)
     , m_cefClient(nullptr)
     , m_maxRenderProcessCount(1)
     , m_cacheSizeMB(64)
@@ -238,16 +238,18 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
 
 void CEFManager::doMessageLoopWork()
 {
-    if (m_initialized && m_processMode == ProcessMode::SingleProcess) {
+    if (m_initialized) {
         CefDoMessageLoopWork();
     }
 }
 
 CEFManager::ProcessMode CEFManager::selectOptimalProcessMode()
 {
-    // CEF 75 所有架构使用单进程模式
-    // subprocess支持已移除以简化部署
-    return ProcessMode::SingleProcess;
+    if (Application::is32BitSystem() || Application::isWindows7SP1()) {
+        return ProcessMode::SingleProcess;
+    }
+
+    return ProcessMode::MultiProcess;
 }
 
 CEFManager::MemoryProfile CEFManager::selectOptimalMemoryProfile()
@@ -282,8 +284,8 @@ QStringList CEFManager::buildCEFCommandLine()
     args << "--disable-renderer-backgrounding";
     args << "--disable-backgrounding-occluded-windows";
 
-    // 32位系统特殊参数
-    if (Application::is32BitSystem()) {
+    // 32位系统和Windows 7特殊参数（强制单进程）
+    if (Application::is32BitSystem() || Application::isWindows7SP1()) {
         args << "--single-process";
         args << "--disable-gpu";
         args << "--disable-gpu-compositing";
@@ -294,7 +296,7 @@ QStringList CEFManager::buildCEFCommandLine()
         args << "--max-old-space-size=256";
     }
 
-    // Windows 7特殊参数
+    // Windows 7额外参数
     if (Application::isWindows7SP1()) {
         args << "--disable-d3d11";
         args << "--disable-gpu-sandbox";
@@ -367,10 +369,14 @@ bool CEFManager::initializeCEFSettings()
 #ifdef Q_OS_WIN
         mainArgs = CefMainArgs(GetModuleHandle(nullptr));
 #else
-        mainArgs = CefMainArgs(0, nullptr);
+        int argc = m_application ? m_application->getOriginalArgc() : 0;
+        char** argv = m_application ? m_application->getOriginalArgv() : nullptr;
+        mainArgs = CefMainArgs(argc, argv);
 #endif
 
-        m_cefApp = new CEFApp();
+        if (!m_cefApp) {
+            m_cefApp = new CEFApp();
+        }
 
         bool result = CefInitialize(mainArgs, settings, m_cefApp.get(), nullptr);
         
@@ -458,7 +464,6 @@ void CEFManager::applyWindows7Optimizations(CefSettings& settings)
 {
     // Windows 7特殊优化
     // 注意：CEF 75不支持直接设置single_process字段，改为使用命令行参数
-    // 在buildCEFCommandLine()方法中已经添加了--single-process参数
     settings.log_severity = LOGSEVERITY_ERROR;
     
     m_logger->appEvent("应用Windows 7 CEF优化设置");
@@ -512,13 +517,11 @@ bool CEFManager::verifyCEFInstallation()
     requiredFiles << "cef.pak";
     
     // CEF子进程文件（仅在多进程模式下需要）
-    // 注意：32位系统使用单进程模式，不需要subprocess文件
-    if (!Application::is32BitSystem()) {
-        // 64位系统暂时使用单进程模式
-        // 多进程模式的subprocess支持待完善
-    } else {
-        // 32位系统使用单进程模式，添加额外的DLL依赖
+    if (Application::is32BitSystem() || Application::isWindows7SP1()) {
+        // 单进程兼容模式需要额外的D3D组件
         requiredFiles << "d3dcompiler_47.dll";
+    } else {
+        // 多进程模式使用当前可执行文件作为子进程入口，无需额外subprocess二进制
     }
     
     // CEF可选文件列表（缺失时不影响核心功能）

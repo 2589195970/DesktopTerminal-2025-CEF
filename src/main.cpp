@@ -10,12 +10,16 @@
 #include "logging/logger.h"
 #include "config/config_manager.h"
 #include "ui/loading_dialog.h"
+#include "cef/cef_app_impl.h"
+
+#include "include/cef_app.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
 #include <shellapi.h>
+#include "include/cef_sandbox_win.h"
 #endif
 
 #ifdef Q_OS_WIN
@@ -165,6 +169,21 @@ bool checkAndHandleAdminPrivileges(int argc, char* argv[], Logger& logger)
 
 int main(int argc, char *argv[])
 {
+    int originalArgc = argc;
+    char** originalArgv = argv;
+
+#ifdef Q_OS_WIN
+    CefMainArgs cefMainArgs(GetModuleHandle(nullptr));
+    CefEnableHighDPISupport();
+#else
+    CefMainArgs cefMainArgs(originalArgc, originalArgv);
+#endif
+    CefRefPtr<CEFApp> sharedCefApp(new CEFApp());
+    int exit_code = CefExecuteProcess(cefMainArgs, sharedCefApp, nullptr);
+    if (exit_code >= 0) {
+        return exit_code;
+    }
+
     QApplication app(argc, argv);
     
     // 设置应用程序基本信息
@@ -226,7 +245,8 @@ int main(int argc, char *argv[])
     logger.appEvent(QString("目标URL: %1").arg(configManager.getUrl()));
     
     // 创建应用程序实例
-    Application application(argc, argv);
+    Application application(argc, argv, originalArgc, originalArgv);
+    application.setSharedCEFApp(sharedCefApp);
     
     // 创建并显示加载对话框
     LoadingDialog* loadingDialog = new LoadingDialog();
