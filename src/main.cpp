@@ -184,13 +184,7 @@ int main(int argc, char *argv[])
         return exit_code;
     }
 
-    QApplication app(argc, argv);
-    
-    // 设置应用程序基本信息
-    app.setApplicationName("DesktopTerminal-CEF");
-    app.setApplicationVersion("1.0.0");
-    app.setOrganizationName("ZDF");
-    app.setOrganizationDomain("sdzdf.com");
+    // 注意：不在这里创建QApplication，而是使用Application类（继承自QApplication）
     
 #ifdef Q_OS_WIN
     // Windows下设置UTF-8编码
@@ -201,11 +195,15 @@ int main(int argc, char *argv[])
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
     
+    // 创建应用程序实例（必须在使用任何Qt功能之前创建）
+    Application application(argc, argv, originalArgc, originalArgv);
+    application.setSharedCEFApp(sharedCefApp);
+
     // 初始化日志系统
     Logger& logger = Logger::instance();
     logger.appEvent("=== DesktopTerminal-CEF 启动 ===");
     logger.appEvent(QString("Qt版本: %1").arg(QT_VERSION_STR));
-    logger.appEvent(QString("应用程序路径: %1").arg(app.applicationDirPath()));
+    logger.appEvent(QString("应用程序路径: %1").arg(application.applicationDirPath()));
     
     // 记录系统信息
     logger.logSystemInfo();
@@ -223,9 +221,9 @@ int main(int argc, char *argv[])
     ConfigManager& configManager = ConfigManager::instance();
     if (!configManager.loadConfig()) {
         logger.errorEvent("配置文件加载失败");
-        
+
         // 尝试创建默认配置
-        QString configPath = app.applicationDirPath() + "/config.json";
+        QString configPath = application.applicationDirPath() + "/config.json";
         if (configManager.createDefaultConfig(configPath)) {
             logger.appEvent(QString("已创建默认配置文件: %1").arg(configPath));
             if (!configManager.loadConfig(configPath)) {
@@ -243,11 +241,7 @@ int main(int argc, char *argv[])
     logger.appEvent(QString("配置文件加载成功: %1").arg(configManager.getActualConfigPath()));
     logger.appEvent(QString("应用程序名称: %1").arg(configManager.getAppName()));
     logger.appEvent(QString("目标URL: %1").arg(configManager.getUrl()));
-    
-    // 创建应用程序实例
-    Application application(argc, argv, originalArgc, originalArgv);
-    application.setSharedCEFApp(sharedCefApp);
-    
+
     // 创建并显示加载对话框
     LoadingDialog* loadingDialog = new LoadingDialog();
     loadingDialog->show();
@@ -366,12 +360,12 @@ int main(int argc, char *argv[])
     loadingDialog->startSystemCheck();
 
     logger.appEvent("应用程序启动完成，进入事件循环");
-    
+
     // 启动性能监控
     logger.startPerformanceMonitoring();
-    
+
     // 运行应用程序
-    int result = app.exec();
+    int result = application.exec();
     
     logger.appEvent(QString("应用程序退出，返回码: %1").arg(result));
     logger.appEvent("=== DesktopTerminal-CEF 关闭 ===");
