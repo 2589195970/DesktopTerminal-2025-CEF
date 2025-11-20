@@ -225,7 +225,7 @@ if(WIN32)
     if(CEF_WRAPPER_LIBRARY)
         message(STATUS "✓ 找到CEF Wrapper库: ${CEF_WRAPPER_LIBRARY}")
     else()
-        message(WARNING "✗ CEF Wrapper库未找到，将从源码编译")
+        message(STATUS "✗ CEF Wrapper库未找到，将从源码编译")
         
         # Windows平台也需要查找wrapper源码目录
         if(EXISTS "${CEF_ROOT_DIR}/libcef_dll")
