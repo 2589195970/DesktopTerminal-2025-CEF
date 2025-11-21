@@ -362,7 +362,34 @@ if(WIN32)
 endif()
 
 # 创建可执行文件
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+if(APPLE)
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS})
+else()
+    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+endif()
+
+# Linux平台RPATH配置
+if(UNIX AND NOT APPLE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+endif()
+
+# 复制资源文件到构建目录
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/config.json"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config.json"
+    COMMENT "复制config.json到构建目录"
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/dependencies"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/dependencies"
+    COMMENT "复制dependencies目录到构建目录"
+)
 
 # 验证CEF库并配置链接
 message(STATUS "=== CEF库链接配置 ===")

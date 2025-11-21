@@ -201,9 +201,9 @@ endfunction()
 # macOS平台CEF文件部署
 function(deploy_cef_macos TARGET_NAME CEF_ROOT BINARY_DIR RESOURCES_DIR)
     message(STATUS "部署macOS CEF文件")
-    
+
     set(CEF_BINARY_PATH "${CEF_ROOT}/Release")
-    set(CEF_RESOURCE_PATH "${CEF_ROOT}/Resources")
+    set(CEF_RESOURCE_PATH "${CEF_BINARY_PATH}/Chromium Embedded Framework.framework/Resources")
     
     # CEF框架
     set(CEF_FRAMEWORK "Chromium Embedded Framework.framework")

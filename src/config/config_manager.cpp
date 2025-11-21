@@ -24,8 +24,9 @@ bool ConfigManager::loadConfig(const QString &configPath)
 {
     QString exe = QCoreApplication::applicationDirPath();
     QStringList paths;
-    
-    // 配置文件搜索路径（与原项目相同的优先级）
+
+    // 配置文件搜索路径（优先使用Qt资源系统）
+    paths << ":/resources/config.json";  // Qt嵌入资源
     paths << exe + "/config.json";
     paths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
     

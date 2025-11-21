@@ -1328,9 +1328,9 @@ jobs:
         path: Output/*.exe
         retention-days: 90
 
-  # Linux构建 - 暂时屏蔽，专注Windows平台修复
+  # Linux构建
   build-linux:
-    if: false  # 屏蔽Linux构建
+    if: true
     runs-on: ubuntu-latest
     name: Linux 64-bit
     
@@ -1475,11 +1475,11 @@ jobs:
         path: artifacts/linux-x64/
         retention-days: 30
 
-  # macOS构建 - 暂时屏蔽，专注Windows平台修复
-  build-macos-disabled:
-    if: false  # 屏蔽macOS构建
+  # macOS构建
+  build-macos:
+    if: true
     runs-on: macos-12
-    name: macOS 64-bit (Disabled)
+    name: macOS 64-bit
     
     steps:
     - name: Checkout code

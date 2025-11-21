@@ -82,7 +82,7 @@ void LoadingDialog::setupUI()
     setObjectName("loadingDialogRoot");
 
     QFont buttonFont;
-    buttonFont.setPointSize(10);
+    buttonFont.setPointSize(11);
     buttonFont.setWeight(QFont::Medium);
 
     auto* outerLayout = new QVBoxLayout(this);
@@ -94,8 +94,8 @@ void LoadingDialog::setupUI()
     outerLayout->addWidget(m_backgroundFrame);
 
     auto* backgroundLayout = new QVBoxLayout(m_backgroundFrame);
-    backgroundLayout->setContentsMargins(36, 36, 36, 36);
-    backgroundLayout->setSpacing(24);
+    backgroundLayout->setContentsMargins(32, 32, 32, 32);
+    backgroundLayout->setSpacing(20);
 
     // 顶部品牌信息
     auto* headerLayout = new QHBoxLayout();
@@ -128,8 +128,8 @@ void LoadingDialog::setupUI()
     m_contentCard = new QFrame(m_backgroundFrame);
     m_contentCard->setObjectName("loadingCard");
     auto* cardLayout = new QVBoxLayout(m_contentCard);
-    cardLayout->setContentsMargins(32, 32, 32, 32);
-    cardLayout->setSpacing(16);
+    cardLayout->setContentsMargins(28, 28, 28, 28);
+    cardLayout->setSpacing(14);
 
     m_titleLabel = new QLabel("环境检测引擎", m_contentCard);
     m_titleLabel->setAlignment(Qt::AlignLeft);

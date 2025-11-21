@@ -137,8 +137,12 @@ copy_cef_files() {
         cp "$CEF_DIR"/Release/*.exe "$PACKAGE_PATH/bin/" 2>/dev/null || true
         cp "$CEF_DIR"/Release/*.bin "$PACKAGE_PATH/bin/" 2>/dev/null || true
     elif [[ "$PLATFORM" == "macos" ]]; then
-        # macOS CEF框架
-        cp -R "$CEF_DIR"/Release/*.framework "$PACKAGE_PATH/bin/" 2>/dev/null || true
+        # macOS CEF框架 - 从构建目录复制
+        BUILD_CEF_DIR="$PROJECT_ROOT/build/Release_$ARCH/bin/Release"
+        if [[ -d "$BUILD_CEF_DIR" ]]; then
+            cp -R "$BUILD_CEF_DIR"/*.framework "$PACKAGE_PATH/bin/" 2>/dev/null || true
+            cp "$BUILD_CEF_DIR"/*.pak "$PACKAGE_PATH/resources/" 2>/dev/null || true
+        fi
     else
         # Linux CEF库
         cp "$CEF_DIR"/Release/*.so* "$PACKAGE_PATH/lib/" 2>/dev/null || true
@@ -171,11 +175,16 @@ copy_qt_libraries() {
         
     elif [[ "$PLATFORM" == "macos" ]]; then
         # macOS Qt框架
-        QT_FRAMEWORKS=("QtCore" "QtGui" "QtWidgets")
+        QT_FRAMEWORKS=("QtCore" "QtGui" "QtWidgets" "QtNetwork")
+        QT_PATHS=("/opt/homebrew/opt/qt@5/lib" "/usr/local/opt/qt5/lib" "/usr/local/opt/qt@5/lib")
+
         for framework in "${QT_FRAMEWORKS[@]}"; do
-            if [[ -d "/usr/local/opt/qt5/lib/${framework}.framework" ]]; then
-                cp -R "/usr/local/opt/qt5/lib/${framework}.framework" "$PACKAGE_PATH/lib/"
-            fi
+            for qt_path in "${QT_PATHS[@]}"; do
+                if [[ -d "$qt_path/${framework}.framework" ]]; then
+                    cp -R "$qt_path/${framework}.framework" "$PACKAGE_PATH/lib/"
+                    break
+                fi
+            done
         done
         
     else
@@ -281,7 +290,13 @@ EOF
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    export DYLD_FRAMEWORK_PATH="$SCRIPT_DIR/lib:$SCRIPT_DIR/bin:$DYLD_FRAMEWORK_PATH"
+else
+    export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
+fi
+
 export PATH="$SCRIPT_DIR/bin:$PATH"
 exec "$SCRIPT_DIR/bin/DesktopTerminal-CEF" "$@"
 EOF
@@ -291,10 +306,45 @@ EOF
     log_success "启动脚本创建完成"
 }
 
+# 修复macOS动态库路径
+fix_macos_dylib_paths() {
+    if [[ "$PLATFORM" != "macos" ]]; then
+        return
+    fi
+
+    log_info "修复macOS动态库路径..."
+
+    local binary="$PACKAGE_PATH/bin/DesktopTerminal-CEF"
+    local frameworks=("QtCore" "QtGui" "QtWidgets" "QtNetwork")
+
+    for framework in "${frameworks[@]}"; do
+        install_name_tool -change \
+            "/opt/homebrew/opt/qt@5/lib/${framework}.framework/Versions/5/${framework}" \
+            "@executable_path/../lib/${framework}.framework/Versions/5/${framework}" \
+            "$binary" 2>/dev/null || true
+    done
+
+    log_success "动态库路径修复完成"
+}
+
+# 创建DMG包
+create_dmg_package() {
+    if ! command -v hdiutil &> /dev/null; then
+        log_error "hdiutil未找到，无法创建DMG"
+        return 1
+    fi
+
+    local dmg_name="${PACKAGE_NAME}.dmg"
+    local temp_dmg="${PACKAGE_NAME}-temp.dmg"
+
+    hdiutil create -volname "$PACKAGE_NAME" -srcfolder "$PACKAGE_NAME" -ov -format UDZO "$dmg_name"
+    log_success "DMG包创建完成: $dmg_name"
+}
+
 # 创建软件包
 create_package() {
     log_info "创建软件包..."
-    
+
     cd "$PACKAGE_DIR"
     
     case "$FORMAT" in
@@ -401,6 +451,7 @@ main() {
     copy_config_files
     copy_documentation
     create_launcher
+    fix_macos_dylib_paths
     create_package
     
     log_success "打包完成！"
