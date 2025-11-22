@@ -196,7 +196,8 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
 #else
         // Linux实现
-        windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), 0, 0, 800, 600);
+        CefRect rect(0, 0, 800, 600);
+        windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), rect);
 #endif
 
         // 配置浏览器设置
