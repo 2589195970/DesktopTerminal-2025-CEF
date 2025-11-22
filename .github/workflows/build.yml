@@ -988,7 +988,7 @@ jobs:
         if (-not $sourceFound) {
           Write-Host "No valid build output found!"
           Write-Host "Attempting global search for exe files..."
-          $allExes = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue
+          $allExes = Get-ChildItem "build" -Recurse -Include "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "DesktopTerminal-CEF.exe" }
           if ($allExes) {
             Write-Host "Found exe files:"
             $allExes | ForEach-Object { Write-Host "  - $($_.FullName)" }
