@@ -23,54 +23,36 @@ ConfigManager::ConfigManager()
 bool ConfigManager::loadConfig(const QString &configPath)
 {
     QString exe = QCoreApplication::applicationDirPath();
-    QStringList paths;
+    QString path = exe + "/config.json";
 
-    // 配置文件搜索路径（优先使用外部文件，嵌入资源作为后备）
-    paths << exe + "/config.json";
-    paths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
-
-#ifdef Q_OS_UNIX
-    paths << "/etc/zdf-exam-desktop/config.json";
-#endif
-
-    paths << exe + "/" + configPath;
-    paths << exe + "/../" + configPath;
-    paths << configPath;
-
-    if (QDir::isAbsolutePath(configPath)) {
-        paths << configPath;
+    QFile file(path);
+    if (!file.exists()) {
+        qCritical() << "配置文件不存在:" << path;
+        return false;
     }
 
-    paths << ":/resources/config.json";  // Qt嵌入资源作为最后的后备
-
-    for (const QString &path : paths) {
-        QFile file(path);
-        if (!file.exists()) {
-            continue;
-        }
-        
-        if (!file.open(QIODevice::ReadOnly)) {
-            continue;
-        }
-        
-        QJsonParseError error;
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-        file.close();
-        
-        if (doc.isNull() || !doc.isObject()) {
-            continue;
-        }
-        
-        config = doc.object();
-        if (!validateConfig()) {
-            continue;
-        }
-        
-        actualConfigPath = path;
-        return true;
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCritical() << "无法打开配置文件:" << path;
+        return false;
     }
-    
-    return false;
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    file.close();
+
+    if (doc.isNull() || !doc.isObject()) {
+        qCritical() << "配置文件JSON格式错误:" << error.errorString();
+        return false;
+    }
+
+    config = doc.object();
+    if (!validateConfig()) {
+        qCritical() << "配置文件验证失败";
+        return false;
+    }
+
+    actualConfigPath = path;
+    return true;
 }
 
 bool ConfigManager::validateConfig() const
@@ -95,87 +77,25 @@ bool ConfigManager::isLoaded() const
 
 bool ConfigManager::createDefaultConfig(const QString &path)
 {
-    QJsonObject defaultConfig;
-    
-    // 基础配置（与原项目相同）
-    defaultConfig["url"] = "http://stu.sdzdf.com/";
-    defaultConfig["exitPassword"] = "sdzdf@2025";
-    defaultConfig["appName"] = "智多分机考桌面端";
-    defaultConfig["iconPath"] = "logo.svg";
-    defaultConfig["appVersion"] = "1.0.0";
-    defaultConfig["configVersion"] = "202511241437";
-    
-    // 性能和兼容性配置
-    defaultConfig["disableHardwareAcceleration"] = false;
-    defaultConfig["maxMemoryMB"] = 512;
-    defaultConfig["lowMemoryMode"] = false;
-    defaultConfig["processModel"] = "process-per-site";
-    
-    // CEF特定配置
-    defaultConfig["cefLogLevel"] = "WARNING";
-    defaultConfig["cefSingleProcessMode"] = false;
-    defaultConfig["cefCacheSizeMB"] = 128;
-    defaultConfig["cefWebSecurityEnabled"] = true;
-    defaultConfig["cefUserAgent"] = "";
-    
-    // 安全策略配置
-    defaultConfig["strictSecurityMode"] = true;
-    defaultConfig["keyboardFilterEnabled"] = true;
-    defaultConfig["contextMenuEnabled"] = false;
-    defaultConfig["downloadEnabled"] = false;
-    defaultConfig["javascriptDialogEnabled"] = false;
-    defaultConfig["developerModeEnabled"] = true; // 默认开启开发者模式
-    defaultConfig["developerModeEnabled"] = true; // 默认开启开发者模式
-    
-    // 架构和兼容性配置
-    defaultConfig["autoArchDetection"] = true;
-    defaultConfig["forceWindows7CompatMode"] = false;
-    defaultConfig["forceLowMemoryMode"] = false;
-    defaultConfig["forcedCEFVersion"] = "";
-    
-    // 日志配置
-    defaultConfig["logLevel"] = "INFO";
-    defaultConfig["logBufferingEnabled"] = true;
-    defaultConfig["logFlushIntervalSeconds"] = 5;
-
-    // 网络检查配置
-    defaultConfig["checkUrl"] = "http://www.baidu.com";
-    defaultConfig["backupCheckUrls"] = QJsonArray::fromStringList({"http://www.bing.com"});
-    defaultConfig["networkCheckTimeout"] = 5000; // 5秒
-
-    // 确保目录存在
-    QFileInfo fileInfo(path);
-    QDir dir = fileInfo.dir();
-    if (!dir.exists() && !dir.mkpath(".")) {
-        return false;
-    }
-
-    // 写入文件
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        return false;
-    }
-    
-    file.write(QJsonDocument(defaultConfig).toJson());
-    file.close();
-    
-    return true;
+    // 不再支持创建默认配置
+    qCritical() << "不支持创建默认配置，必须提供有效的config.json文件";
+    return false;
 }
 
-// 基础配置获取方法（与原项目完全相同）
+// 基础配置获取方法
 QString ConfigManager::getUrl() const
 {
-    return config.value("url").toString("http://stu.sdzdf.com/");
+    return config.value("url").toString();
 }
 
 QString ConfigManager::getExitPassword() const
 {
-    return config.value("exitPassword").toString("123456");
+    return config.value("exitPassword").toString();
 }
 
 QString ConfigManager::getAppName() const
 {
-    return config.value("appName").toString("zdf-exam-desktop");
+    return config.value("appName").toString();
 }
 
 QString ConfigManager::getActualConfigPath() const
