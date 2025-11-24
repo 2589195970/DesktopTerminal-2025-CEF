@@ -190,7 +190,7 @@ Section "主程序" SecMain
     File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
 
-    ; 安装resources目录
+    ; 先复制resources目录（包含logo等资源文件）
     File /r "artifacts\windows-${ARCH}\resources"
     DetailPrint "✓ 应用资源已安装"
     
@@ -278,7 +278,8 @@ Section "主程序" SecMain
     CreateDirectory "$INSTDIR\resources"
     DetailPrint "正在配置应用程序..."
 
-    ; 使用用户输入的配置生成config.json
+    ; 使用用户输入的配置生成config.json（覆盖artifacts中的旧配置）
+    DetailPrint "生成配置文件: URL=$ConfigURL"
     FileOpen $0 "$INSTDIR\resources\config.json" w
     FileWrite $0 '{$\r$\n'
     FileWrite $0 '  "url": "$ConfigURL",$\r$\n'
@@ -293,12 +294,7 @@ Section "主程序" SecMain
     FileWrite $0 '  "contextMenuEnabled": false$\r$\n'
     FileWrite $0 '}$\r$\n'
     FileClose $0
-    DetailPrint "已创建配置文件: URL=$ConfigURL"
-    
-    ; 始终复制一份默认配置作为备份
-    ${If} ${FileExists} "resources\config.json"
-        File /oname=resources\config.json.default "resources\config.json"
-    ${EndIf}
+    DetailPrint "✓ 配置文件已生成"
     
     ; 复制图标文件
     ${If} ${FileExists} "resources\logo.ico"
@@ -397,8 +393,8 @@ Section "主程序" SecMain
             DetailPrint "⚠ DirectX编译器库验证失败，可能影响渲染"
         ${EndIf}
     ${Else}
-        ; 64位系统：CEF 75同样使用单进程模式
-        DetailPrint "ℹ CEF 75配置：使用单进程模式，无需子进程文件验证"
+        ; 64位系统：CEF 75验证
+        DetailPrint "ℹ CEF 75配置：核心库验证"
         ${If} ${FileExists} "$INSTDIR\libcef.dll"
             DetailPrint "✓ CEF核心库验证通过"
         ${Else}
@@ -409,9 +405,9 @@ Section "主程序" SecMain
     
     ; 可选：检查crashpad处理程序（仅信息记录）
     ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
-        DetailPrint "ℹ 检测到crashpad崩溃处理程序（可选功能）"
+        DetailPrint "✓ 检测到crashpad崩溃处理程序"
     ${Else}
-        DetailPrint "ℹ 未安装crashpad处理程序，使用CEF内嵌崩溃处理（推荐）"
+        DetailPrint "✓ 使用CEF内嵌崩溃处理（正常）"
     ${EndIf}
     
     ; 统计安装文件数量进行验证

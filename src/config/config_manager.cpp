@@ -30,8 +30,8 @@ bool ConfigManager::loadConfig(const QString &configPath)
 
     QFile file(path);
     if (!file.exists()) {
-        qCritical() << "配置文件不存在:" << path;
-        return false;
+        qWarning() << "配置文件不存在:" << path << "，尝试继续...";
+        // 不立即返回false，继续尝试打开
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
