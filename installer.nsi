@@ -190,9 +190,9 @@ Section "主程序" SecMain
     File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
 
-    ; 先复制resources目录（包含logo等资源文件）
-    File /r "artifacts\windows-${ARCH}\resources"
-    DetailPrint "✓ 应用资源已安装"
+;     ; 先复制resources目录（包含logo等资源文件）
+;     File /r "artifacts\windows-${ARCH}\resources"
+;     DetailPrint "✓ 应用资源已安装"
     
     ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
     CreateDirectory "$INSTDIR\platforms"
