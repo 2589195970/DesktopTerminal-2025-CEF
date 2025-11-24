@@ -368,7 +368,7 @@ Section "主程序" SecMain
         StrCpy $VerificationErrors "$VerificationErrors• 主程序文件 DesktopTerminal-CEF.exe 缺失$\n"
     ${EndIf}
     
-    ${If} ${FileExists} "$INSTDIR\config.json"
+    ${If} ${FileExists} "$INSTDIR\resources\config.json"
         DetailPrint "✓ 配置文件验证通过"
     ${Else}
         DetailPrint "⚠ 配置文件缺失，将影响程序启动"
