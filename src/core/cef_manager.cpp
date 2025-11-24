@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QWidget>
 
 #include "cef_browser.h"
 #include "cef_command_line.h"
@@ -190,14 +191,40 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         HWND hwnd = static_cast<HWND>(parentWidget);
         RECT rect;
         GetClientRect(hwnd, &rect);
+
+        // 获取DPI缩放因子并调整矩形
+        HDC hdc = GetDC(hwnd);
+        if (hdc) {
+            int dpiX = GetDeviceCaps(hdc, LOGPIXELSX);
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            ReleaseDC(hwnd, hdc);
+
+            // 应用DPI缩放（96是标准DPI）
+            if (dpiX != 96 || dpiY != 96) {
+                rect.right = MulDiv(rect.right, dpiX, 96);
+                rect.bottom = MulDiv(rect.bottom, dpiY, 96);
+            }
+        }
+
         windowInfo.SetAsChild(hwnd, rect);
 #elif defined(Q_OS_MAC)
-        // macOS实现
-        windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
+        // macOS实现 - 使用QWidget获取实际尺寸
+        QWidget* widget = static_cast<QWidget*>(parentWidget);
+        if (widget) {
+            windowInfo.SetAsChild(parentWidget, 0, 0, widget->width(), widget->height());
+        } else {
+            windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
+        }
 #else
-        // Linux实现
-        CefRect rect(0, 0, 800, 600);
-        windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), rect);
+        // Linux实现 - 使用QWidget获取实际尺寸
+        QWidget* widget = reinterpret_cast<QWidget*>(parentWidget);
+        if (widget) {
+            CefRect rect(0, 0, widget->width(), widget->height());
+            windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), rect);
+        } else {
+            CefRect rect(0, 0, 800, 600);
+            windowInfo.SetAsChild(reinterpret_cast<unsigned long>(parentWidget), rect);
+        }
 #endif
 
         // 配置浏览器设置

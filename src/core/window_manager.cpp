@@ -285,22 +285,37 @@ void WindowManager::setupWindowFlags()
 void WindowManager::setupWindowGeometry()
 {
     if (!m_targetWindow) return;
-    
+
     // 获取主屏幕
     QScreen* screen = QApplication::primaryScreen();
     if (screen) {
         m_currentScreen = screen;
         m_expectedGeometry = screen->geometry();
-        
+
+        // 获取DPI缩放因子
+        qreal dpiRatio = screen->devicePixelRatio();
+
+        // 记录屏幕信息
+        m_logger->appEvent(QString("屏幕分辨率: %1x%2")
+            .arg(m_expectedGeometry.width())
+            .arg(m_expectedGeometry.height()));
+        m_logger->appEvent(QString("DPI缩放因子: %1").arg(dpiRatio));
+
+        // 动态计算最小窗口尺寸（不超过屏幕的80%）
+        int minWidth = qMin(1280, static_cast<int>(m_expectedGeometry.width() * 0.8));
+        int minHeight = qMin(800, static_cast<int>(m_expectedGeometry.height() * 0.8));
+
         // 设置窗口几何形状为全屏
         m_targetWindow->setGeometry(m_expectedGeometry);
-        m_targetWindow->setMinimumSize(1280, 800); // 最小尺寸保护
-        
-        m_logger->appEvent(QString("窗口几何设置: %1x%2+%3+%4")
+        m_targetWindow->setMinimumSize(minWidth, minHeight);
+
+        m_logger->appEvent(QString("窗口几何设置: %1x%2+%3+%4, 最小尺寸: %5x%6")
             .arg(m_expectedGeometry.width())
             .arg(m_expectedGeometry.height())
             .arg(m_expectedGeometry.x())
-            .arg(m_expectedGeometry.y()));
+            .arg(m_expectedGeometry.y())
+            .arg(minWidth)
+            .arg(minHeight));
     }
 }
 

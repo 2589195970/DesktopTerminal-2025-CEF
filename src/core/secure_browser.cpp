@@ -489,14 +489,15 @@ void SecureBrowser::initializeWindow()
     // 设置窗口属性（与原项目相同）
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setWindowState(Qt::WindowFullScreen);
-    setMinimumSize(1280, 800);
-    
+
+    // 最小尺寸由WindowManager统一管理，此处不再硬编码
+
     // 设置窗口标题
     QWidget::setWindowTitle(m_windowTitle);
-    
+
     // 禁用上下文菜单策略
     setContextMenuPolicy(Qt::NoContextMenu);
-    
+
     m_logger->appEvent("窗口初始化完成");
 }
 
