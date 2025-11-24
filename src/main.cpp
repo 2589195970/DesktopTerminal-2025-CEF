@@ -221,21 +221,9 @@ int main(int argc, char *argv[])
     ConfigManager& configManager = ConfigManager::instance();
     if (!configManager.loadConfig()) {
         logger.errorEvent("配置文件加载失败");
-
-        // 尝试创建默认配置
-        QString configPath = application.applicationDirPath() + "/config.json";
-        if (configManager.createDefaultConfig(configPath)) {
-            logger.appEvent(QString("已创建默认配置文件: %1").arg(configPath));
-            if (!configManager.loadConfig(configPath)) {
-                QMessageBox::critical(nullptr, "配置错误", 
-                    "无法加载配置文件，程序将退出。\\n\\n请检查配置文件格式或联系管理员。");
-                return -1;
-            }
-        } else {
-            QMessageBox::critical(nullptr, "配置错误", 
-                "无法创建配置文件，程序将退出。\\n\\n请检查文件权限或联系管理员。");
-            return -1;
-        }
+        QMessageBox::critical(nullptr, "配置错误",
+            "无法加载配置文件，程序将退出。\\n\\n请在程序目录下提供有效的config.json文件。");
+        return -1;
     }
     
     logger.appEvent(QString("配置文件加载成功: %1").arg(configManager.getActualConfigPath()));

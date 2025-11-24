@@ -201,27 +201,12 @@ copy_qt_libraries() {
 # 复制配置文件
 copy_config_files() {
     log_info "复制配置文件..."
-    
-    # 创建默认配置文件
-    cat > "$PACKAGE_PATH/config/config.json" << EOF
-{
-    "url": "http://stu.sdzdf.com/",
-    "exitPassword": "sdzdf@2025",
-    "appName": "智多分机考桌面端",
-    "iconPath": "logo.svg",
-    "appVersion": "${VERSION}",
-    "cefLogLevel": "WARNING",
-    "strictSecurityMode": true,
-    "keyboardFilterEnabled": true,
-    "contextMenuEnabled": false
-}
-EOF
-    
+
     # 复制资源文件
     if [[ -f "$PROJECT_ROOT/resources/logo.svg" ]]; then
         cp "$PROJECT_ROOT/resources/logo.svg" "$PACKAGE_PATH/resources/"
     fi
-    
+
     log_success "配置文件复制完成"
 }
 

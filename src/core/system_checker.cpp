@@ -540,17 +540,11 @@ void SystemChecker::attemptAutoFix()
     for (CheckType type : pendingFixes) {
         bool fixed = false;
         if (type == CHECK_CONFIG_PERMISSIONS) {
-            QString defaultPath = QCoreApplication::applicationDirPath() + "/config.json";
-            if (m_configManager->createDefaultConfig(defaultPath)) {
-                m_logger->appEvent("自动修复：已重新生成默认配置文件");
-                fixed = true;
-            } else {
-                m_logger->errorEvent("自动修复失败：无法创建默认配置文件");
-            }
+            m_logger->errorEvent("配置文件缺失，无法自动修复，请手动提供config.json");
         } else if (type == CHECK_RUNTIME_DEPENDENCIES) {
             fixed = installVCRuntimePackage();
         }
-        
+
         if (fixed) {
             retryCheck(type);
             fixedCount++;
