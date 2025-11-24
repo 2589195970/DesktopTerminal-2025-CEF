@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QTextCodec>
 #include <QMetaObject>
+#include <QInputDialog>
 
 #include "core/application.h"
 #include "core/secure_browser.h"
@@ -230,6 +231,36 @@ int main(int argc, char *argv[])
     logger.appEvent(QString("配置版本: %1").arg(configManager.getConfigVersion()));
     logger.appEvent(QString("应用程序名称: %1").arg(configManager.getAppName()));
     logger.appEvent(QString("目标URL: %1").arg(configManager.getUrl()));
+
+    // 启动时确认配置
+    QString confirmMsg = QString("当前配置:\n\nURL: %1\n退出密码: %2\n\n是否需要修改配置?")
+        .arg(configManager.getUrl())
+        .arg(configManager.getExitPassword());
+
+    QMessageBox::StandardButton reply = QMessageBox::question(nullptr, "确认配置", confirmMsg,
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        QString newUrl = QInputDialog::getText(nullptr, "修改配置",
+            "请输入新的URL:", QLineEdit::Normal, configManager.getUrl());
+        QString newPassword = QInputDialog::getText(nullptr, "修改配置",
+            "请输入新的退出密码:", QLineEdit::Password, configManager.getExitPassword());
+
+        if (!newUrl.isEmpty() && !newPassword.isEmpty()) {
+            // 更新配置并保存
+            configManager.config["url"] = newUrl;
+            configManager.config["exitPassword"] = newPassword;
+
+            QString path = QCoreApplication::applicationDirPath() + "/resources/config.json";
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly)) {
+                QJsonDocument doc(configManager.config);
+                file.write(doc.toJson(QJsonDocument::Indented));
+                file.close();
+                logger.appEvent("配置已更新并保存");
+            }
+        }
+    }
 
     // 创建并显示加载对话框
     LoadingDialog* loadingDialog = new LoadingDialog();

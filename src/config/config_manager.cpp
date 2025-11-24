@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonParseError>
+#include <QInputDialog>
 
 ConfigManager& ConfigManager::instance()
 {
