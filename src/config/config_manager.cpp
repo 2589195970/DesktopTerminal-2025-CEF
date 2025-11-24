@@ -43,24 +43,13 @@ bool ConfigManager::loadConfig(const QString &configPath)
         paths << configPath;
     }
 
-    paths << ":/resources/config.json";  // Qt嵌入资源作为后备
-
-    // 记录所有尝试的路径
-    QString attemptedPaths;
-    for (const QString &path : paths) {
-        attemptedPaths += path + "; ";
-    }
-    qDebug() << "尝试加载配置文件，搜索路径:" << attemptedPaths;
-
     for (const QString &path : paths) {
         QFile file(path);
         if (!file.exists()) {
-            qDebug() << "配置文件不存在:" << path;
             continue;
         }
 
         if (!file.open(QIODevice::ReadOnly)) {
-            qDebug() << "配置文件无法打开:" << path;
             continue;
         }
 
@@ -69,22 +58,18 @@ bool ConfigManager::loadConfig(const QString &configPath)
         file.close();
 
         if (doc.isNull() || !doc.isObject()) {
-            qDebug() << "配置文件JSON解析失败:" << path << "错误:" << error.errorString();
             continue;
         }
 
         config = doc.object();
         if (!validateConfig()) {
-            qDebug() << "配置文件验证失败:" << path << "内容:" << config;
             continue;
         }
 
         actualConfigPath = path;
-        qDebug() << "成功加载配置文件:" << path;
         return true;
     }
 
-    qDebug() << "所有配置文件路径均加载失败";
     return false;
 }
 
