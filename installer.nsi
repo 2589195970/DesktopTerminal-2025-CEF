@@ -190,10 +190,6 @@ Section "主程序" SecMain
     File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
 
-;     ; 先复制resources目录（包含logo等资源文件）
-;     File /r "artifacts\windows-${ARCH}\resources"
-;     DetailPrint "✓ 应用资源已安装"
-    
     ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
     CreateDirectory "$INSTDIR\platforms"
     File /nonfatal /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
@@ -296,33 +292,24 @@ Section "主程序" SecMain
     FileClose $0
     DetailPrint "✓ 配置文件已生成"
     
-    ; 复制图标文件
-    ${If} ${FileExists} "resources\logo.ico"
-        File /oname=resources\logo.ico "resources\logo.ico"
-    ${ElseIf} ${FileExists} "resources\logo.png"
-        File /oname=resources\logo.png "resources\logo.png"
-        DetailPrint "使用PNG格式图标"
-    ${Else}
-        DetailPrint "警告：未找到应用图标文件"
-    ${EndIf}
-    
-    ; 复制离线运行时安装包（用于自动修复/安装）
+    ; 复制资源文件到resources目录
+    SetOutPath "$INSTDIR\resources"
+    File "resources\logo.ico"
+    File /nonfatal "resources\logo.png"
+    File /nonfatal "resources\app.manifest"
+    File /nonfatal "resources\loading_animation.css"
+    DetailPrint "✓ 应用资源文件已安装"
+
+    ; 复制离线运行时安装包
     CreateDirectory "$INSTDIR\resources\dependencies"
-    ${If} ${FileExists} "resources\dependencies\VC_redist.x86.exe"
-        File /oname=resources\dependencies\VC_redist.x86.exe "resources\dependencies\VC_redist.x86.exe"
-        DetailPrint "已复制VC++ Redistributable x86 安装包"
-    ${Else}
-        DetailPrint "警告：未找到VC++ Redistributable x86 安装包"
-    ${EndIf}
-    ${If} ${FileExists} "resources\dependencies\VC_redist.x64.exe"
-        File /oname=resources\dependencies\VC_redist.x64.exe "resources\dependencies\VC_redist.x64.exe"
-        DetailPrint "已复制VC++ Redistributable x64 安装包"
-    ${Else}
-        DetailPrint "警告：未找到VC++ Redistributable x64 安装包"
-    ${EndIf}
-    ${If} ${FileExists} "resources\dependencies\manifest.json"
-        File /oname=resources\dependencies\manifest.json "resources\dependencies\manifest.json"
-    ${EndIf}
+    SetOutPath "$INSTDIR\resources\dependencies"
+    File /nonfatal "resources\dependencies\VC_redist.x86.exe"
+    File /nonfatal "resources\dependencies\VC_redist.x64.exe"
+    File /nonfatal "resources\dependencies\manifest.json"
+    DetailPrint "✓ 依赖安装包已复制"
+
+    ; 恢复输出路径到主目录
+    SetOutPath "$INSTDIR"
 
     ; 注册表写入（适配CEF版本）
     WriteRegStr HKLM "Software\${COMPANYNAME}\${APPNAME}" "InstallDir" "$INSTDIR"

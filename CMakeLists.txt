@@ -378,17 +378,11 @@ endif()
 
 # 复制资源文件到构建目录
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/config.json"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/config.json"
-    COMMENT "复制config.json到构建目录"
-)
-
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/dependencies"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/dependencies"
-    COMMENT "复制dependencies目录到构建目录"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
+    COMMENT "复制resources目录到构建目录"
 )
 
 # 验证CEF库并配置链接
