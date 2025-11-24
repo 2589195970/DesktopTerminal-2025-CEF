@@ -222,7 +222,7 @@ int main(int argc, char *argv[])
     if (!configManager.loadConfig()) {
         logger.errorEvent("配置文件加载失败");
         QMessageBox::critical(nullptr, "配置错误",
-            "无法加载配置文件，程序将退出。\\n\\n请在程序目录下提供有效的config.json文件。");
+            "配置加载失败，程序将退出。");
         return -1;
     }
     

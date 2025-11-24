@@ -29,8 +29,22 @@ bool ConfigManager::loadConfig(const QString &configPath)
 
     QFile file(path);
     if (!file.exists()) {
-        qCritical() << "配置文件不存在:" << path;
-        return false;
+        qWarning() << "配置文件不存在:" << path << "，使用内置默认配置";
+
+        // 使用内置默认配置
+        config = QJsonObject{
+            {"url", "http://stu.sdzdf.com/"},
+            {"exitPassword", "sdzdf@2025"},
+            {"appName", "智多分机考桌面端"},
+            {"configVersion", "1.0.0-builtin"},
+            {"cefLogLevel", "WARNING"},
+            {"strictSecurityMode", true},
+            {"keyboardFilterEnabled", true},
+            {"contextMenuEnabled", false}
+        };
+
+        actualConfigPath = "builtin";
+        return true;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
