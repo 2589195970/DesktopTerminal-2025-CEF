@@ -5,7 +5,6 @@
 #include "../core/cef_manager.h"
 
 #include <QUrl>
-#include <QRegularExpression>
 
 CEFClient::CEFClient(CEFManager* cefManager)
     : m_logger(&Logger::instance())
@@ -22,15 +21,6 @@ CEFClient::CEFClient(CEFManager* cefManager)
     , m_reduceLogging(false)
     , m_disableAnimations(false)
 {
-    // 从配置读取允许的域名
-    m_allowedDomain = m_configManager->getUrl();
-    if (!m_allowedDomain.isEmpty()) {
-        QString domain = extractDomain(m_allowedDomain);
-        if (!domain.isEmpty()) {
-            m_allowedDomains << domain;
-        }
-    }
-
     // 检测Windows 7兼容性模式
     if (Application::isWindows7SP1()) {
         enableWindows7Compatibility(true);
@@ -68,10 +58,6 @@ void CEFClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFram
         // URL退出检测已移到OnBeforeBrowse方法中，避免JavaScript导航误触发（修复误检测logout问题）
         // 这里只记录地址变更，不再检测退出模式
         
-        // 验证URL是否被允许
-        if (!isUrlAllowed(urlStr)) {
-            logSecurityEvent("非法地址访问", urlStr);
-        }
     }
 }
 
@@ -104,14 +90,8 @@ bool CEFClient::OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>
         logSecurityEvent("弹窗被阻止", url);
         return true; // 阻止弹窗
     }
-    
-    // 检查URL是否被允许
-    if (!isUrlAllowed(url)) {
-        logSecurityEvent("非法弹窗被阻止", url);
-        return true;
-    }
-    
-    return false; // 允许弹窗
+
+    return false; // 不做URL访问限制
 }
 
 void CEFClient::OnAfterCreated(CefRefPtr<CefBrowser> browser)
@@ -196,16 +176,7 @@ bool CEFClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame
         }
     }
     
-    // URL访问控制
-    bool allowed = isUrlAllowed(url);
-    logNavigationAttempt(url, allowed);
-    
-    if (!allowed) {
-        logSecurityEvent("导航被阻止", url);
-        return true; // 阻止导航
-    }
-    
-    return false; // 允许导航
+    return false; // 不做URL访问限制
 }
 
 bool CEFClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString& target_url, CefRequestHandler::WindowOpenDisposition target_disposition, bool user_gesture)
@@ -227,22 +198,6 @@ CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRef
     // 目前返回nullptr使用默认处理
     return nullptr;
 }
-
-// 注意：CEF 75中此方法签名可能不同，暂时注释掉
-/*
-bool CEFClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback)
-{
-    QString url = QString::fromStdString(request->GetURL().ToString());
-    
-    // 检查资源URL是否被允许
-    if (!isUrlAllowed(url)) {
-        logSecurityEvent("资源加载被阻止", url);
-        return true; // 阻止资源加载
-    }
-    
-    return false; // 允许资源加载
-}
-*/
 
 // ==================== CefKeyboardHandler接口实现（安全控制）====================
 
@@ -366,19 +321,6 @@ void CEFClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDo
 
 // ==================== 公共配置方法 ====================
 
-void CEFClient::setAllowedDomain(const QString& domain)
-{
-    m_allowedDomain = domain;
-    m_allowedDomains.clear();
-    
-    QString extractedDomain = extractDomain(domain);
-    if (!extractedDomain.isEmpty()) {
-        m_allowedDomains << extractedDomain;
-    }
-    
-    m_logger->configEvent(QString("设置允许域名: %1").arg(domain));
-}
-
 void CEFClient::setSecurityMode(bool strict)
 {
     m_strictSecurityMode = strict;
@@ -423,43 +365,6 @@ void CEFClient::setLowMemoryMode(bool enable)
 }
 
 // ==================== 私有辅助方法 ====================
-
-bool CEFClient::isUrlAllowed(const QString& url)
-{
-    if (url.isEmpty()) {
-        return false;
-    }
-    
-    // about:blank等特殊URL总是允许
-    if (url.startsWith("about:") || url.startsWith("data:")) {
-        return true;
-    }
-    
-    QString domain = extractDomain(url);
-    return isDomainAllowed(domain);
-}
-
-bool CEFClient::isDomainAllowed(const QString& domain)
-{
-    if (domain.isEmpty()) {
-        return false;
-    }
-    
-    // 检查是否在允许列表中
-    for (const QString& allowedDomain : m_allowedDomains) {
-        if (domain == allowedDomain || domain.endsWith("." + allowedDomain)) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-QString CEFClient::extractDomain(const QString& url)
-{
-    QUrl qurl(url);
-    return qurl.host().toLower();
-}
 
 bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
 {
@@ -518,12 +423,6 @@ void CEFClient::logSecurityEvent(const QString& event, const QString& details)
 {
     QString logMessage = QString("%1: %2").arg(event).arg(details);
     m_logger->logEvent("安全控制", logMessage, "security.log", L_WARNING);
-}
-
-void CEFClient::logNavigationAttempt(const QString& url, bool allowed)
-{
-    QString status = allowed ? "允许" : "阻止";
-    m_logger->logEvent("导航控制", QString("%1 - %2").arg(status).arg(url), "navigation.log", L_INFO);
 }
 
 void CEFClient::logKeyboardEvent(const CefKeyEvent& event, bool allowed)

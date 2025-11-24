@@ -90,7 +90,6 @@ public:
     virtual void OnDownloadUpdated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item, CefRefPtr<CefDownloadItemCallback> callback) override;
 
     // 安全策略配置
-    void setAllowedDomain(const QString& domain);
     void setSecurityMode(bool strict);
     void setKeyboardFilterEnabled(bool enabled);
     void setContextMenuEnabled(bool enabled);
@@ -101,11 +100,6 @@ public:
     void setLowMemoryMode(bool enable);
 
 private:
-    // URL验证
-    bool isUrlAllowed(const QString& url);
-    bool isDomainAllowed(const QString& domain);
-    QString extractDomain(const QString& url);
-
     // 键盘事件过滤
     bool isKeyEventAllowed(const CefKeyEvent& event);
     bool isSystemShortcut(const CefKeyEvent& event);
@@ -113,7 +107,6 @@ private:
 
     // 安全日志记录
     void logSecurityEvent(const QString& event, const QString& details);
-    void logNavigationAttempt(const QString& url, bool allowed);
     void logKeyboardEvent(const CefKeyEvent& event, bool allowed);
 
 public:
@@ -133,8 +126,6 @@ private:
     CEFManager* m_cefManager;
 
     // 安全配置
-    QString m_allowedDomain;
-    QStringList m_allowedDomains;
     bool m_strictSecurityMode;
     bool m_keyboardFilterEnabled;
     bool m_contextMenuEnabled;
