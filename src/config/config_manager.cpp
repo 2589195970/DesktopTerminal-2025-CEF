@@ -23,7 +23,7 @@ ConfigManager::ConfigManager()
 bool ConfigManager::loadConfig(const QString &configPath)
 {
     QString exe = QCoreApplication::applicationDirPath();
-    QString path = exe + "/config.json";
+    QString path = exe + "/resources/config.json";
 
     QFile file(path);
     if (!file.exists()) {
