@@ -18,44 +18,61 @@ ConfigManager& ConfigManager::instance()
 ConfigManager::ConfigManager()
     : QObject(nullptr)
 {
-    if (!loadConfig()) {
-        qFatal("配置文件加载失败，程序无法启动");
-    }
+    loadConfig();
 }
 
 bool ConfigManager::loadConfig(const QString &configPath)
 {
     QString exe = QCoreApplication::applicationDirPath();
-    QString path = exe + "/resources/config.json";
+    QStringList paths;
 
-    QFile file(path);
-    if (!file.exists()) {
-        qWarning() << "配置文件不存在:" << path << "，尝试继续...";
-        // 不立即返回false，继续尝试打开
+    // 配置文件搜索路径
+    paths << exe + "/resources/config.json";
+    paths << exe + "/config.json";
+    paths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
+
+#ifdef Q_OS_UNIX
+    paths << "/etc/zdf-exam-desktop/config.json";
+#endif
+
+    paths << exe + "/" + configPath;
+    paths << exe + "/../" + configPath;
+    paths << configPath;
+
+    if (QDir::isAbsolutePath(configPath)) {
+        paths << configPath;
     }
 
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCritical() << "无法打开配置文件:" << path;
-        return false;
+    paths << ":/resources/config.json";  // Qt嵌入资源作为后备
+
+    for (const QString &path : paths) {
+        QFile file(path);
+        if (!file.exists()) {
+            continue;
+        }
+
+        if (!file.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+
+        QJsonParseError error;
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+        file.close();
+
+        if (doc.isNull() || !doc.isObject()) {
+            continue;
+        }
+
+        config = doc.object();
+        if (!validateConfig()) {
+            continue;
+        }
+
+        actualConfigPath = path;
+        return true;
     }
 
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    file.close();
-
-    if (doc.isNull() || !doc.isObject()) {
-        qCritical() << "配置文件JSON格式错误:" << error.errorString();
-        return false;
-    }
-
-    config = doc.object();
-    if (!validateConfig()) {
-        qCritical() << "配置文件验证失败";
-        return false;
-    }
-
-    actualConfigPath = path;
-    return true;
+    return false;
 }
 
 bool ConfigManager::validateConfig() const
