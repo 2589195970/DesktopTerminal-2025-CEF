@@ -239,6 +239,7 @@ int main(int argc, char *argv[])
     }
     
     logger.appEvent(QString("配置文件加载成功: %1").arg(configManager.getActualConfigPath()));
+    logger.appEvent(QString("配置版本: %1").arg(configManager.getConfigVersion()));
     logger.appEvent(QString("应用程序名称: %1").arg(configManager.getAppName()));
     logger.appEvent(QString("目标URL: %1").arg(configManager.getUrl()));
 

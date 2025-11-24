@@ -4,6 +4,7 @@
   "appName": "智多分机考桌面端-CEF",
   "iconPath": "logo.ico",
   "appVersion": "1.0.0",
+  "configVersion": "202511241437",
   "urlExitEnabled": false,
   "urlExitPattern": "/logout",
   "strictSecurityMode": false,

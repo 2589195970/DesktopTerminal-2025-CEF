@@ -52,6 +52,7 @@ public:
     QString getExitPassword() const;
     QString getAppName() const;
     QString getActualConfigPath() const;
+    QString getConfigVersion() const;
 
     // 性能和兼容性配置
     bool isHardwareAccelerationDisabled() const;

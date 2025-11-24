@@ -103,6 +103,7 @@ bool ConfigManager::createDefaultConfig(const QString &path)
     defaultConfig["appName"] = "智多分机考桌面端";
     defaultConfig["iconPath"] = "logo.svg";
     defaultConfig["appVersion"] = "1.0.0";
+    defaultConfig["configVersion"] = "202511241437";
     
     // 性能和兼容性配置
     defaultConfig["disableHardwareAcceleration"] = false;
@@ -180,6 +181,11 @@ QString ConfigManager::getAppName() const
 QString ConfigManager::getActualConfigPath() const
 {
     return actualConfigPath;
+}
+
+QString ConfigManager::getConfigVersion() const
+{
+    return config.value("configVersion").toString("unknown");
 }
 
 // 性能和兼容性配置
