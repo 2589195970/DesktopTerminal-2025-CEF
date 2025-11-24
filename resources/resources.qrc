@@ -7,6 +7,5 @@
         <file>logo-neutral.png</file>
         <file>logo.ico</file>
         <file>logo.png</file>
-        <file>VC_redist.x86.exe</file>
     </qresource>
 </RCC>

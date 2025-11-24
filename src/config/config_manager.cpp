@@ -25,22 +25,23 @@ bool ConfigManager::loadConfig(const QString &configPath)
     QString exe = QCoreApplication::applicationDirPath();
     QStringList paths;
 
-    // 配置文件搜索路径（优先使用Qt资源系统）
-    paths << ":/resources/config.json";  // Qt嵌入资源
+    // 配置文件搜索路径（优先使用外部文件，嵌入资源作为后备）
     paths << exe + "/config.json";
     paths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
-    
+
 #ifdef Q_OS_UNIX
     paths << "/etc/zdf-exam-desktop/config.json";
 #endif
-    
+
     paths << exe + "/" + configPath;
     paths << exe + "/../" + configPath;
     paths << configPath;
-    
+
     if (QDir::isAbsolutePath(configPath)) {
         paths << configPath;
     }
+
+    paths << ":/resources/config.json";  // Qt嵌入资源作为最后的后备
 
     for (const QString &path : paths) {
         QFile file(path);

@@ -1,5 +1,5 @@
 {
-  "url": "http://stu.sdzdf.com?Client='ExamTerminal'",
+  "url": "http://test.sdzdf.com:8011/stu?Client='ExamTerminal'",
   "exitPassword": "sdzdf@2025",
   "appName": "智多分机考桌面端-CEF",
   "iconPath": "logo.ico",
