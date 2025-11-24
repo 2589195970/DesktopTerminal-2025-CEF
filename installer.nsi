@@ -7,6 +7,7 @@ Unicode true
 !include "FileFunc.nsh"
 !include "x64.nsh"
 !include "WinVer.nsh"
+!include "nsDialogs.nsh"
 
 ; ─────────────────────────────────────────────
 ; 常量定义
@@ -51,6 +52,7 @@ RequestExecutionLevel admin
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom ConfigPage ConfigPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -65,6 +67,11 @@ LangString MSG_UninstallDone ${LANG_SIMPCHINESE} "卸载完成，相关文件已
 
 Var /GLOBAL VerificationErrors
 Var /GLOBAL VCInstallerPath
+Var /GLOBAL ConfigURL
+Var /GLOBAL ConfigPassword
+Var /GLOBAL Dialog
+Var /GLOBAL URLText
+Var /GLOBAL PasswordText
 
 ; ─────────────────────────────────────────────
 ; 安装前检查
@@ -103,6 +110,34 @@ Function .onInit
             RMDir "$INSTDIR"
         continue_install:
     ${EndIf}
+FunctionEnd
+
+; ─────────────────────────────────────────────
+; 配置输入页面
+; ─────────────────────────────────────────────
+Function ConfigPage
+    nsDialogs::Create 1018
+    Pop $Dialog
+
+    ${NSD_CreateLabel} 0 0 100% 12u "请配置考试系统信息："
+    Pop $0
+
+    ${NSD_CreateLabel} 0 20u 100% 12u "考试系统URL:"
+    Pop $0
+    ${NSD_CreateText} 0 32u 100% 12u "http://stu.sdzdf.com"
+    Pop $URLText
+
+    ${NSD_CreateLabel} 0 52u 100% 12u "退出密码:"
+    Pop $0
+    ${NSD_CreatePassword} 0 64u 100% 12u "sdzdf@2025"
+    Pop $PasswordText
+
+    nsDialogs::Show
+FunctionEnd
+
+Function ConfigPageLeave
+    ${NSD_GetText} $URLText $ConfigURL
+    ${NSD_GetText} $PasswordText $ConfigPassword
 FunctionEnd
 
 ; ─────────────────────────────────────────────
@@ -242,22 +277,23 @@ Section "主程序" SecMain
     ; 资源目录
     CreateDirectory "$INSTDIR\resources"
     DetailPrint "正在配置应用程序..."
-    
-    ; config.json：仅首次安装时复制，保护用户配置
-    ${If} ${FileExists} "$INSTDIR\config.json"
-        DetailPrint "保留现有配置文件"
-    ${Else}
-        ${If} ${FileExists} "resources\config.json"
-            File /oname=config.json "resources\config.json"
-            DetailPrint "已安装默认配置文件"
-        ${Else}
-            ; 创建基本配置文件（适配CEF版本）
-            FileOpen $0 "$INSTDIR\config.json" w
-            FileWrite $0 '{"url":"https://example.com","exitPassword":"admin123","appName":"智多分机考桌面端-CEF","cefVersion":"${CEF_VERSION}"}'
-            FileClose $0
-            DetailPrint "已创建默认配置文件"
-        ${EndIf}
-    ${EndIf}
+
+    ; 使用用户输入的配置生成config.json
+    FileOpen $0 "$INSTDIR\resources\config.json" w
+    FileWrite $0 '{$\r$\n'
+    FileWrite $0 '  "url": "$ConfigURL",$\r$\n'
+    FileWrite $0 '  "exitPassword": "$ConfigPassword",$\r$\n'
+    FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
+    FileWrite $0 '  "iconPath": "logo.ico",$\r$\n'
+    FileWrite $0 '  "appVersion": "1.0.0",$\r$\n'
+    FileWrite $0 '  "configVersion": "installer-generated",$\r$\n'
+    FileWrite $0 '  "cefLogLevel": "WARNING",$\r$\n'
+    FileWrite $0 '  "strictSecurityMode": true,$\r$\n'
+    FileWrite $0 '  "keyboardFilterEnabled": true,$\r$\n'
+    FileWrite $0 '  "contextMenuEnabled": false$\r$\n'
+    FileWrite $0 '}$\r$\n'
+    FileClose $0
+    DetailPrint "已创建配置文件: URL=$ConfigURL"
     
     ; 始终复制一份默认配置作为备份
     ${If} ${FileExists} "resources\config.json"
