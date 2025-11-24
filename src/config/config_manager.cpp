@@ -43,8 +43,6 @@ bool ConfigManager::loadConfig(const QString &configPath)
         paths << configPath;
     }
 
-    paths << ":/resources/config.json";  // Qt嵌入资源作为后备
-
     for (const QString &path : paths) {
         QFile file(path);
         if (!file.exists()) {
