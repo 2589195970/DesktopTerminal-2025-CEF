@@ -17,7 +17,9 @@ ConfigManager& ConfigManager::instance()
 ConfigManager::ConfigManager()
     : QObject(nullptr)
 {
-    loadConfig();
+    if (!loadConfig()) {
+        qFatal("配置文件加载失败，程序无法启动");
+    }
 }
 
 bool ConfigManager::loadConfig(const QString &configPath)
