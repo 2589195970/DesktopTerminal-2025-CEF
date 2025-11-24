@@ -190,6 +190,12 @@ Section "主程序" SecMain
     File /r "artifacts\windows-${ARCH}\locales"
     DetailPrint "✓ 本地化文件已安装"
 
+    ; 先复制构建产物中的resources目录（如果存在）
+    ${If} ${FileExists} "artifacts\windows-${ARCH}\resources"
+        File /r "artifacts\windows-${ARCH}\resources"
+        DetailPrint "✓ 构建产物resources已安装"
+    ${EndIf}
+
     ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
     CreateDirectory "$INSTDIR\platforms"
     File /nonfatal /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
