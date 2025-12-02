@@ -497,9 +497,21 @@ void CEFClient::showDevToolsOnUIThread()
 
 #ifdef Q_OS_WIN
     windowInfo.SetAsPopup(host->GetWindowHandle(), "DevTools");
+#elif defined(Q_OS_MAC)
+    CefString(&windowInfo.window_name).FromASCII("DevTools");
+    windowInfo.x = 100;
+    windowInfo.y = 100;
+    windowInfo.width = 800;
+    windowInfo.height = 600;
+    windowInfo.hidden = false;
+#else
+    CefString(&windowInfo.window_name).FromASCII("DevTools");
+    windowInfo.x = 100;
+    windowInfo.y = 100;
+    windowInfo.width = 800;
+    windowInfo.height = 600;
 #endif
 
-    // 传递this作为client，确保DevTools能正确显示当前浏览器的内容
     host->ShowDevTools(windowInfo, this, settings, CefPoint());
     m_logger->appEvent("CEF DevTools窗口已创建");
 }
