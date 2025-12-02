@@ -229,6 +229,13 @@ void SecureBrowser::keyPressEvent(QKeyEvent *event)
         m_logger->appEvent(QString("按键事件: %1").arg(keySequence));
     }
 
+    // F10退出（备用方案，当全局热键注册失败时）
+    if (event->key() == Qt::Key_F10 && event->modifiers() == Qt::NoModifier) {
+        event->accept();
+        handleExitHotkey();
+        return;
+    }
+
     // F12开发者工具（备用方案，当全局热键注册失败时）
     if (event->key() == Qt::Key_F12 && event->modifiers() == Qt::NoModifier) {
         event->accept();
