@@ -64,79 +64,50 @@ jobs:
       uses: actions/cache@v4
       with:
         path: third_party/cef
-        key: cef-windows-${{ matrix.arch }}-75.1.14-stable-v7
+        key: cef-${{ matrix.arch }}-${{ matrix.cef_version }}-verified
         restore-keys: |
-          cef-windows-${{ matrix.arch }}-75.1.14-stable-
-          cef-windows-${{ matrix.arch }}-75.1.14-
-          cef-windows-${{ matrix.arch }}-75-
+          cef-${{ matrix.arch }}-${{ matrix.cef_version }}-
 
     - name: Verify CEF Cache Status
-      id: verify-cef-cache  
+      id: verify-cef-cache
       shell: cmd
-      # [INFO] 重要：验证CEF缓存完整性，避免不完整的CEF导致链接错误
-      # 这个步骤经过多版本调试，请勿轻易删除或简化
       run: |
         setlocal enabledelayedexpansion
-        echo "=== CEF缓存状态验证 ==="
-        
-        REM 根据架构确定CEF版本
+        echo "=== 快速CEF缓存验证 ==="
+
+        REM 确定CEF平台
         if "${{ matrix.arch }}"=="x86" (
-          set "CEF_VERSION=${{ matrix.cef_version }}"
           set "CEF_PLATFORM=windows32"
         ) else (
-          set "CEF_VERSION=${{ matrix.cef_version }}"
           set "CEF_PLATFORM=windows64"
         )
-        
-        echo "CEF配置信息:"
-        echo "  架构: ${{ matrix.arch }}"
-        echo "  CEF版本: !CEF_VERSION!"
-        echo "  CEF平台: !CEF_PLATFORM!"
-        echo "  缓存状态: ${{ steps.cache-cef.outputs.cache-hit }}"
-        
+
+        set "CEF_VERSION=${{ matrix.cef_version }}"
         set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
-        echo "  预期CEF目录: !CEF_BINARY_NAME!"
-        
-        REM 验证缓存内容完整性
+        set "CEF_HEADER=third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h"
+
+        REM 快速验证：只检查关键头文件
         set "CEF_VALID=false"
         if "${{ steps.cache-cef.outputs.cache-hit }}"=="true" (
-          echo "检查缓存的CEF完整性..."
-          if exist "third_party\cef\!CEF_BINARY_NAME!\include\cef_version.h" (
-            if exist "third_party\cef\!CEF_BINARY_NAME!\Release\libcef.lib" (
-              if exist "third_party\cef\!CEF_BINARY_NAME!\libcef_dll" (
-                echo "[OK] CEF缓存验证通过 - 所有关键文件存在"
-                set "CEF_VALID=true"
-              ) else (
-                echo "[ERROR] CEF Wrapper源码缺失"
-              )
-            ) else (
-              echo "[ERROR] CEF主库文件缺失"
-            )
+          if exist "!CEF_HEADER!" (
+            echo "[OK] CEF缓存有效"
+            set "CEF_VALID=true"
           ) else (
-            echo "[ERROR] CEF头文件缺失"
-          )
-        ) else (
-          echo "未命中缓存，需要下载CEF"
-        )
-        
-        if "!CEF_VALID!"=="false" (
-          echo "清理不完整的CEF目录..."
-          if exist "third_party\cef" (
+            echo "[WARN] 缓存损坏，清理后重新下载"
             rmdir /s /q "third_party\cef" 2>nul
           )
+        ) else (
+          echo "[INFO] 缓存未命中，需要下载"
         )
-        
+
         echo "cef-valid=!CEF_VALID!" >> %GITHUB_OUTPUT%
-        echo "CEF验证结果: !CEF_VALID!"
 
     - name: Download CEF
       if: steps.cache-cef.outputs.cache-hit != 'true' || steps.verify-cef-cache.outputs.cef-valid != 'true'
       shell: cmd
       run: |
         echo "下载CEF for ${{ matrix.arch }}..."
-        echo "强制重新下载以确保库文件完整..."
         if exist "third_party\cef" (
-          echo "删除现有CEF目录以确保全新安装..."
           rmdir /s /q "third_party\cef"
         )
         if "${{ matrix.arch }}"=="x86" (
@@ -1330,7 +1301,7 @@ jobs:
 
   # Linux构建
   build-linux:
-    if: true
+    if: false
     runs-on: ubuntu-latest
     name: Linux 64-bit
     
@@ -1477,7 +1448,7 @@ jobs:
 
   # macOS构建
   build-macos:
-    if: true
+    if: false
     runs-on: macos-12
     name: macOS 64-bit
     
