@@ -25,9 +25,9 @@ PasswordDialog::PasswordDialog(const QString& title, const QString& label, QWidg
     setupUI(title, label);
     applyStyles();
 
-    // 居中显示
-    int dialogWidth = 400;
-    int dialogHeight = 220;
+    // 居中显示 - 增大尺寸
+    int dialogWidth = 480;
+    int dialogHeight = 280;
     setFixedSize(dialogWidth, dialogHeight);
 
     if (QScreen *screen = QApplication::primaryScreen()) {
@@ -60,15 +60,15 @@ void PasswordDialog::setupUI(const QString& title, const QString& label)
     outerLayout->addWidget(m_backgroundFrame);
 
     auto* backgroundLayout = new QVBoxLayout(m_backgroundFrame);
-    backgroundLayout->setContentsMargins(24, 24, 24, 24);
-    backgroundLayout->setSpacing(16);
+    backgroundLayout->setContentsMargins(32, 32, 32, 32);
+    backgroundLayout->setSpacing(0);
 
     // 内容卡片
     m_contentCard = new QFrame(m_backgroundFrame);
     m_contentCard->setObjectName("passwordCard");
     auto* cardLayout = new QVBoxLayout(m_contentCard);
-    cardLayout->setContentsMargins(24, 24, 24, 24);
-    cardLayout->setSpacing(16);
+    cardLayout->setContentsMargins(32, 28, 32, 28);
+    cardLayout->setSpacing(20);
 
     // 标题
     m_titleLabel = new QLabel(title, m_contentCard);
@@ -95,18 +95,22 @@ void PasswordDialog::setupUI(const QString& title, const QString& label)
     auto* buttonLayout = new QHBoxLayout();
     buttonLayout->setSpacing(12);
 
+    buttonLayout->addStretch();
+
     m_cancelButton = new QPushButton("取消", m_contentCard);
     m_cancelButton->setObjectName("passwordCancelButton");
-    m_cancelButton->setMinimumSize(100, 40);
+    m_cancelButton->setMinimumSize(120, 44);
     connect(m_cancelButton, &QPushButton::clicked, this, &QDialog::reject);
     buttonLayout->addWidget(m_cancelButton);
 
     m_confirmButton = new QPushButton("确认", m_contentCard);
     m_confirmButton->setObjectName("passwordConfirmButton");
-    m_confirmButton->setMinimumSize(100, 40);
+    m_confirmButton->setMinimumSize(120, 44);
     m_confirmButton->setDefault(true);
     connect(m_confirmButton, &QPushButton::clicked, this, &QDialog::accept);
     buttonLayout->addWidget(m_confirmButton);
+
+    buttonLayout->addStretch();
 
     cardLayout->addLayout(buttonLayout);
 
@@ -124,7 +128,7 @@ void PasswordDialog::applyStyles()
         }
 
         QFrame#passwordBackgroundFrame {
-            border-radius: 16px;
+            border-radius: 20px;
             background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1,
                 stop:0 #fafafa,
                 stop:1 #f0f0f2);
@@ -133,29 +137,31 @@ void PasswordDialog::applyStyles()
 
         QFrame#passwordCard {
             background-color: #ffffff;
-            border-radius: 12px;
+            border-radius: 16px;
             border: 1px solid #e8e8ea;
         }
 
         QLabel#passwordTitle {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 600;
             color: #1d1d1f;
+            padding-bottom: 4px;
         }
 
         QLabel#passwordPrompt {
-            font-size: 14px;
+            font-size: 15px;
             color: #6e6e73;
+            padding-bottom: 4px;
         }
 
         QLineEdit#passwordInput {
-            font-size: 16px;
+            font-size: 18px;
             color: #1d1d1f;
             background-color: #f5f5f7;
             border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            padding: 10px 16px;
-            min-height: 20px;
+            border-radius: 10px;
+            padding: 14px 20px;
+            min-height: 24px;
         }
 
         QLineEdit#passwordInput:focus {
@@ -164,13 +170,13 @@ void PasswordDialog::applyStyles()
         }
 
         QPushButton#passwordCancelButton {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 500;
             color: #6e6e73;
             background-color: #ffffff;
             border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            padding: 8px 20px;
+            border-radius: 10px;
+            padding: 10px 24px;
         }
 
         QPushButton#passwordCancelButton:hover {
@@ -182,13 +188,13 @@ void PasswordDialog::applyStyles()
         }
 
         QPushButton#passwordConfirmButton {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 500;
             color: #ffffff;
             background-color: #007aff;
             border: none;
-            border-radius: 8px;
-            padding: 8px 20px;
+            border-radius: 10px;
+            padding: 10px 24px;
         }
 
         QPushButton#passwordConfirmButton:hover {

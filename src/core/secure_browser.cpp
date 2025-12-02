@@ -229,9 +229,16 @@ bool SecureBrowser::event(QEvent *event)
 void SecureBrowser::keyPressEvent(QKeyEvent *event)
 {
     QString keySequence = QKeySequence(event->key() | event->modifiers()).toString();
-    
+
     if (!m_logger->getLogLevel() == L_DEBUG) {
         m_logger->appEvent(QString("按键事件: %1").arg(keySequence));
+    }
+
+    // F12开发者工具（备用方案，当全局热键注册失败时）
+    if (event->key() == Qt::Key_F12 && event->modifiers() == Qt::NoModifier) {
+        event->accept();
+        handleDevToolsHotkey();
+        return;
     }
 
     // 允许Ctrl+R刷新
