@@ -374,32 +374,30 @@ void SecureBrowser::handleExitHotkey()
 void SecureBrowser::handleDevToolsHotkey()
 {
     m_needFocusCheck = false; // 暂时禁用焦点检查
-    
+
     m_logger->hotkeyEvent("F12开发者工具热键被触发");
-    
-    // 调试模式：暂时禁用密码验证以测试F12功能
-    // 用户可以通过配置文件控制是否需要密码
-    bool requirePassword = m_configManager->isStrictSecurityMode();
-    
-    if (requirePassword) {
-        QString password;
-        bool ok = m_logger->getPassword(this, "开发者工具", "请输入密码以开启/关闭开发者工具：", password);
-        QString exitPassword = m_configManager->getExitPassword();
-        
-        if (ok && password == exitPassword) {
-            m_logger->hotkeyEvent("开发者工具密码正确");
-            toggleDevTools();
-        } else {
-            m_logger->hotkeyEvent(ok ? "开发者工具密码错误" : "取消开发者工具");
-            m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
-            m_needFocusCheck = true; // 恢复焦点检查
-        }
-    } else {
-        // 调试模式：直接打开开发者工具
-        m_logger->hotkeyEvent("调试模式：直接开启开发者工具（无需密码）");
+
+    // 如果DevTools已打开，直接关闭（无需密码）
+    if (m_devToolsOpen) {
+        m_logger->hotkeyEvent("关闭开发者工具（无需密码）");
         toggleDevTools();
-        m_needFocusCheck = true; // 恢复焦点检查
+        m_needFocusCheck = true;
+        return;
     }
+
+    // 打开DevTools需要密码验证（参照F10退出密码实现）
+    QString password;
+    bool ok = m_logger->getPassword(this, "开发者工具", "请输入密码以开启开发者工具：", password);
+    QString exitPassword = m_configManager->getExitPassword();
+
+    if (ok && password == exitPassword) {
+        m_logger->hotkeyEvent("开发者工具密码正确");
+        toggleDevTools();
+    } else {
+        m_logger->hotkeyEvent(ok ? "开发者工具密码错误" : "取消开发者工具");
+        m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
+    }
+    m_needFocusCheck = true; // 恢复焦点检查
 }
 
 void SecureBrowser::handleUrlExit(const QString& url)

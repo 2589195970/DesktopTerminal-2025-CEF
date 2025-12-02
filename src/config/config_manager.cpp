@@ -24,16 +24,13 @@ ConfigManager::ConfigManager()
 
 bool ConfigManager::loadConfig(const QString &configPath)
 {
+    m_lastError.clear();
     QString exe = QCoreApplication::applicationDirPath();
     QString targetPath = exe + "/resources/config.json";
-
-    qInfo() << "应用程序目录:" << exe;
-    qInfo() << "配置文件路径:" << targetPath;
 
     // 确保resources目录存在
     QDir resourcesDir(exe + "/resources");
     if (!resourcesDir.exists()) {
-        qInfo() << "resources目录不存在，创建中...";
         resourcesDir.mkpath(".");
     }
 
@@ -43,33 +40,46 @@ bool ConfigManager::loadConfig(const QString &configPath)
     // 唯一的配置文件路径
     QFile file(targetPath);
     if (!file.exists()) {
-        qCritical() << "配置文件不存在:" << targetPath;
-        qCritical() << "请确保config.json位于:" << targetPath;
+        m_lastError = QString("配置文件不存在\n路径: %1\n应用目录: %2").arg(targetPath, exe);
         return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
-        qCritical() << "无法打开配置文件:" << targetPath;
+        m_lastError = QString("无法打开配置文件\n路径: %1\n错误: %2").arg(targetPath, file.errorString());
         return false;
     }
 
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    QByteArray data = file.readAll();
     file.close();
 
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+
     if (doc.isNull() || !doc.isObject()) {
-        qCritical() << "配置文件JSON解析失败:" << error.errorString();
+        m_lastError = QString("JSON解析失败\n路径: %1\n错误: %2\n位置: %3").arg(targetPath, error.errorString()).arg(error.offset);
         return false;
     }
 
     config = doc.object();
     if (!validateConfig()) {
-        qCritical() << "配置文件验证失败，缺少必需字段";
+        QStringList missing;
+        QStringList requiredFields = {"url", "exitPassword", "appName"};
+        for (const QString &field : requiredFields) {
+            if (!config.contains(field) || config[field].toString().isEmpty()) {
+                missing << field;
+            }
+        }
+        m_lastError = QString("配置验证失败\n路径: %1\n缺少字段: %2").arg(targetPath, missing.join(", "));
         return false;
     }
 
     actualConfigPath = targetPath;
     return true;
+}
+
+QString ConfigManager::getLastError() const
+{
+    return m_lastError;
 }
 
 void ConfigManager::migrateConfig(const QString &targetPath)

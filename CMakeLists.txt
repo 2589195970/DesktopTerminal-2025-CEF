@@ -274,6 +274,7 @@ set(SOURCES
     src/security/keyboard_filter.cpp
     src/network/network_checker.cpp
     src/ui/loading_dialog.cpp
+    src/ui/password_dialog.cpp
     resources/resources.qrc
 )
 
@@ -292,6 +293,7 @@ set(HEADERS
     src/security/keyboard_filter.h
     src/network/network_checker.h
     src/ui/loading_dialog.h
+    src/ui/password_dialog.h
 )
 
 # QHotkey子项目

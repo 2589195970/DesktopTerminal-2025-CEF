@@ -221,9 +221,10 @@ int main(int argc, char *argv[])
     // 初始化配置管理器
     ConfigManager& configManager = ConfigManager::instance();
     if (!configManager.loadConfig()) {
-        logger.errorEvent("配置文件加载失败");
+        QString errorDetail = configManager.getLastError();
+        logger.errorEvent(QString("配置文件加载失败: %1").arg(errorDetail));
         QMessageBox::critical(nullptr, "配置错误",
-            "配置加载失败，程序将退出。");
+            QString("配置加载失败，程序将退出。\n\n详细信息:\n%1").arg(errorDetail));
         return -1;
     }
     

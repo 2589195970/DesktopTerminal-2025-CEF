@@ -5,6 +5,7 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CEF_DIR="$PROJECT_ROOT/third_party/cef"
+GITHUB_REPO="zhao/DesktopTerminal-2025-CEF"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -143,15 +144,26 @@ check_existing_cef() {
 # 下载CEF
 download_cef() {
     log_info "开始下载CEF $CEF_VERSION..."
-    
+
     # 创建临时目录
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf $TEMP_DIR" EXIT
-    
-    # 下载文件
+
+    # 优先从GitHub Release下载
+    GITHUB_RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/cef-75.1.14/cef-75.1.14-${CEF_PLATFORM}.tar.bz2"
+    log_info "尝试从GitHub Release下载..."
+
+    if command -v curl >/dev/null 2>&1; then
+        if curl -L -f "$GITHUB_RELEASE_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME" 2>/dev/null; then
+            log_success "GitHub Release下载成功"
+            return 0
+        fi
+    fi
+
+    # 回退到Spotify CDN
+    log_warning "GitHub Release下载失败，回退到Spotify CDN..."
     log_info "下载 $CEF_ARCHIVE_NAME..."
-    
-    # 尝试使用curl，如果失败则使用wget
+
     if command -v curl >/dev/null 2>&1; then
         if ! curl -L "$DOWNLOAD_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
             log_error "curl下载失败"
@@ -163,10 +175,10 @@ download_cef() {
             return 1
         fi
     else
-        log_error "未找到curl或wget，无法下载文件"
+        log_error "未找到curl或wget"
         return 1
     fi
-    
+
     log_success "下载完成"
     
     # 验证下载的文件

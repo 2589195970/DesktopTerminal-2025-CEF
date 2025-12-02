@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "../ui/password_dialog.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -201,9 +202,12 @@ void Logger::showCriticalError(QWidget *parent, const QString &title, const QStr
 
 bool Logger::getPassword(QWidget *parent, const QString &title, const QString &label, QString &password)
 {
-    bool ok;
-    password = QInputDialog::getText(parent, title, label, QLineEdit::Password, "", &ok);
-    return ok;
+    PasswordDialog dialog(title, label, parent);
+    if (dialog.exec() == QDialog::Accepted) {
+        password = dialog.password();
+        return true;
+    }
+    return false;
 }
 
 void Logger::collectSystemInfo()

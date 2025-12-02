@@ -100,7 +100,11 @@ public:
     // 直接访问配置对象（与原项目兼容）
     QJsonObject config;
 
+    // 获取最后一次错误信息
+    QString getLastError() const;
+
 private:
+    QString m_lastError;
     ConfigManager();
     ~ConfigManager() = default;
     ConfigManager(const ConfigManager&) = delete;

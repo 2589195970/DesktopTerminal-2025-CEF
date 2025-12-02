@@ -8,6 +8,7 @@ REM 设置脚本目录
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%.."
 set "CEF_DIR=%PROJECT_ROOT%\third_party\cef"
+set "GITHUB_REPO=zhao/DesktopTerminal-2025-CEF"
 
 REM 日志函数定义
 goto :main
@@ -99,14 +100,23 @@ REM 创建临时目录
 set "TEMP_DIR=%TEMP%\cef_download_%RANDOM%"
 mkdir "%TEMP_DIR%"
 
-REM 下载文件
+REM 优先从GitHub Release下载
+set "GITHUB_RELEASE_URL=https://github.com/%GITHUB_REPO%/releases/download/cef-75.1.14/cef-75.1.14-%CEF_PLATFORM%.tar.bz2"
+call :log_info "尝试从GitHub Release下载..."
+
+powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%GITHUB_RELEASE_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UseBasicParsing -TimeoutSec 300; exit 0 } catch { exit 1 } }" >nul 2>&1
+
+if !errorlevel! equ 0 (
+    call :log_success "GitHub Release下载成功！"
+    goto :verify_download
+)
+
+REM 回退到Spotify CDN
+call :log_warning "GitHub Release下载失败，回退到Spotify CDN..."
 call :log_info "下载 %CEF_ARCHIVE_NAME%..."
 
-REM 检查是否有PowerShell
 powershell -Command "exit" >nul 2>&1
 if !errorlevel! equ 0 (
-    REM 使用PowerShell下载，带重试机制
-    call :log_info "使用PowerShell下载，最多重试3次..."
     set "DOWNLOAD_SUCCESS=false"
     for /l %%i in (1,1,3) do (
         if "!DOWNLOAD_SUCCESS!"=="false" (
@@ -122,15 +132,17 @@ if !errorlevel! equ 0 (
         )
     )
     if "!DOWNLOAD_SUCCESS!"=="false" (
-        call :log_error "PowerShell下载失败，已重试3次"
+        call :log_error "所有下载源均失败"
         rmdir /s /q "%TEMP_DIR%"
         exit /b 1
     )
 ) else (
-    call :log_error "需要PowerShell支持，请升级到Windows 7 SP1或更高版本"
+    call :log_error "需要PowerShell支持"
     rmdir /s /q "%TEMP_DIR%"
     exit /b 1
 )
+
+:verify_download
 
 REM 验证下载的文件
 if not exist "%TEMP_DIR%\%CEF_ARCHIVE_NAME%" (
