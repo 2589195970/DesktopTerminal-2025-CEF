@@ -306,8 +306,8 @@ Section "主程序" SecMain
     FileWrite $0 '  "strictSecurityMode": true,$\r$\n'
     FileWrite $0 '  "keyboardFilterEnabled": true,$\r$\n'
     FileWrite $0 '  "contextMenuEnabled": false,$\r$\n'
-    ; sensitiveOperationRequirePassword: 1=true, 0=false
-    ${If} $RequirePassword == ${BST_CHECKED}
+    ; sensitiveOperationRequirePassword: 1=checked, 0=unchecked
+    ${If} $RequirePassword == 1
         FileWrite $0 '  "sensitiveOperationRequirePassword": true$\r$\n'
     ${Else}
         FileWrite $0 '  "sensitiveOperationRequirePassword": false$\r$\n'
