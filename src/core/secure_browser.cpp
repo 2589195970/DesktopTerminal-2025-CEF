@@ -355,11 +355,19 @@ void SecureBrowser::changeEvent(QEvent *event)
 void SecureBrowser::handleExitHotkey()
 {
     m_needFocusCheck = false; // 暂时禁用焦点检查
-    
+
+    // 检查是否需要密码验证
+    if (!m_configManager->isSensitiveOperationPasswordRequired()) {
+        m_logger->hotkeyEvent("无密码模式，直接退出");
+        m_logger->shutdown();
+        QApplication::quit();
+        return;
+    }
+
     QString password;
     bool ok = m_logger->getPassword(this, "安全退出", "请输入退出密码：", password);
     QString exitPassword = m_configManager->getExitPassword();
-    
+
     if (ok && password == exitPassword) {
         m_logger->hotkeyEvent("密码正确，退出");
         m_logger->shutdown();
@@ -380,6 +388,14 @@ void SecureBrowser::handleDevToolsHotkey()
     // 如果DevTools已打开，直接关闭（无需密码）
     if (m_devToolsOpen) {
         m_logger->hotkeyEvent("关闭开发者工具（无需密码）");
+        toggleDevTools();
+        m_needFocusCheck = true;
+        return;
+    }
+
+    // 检查是否需要密码验证
+    if (!m_configManager->isSensitiveOperationPasswordRequired()) {
+        m_logger->hotkeyEvent("无密码模式，直接打开开发者工具");
         toggleDevTools();
         m_needFocusCheck = true;
         return;

@@ -76,7 +76,10 @@ public:
 
     // 开发者模式配置
     bool isDeveloperModeEnabled() const;
-    
+
+    // 敏感操作密码配置
+    bool isSensitiveOperationPasswordRequired() const;
+
     // URL退出配置（新增）
     bool isUrlExitEnabled() const;
     QString getUrlExitPattern() const;

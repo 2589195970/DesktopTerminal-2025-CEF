@@ -69,9 +69,11 @@ Var /GLOBAL VerificationErrors
 Var /GLOBAL VCInstallerPath
 Var /GLOBAL ConfigURL
 Var /GLOBAL ConfigPassword
+Var /GLOBAL RequirePassword
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
+Var /GLOBAL RequirePasswordCheckbox
 
 ; ─────────────────────────────────────────────
 ; 安装前检查
@@ -132,12 +134,17 @@ Function ConfigPage
     ${NSD_CreatePassword} 0 64u 100% 12u "sdzdf@2025"
     Pop $PasswordText
 
+    ${NSD_CreateCheckbox} 0 84u 100% 12u "敏感操作需要密码验证(F10退出等)"
+    Pop $RequirePasswordCheckbox
+    ${NSD_Check} $RequirePasswordCheckbox
+
     nsDialogs::Show
 FunctionEnd
 
 Function ConfigPageLeave
     ${NSD_GetText} $URLText $ConfigURL
     ${NSD_GetText} $PasswordText $ConfigPassword
+    ${NSD_GetState} $RequirePasswordCheckbox $RequirePassword
 FunctionEnd
 
 ; ─────────────────────────────────────────────
@@ -283,17 +290,28 @@ Section "主程序" SecMain
     ; 使用用户输入的配置生成config.json（覆盖artifacts中的旧配置）
     DetailPrint "生成配置文件: URL=$ConfigURL"
     FileOpen $0 "$INSTDIR\resources\config.json" w
+    ; 写入UTF-8 BOM
+    FileWriteByte $0 0xEF
+    FileWriteByte $0 0xBB
+    FileWriteByte $0 0xBF
+    ; JSON内容
     FileWrite $0 '{$\r$\n'
     FileWrite $0 '  "url": "$ConfigURL",$\r$\n'
     FileWrite $0 '  "exitPassword": "$ConfigPassword",$\r$\n'
-    FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
+    FileWrite $0 '  "appName": "ZDF-Exam-Desktop",$\r$\n'
     FileWrite $0 '  "iconPath": "logo.ico",$\r$\n'
     FileWrite $0 '  "appVersion": "1.0.0",$\r$\n'
     FileWrite $0 '  "configVersion": "installer-generated",$\r$\n'
     FileWrite $0 '  "cefLogLevel": "WARNING",$\r$\n'
     FileWrite $0 '  "strictSecurityMode": true,$\r$\n'
     FileWrite $0 '  "keyboardFilterEnabled": true,$\r$\n'
-    FileWrite $0 '  "contextMenuEnabled": false$\r$\n'
+    FileWrite $0 '  "contextMenuEnabled": false,$\r$\n'
+    ; sensitiveOperationRequirePassword: 1=true, 0=false
+    ${If} $RequirePassword == ${BST_CHECKED}
+        FileWrite $0 '  "sensitiveOperationRequirePassword": true$\r$\n'
+    ${Else}
+        FileWrite $0 '  "sensitiveOperationRequirePassword": false$\r$\n'
+    ${EndIf}
     FileWrite $0 '}$\r$\n'
     FileClose $0
     DetailPrint "✓ 配置文件已生成"

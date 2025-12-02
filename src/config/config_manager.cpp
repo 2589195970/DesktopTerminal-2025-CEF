@@ -52,6 +52,14 @@ bool ConfigManager::loadConfig(const QString &configPath)
     QByteArray data = file.readAll();
     file.close();
 
+    // 跳过UTF-8 BOM（如果存在）
+    if (data.size() >= 3 &&
+        static_cast<unsigned char>(data[0]) == 0xEF &&
+        static_cast<unsigned char>(data[1]) == 0xBB &&
+        static_cast<unsigned char>(data[2]) == 0xBF) {
+        data = data.mid(3);
+    }
+
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(data, &error);
 
@@ -260,6 +268,12 @@ bool ConfigManager::isJavaScriptDialogEnabled() const
 bool ConfigManager::isDeveloperModeEnabled() const
 {
     return config.value("developerModeEnabled").toBool(false);
+}
+
+// 敏感操作密码配置
+bool ConfigManager::isSensitiveOperationPasswordRequired() const
+{
+    return config.value("sensitiveOperationRequirePassword").toBool(true);
 }
 
 bool ConfigManager::isUrlExitEnabled() const
