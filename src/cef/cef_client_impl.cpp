@@ -374,24 +374,40 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
     if (event.modifiers == EVENTFLAG_CONTROL_DOWN && event.windows_key_code == 'R') {
         return true;
     }
-    
-    // 允许普通字符输入
-    if (event.modifiers == 0 || event.modifiers == EVENTFLAG_SHIFT_DOWN) {
+
+    // 移除NumLock和CapsLock修饰符进行判断（这些不影响安全性）
+    uint32 modifiersWithoutLocks = event.modifiers & ~(EVENTFLAG_NUM_LOCK_ON | EVENTFLAG_CAPS_LOCK_ON);
+
+    // 允许普通字符输入（包括小键盘）
+    if (modifiersWithoutLocks == 0 || modifiersWithoutLocks == EVENTFLAG_SHIFT_DOWN) {
         return true;
     }
-    
+
     // 允许方向键、回车、退格等基本导航键
-    // CEF 75兼容性：使用数值而不是VK_常量以确保跨版本兼容
-    if (event.windows_key_code >= 37 && event.windows_key_code <= 40) { // VK_LEFT到VK_DOWN
+    if (event.windows_key_code >= 37 && event.windows_key_code <= 40) {
         return true;
     }
-    
-    if (event.windows_key_code == 13 || event.windows_key_code == 8 ||  // VK_RETURN, VK_BACK
-        event.windows_key_code == 9 || event.windows_key_code == 27) {   // VK_TAB, VK_ESCAPE
+
+    if (event.windows_key_code == 13 || event.windows_key_code == 8 ||
+        event.windows_key_code == 9 || event.windows_key_code == 27) {
         return true;
     }
-    
-    // 其他系统快捷键都被阻止
+
+    // 允许小键盘数字键 (VK_NUMPAD0=96 到 VK_NUMPAD9=105)
+    if (event.windows_key_code >= 96 && event.windows_key_code <= 105) {
+        return true;
+    }
+
+    // 允许小键盘运算符 (VK_MULTIPLY=106 到 VK_DIVIDE=111)
+    if (event.windows_key_code >= 106 && event.windows_key_code <= 111) {
+        return true;
+    }
+
+    // 允许Delete键 (VK_DELETE=46)
+    if (event.windows_key_code == 46) {
+        return true;
+    }
+
     return false;
 }
 
@@ -483,7 +499,8 @@ void CEFClient::showDevToolsOnUIThread()
     windowInfo.SetAsPopup(host->GetWindowHandle(), "DevTools");
 #endif
 
-    host->ShowDevTools(windowInfo, nullptr, settings, CefPoint());
+    // 传递this作为client，确保DevTools能正确显示当前浏览器的内容
+    host->ShowDevTools(windowInfo, this, settings, CefPoint());
     m_logger->appEvent("CEF DevTools窗口已创建");
 }
 
