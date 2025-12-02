@@ -453,27 +453,45 @@ void CEFClient::showDevTools()
         m_logger->errorEvent("开发者工具操作失败：浏览器实例未初始化");
         return;
     }
-    
+
     CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
     if (!host) {
         m_logger->errorEvent("开发者工具操作失败：无法获取浏览器主机");
         return;
     }
-    
+
     try {
         // 创建开发者工具窗口信息
         CefWindowInfo windowInfo;
         CefBrowserSettings settings;
-        
-        // 在Windows平台设置开发者工具窗口为弹出窗口
+
 #ifdef Q_OS_WIN
-        windowInfo.SetAsPopup(nullptr, "开发者工具");
+        // Windows平台：使用弹出窗口
+        windowInfo.SetAsPopup(nullptr, "DevTools");
+#elif defined(Q_OS_MAC)
+        // macOS平台：设置窗口大小，不设置parent_view让CEF创建独立窗口
+        windowInfo.x = 100;
+        windowInfo.y = 100;
+        windowInfo.width = 1024;
+        windowInfo.height = 768;
+        windowInfo.hidden = false;
+        windowInfo.parent_view = nullptr;
+        CefString(&windowInfo.window_name).FromASCII("DevTools");
+#else
+        // Linux平台：设置窗口大小
+        windowInfo.x = 100;
+        windowInfo.y = 100;
+        windowInfo.width = 1024;
+        windowInfo.height = 768;
+        windowInfo.parent_window = 0;
+        CefString(&windowInfo.window_name).FromASCII("DevTools");
 #endif
-        
+
         // 显示开发者工具
         host->ShowDevTools(windowInfo, nullptr, settings, CefPoint());
-        
+
         logSecurityEvent("开发者工具", "已开启");
+        m_logger->appEvent("CEF DevTools窗口已请求创建");
     } catch (...) {
         m_logger->errorEvent("开发者工具开启异常");
     }
