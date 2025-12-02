@@ -26,7 +26,6 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
     , m_exitHotkeyF10(nullptr)
-    , m_exitHotkeyBackslash(nullptr)
     , m_devToolsHotkeyF12(nullptr)
     , m_maintenanceTimer(nullptr)
     , m_cefMessageLoopTimer(nullptr)
@@ -98,10 +97,6 @@ SecureBrowser::~SecureBrowser()
         m_exitHotkeyF10 = nullptr;
     }
     
-    if (m_exitHotkeyBackslash) {
-        delete m_exitHotkeyBackslash;
-        m_exitHotkeyBackslash = nullptr;
-    }
     
     if (m_devToolsHotkeyF12) {
         delete m_devToolsHotkeyF12;
@@ -532,14 +527,12 @@ void SecureBrowser::initializeCEF()
 void SecureBrowser::initializeHotkeys()
 {
     try {
-        // 创建全局热键（与原项目相同）
+        // 创建全局热键
         m_exitHotkeyF10 = new QHotkey(QKeySequence("F10"), true, this);
-        m_exitHotkeyBackslash = new QHotkey(QKeySequence("\\"), true, this);
         m_devToolsHotkeyF12 = new QHotkey(QKeySequence("F12"), true, this);
-        
+
         // 连接信号（使用队列连接提高稳定性）
         connect(m_exitHotkeyF10, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
-        connect(m_exitHotkeyBackslash, &QHotkey::activated, this, &SecureBrowser::handleExitHotkey, Qt::QueuedConnection);
         connect(m_devToolsHotkeyF12, &QHotkey::activated, this, &SecureBrowser::handleDevToolsHotkey, Qt::QueuedConnection);
         
         // 检查每个热键的注册状态 - 修复F12无效的关键检查
@@ -547,19 +540,12 @@ void SecureBrowser::initializeHotkeys()
         bool allRegistered = true;
         
         if (m_exitHotkeyF10->isRegistered()) {
-            registrationStatus += "F10: ✓ ";
+            registrationStatus += "F10: OK ";
         } else {
-            registrationStatus += "F10: ✗ ";
+            registrationStatus += "F10: FAIL ";
             allRegistered = false;
         }
-        
-        if (m_exitHotkeyBackslash->isRegistered()) {
-            registrationStatus += "\\: ✓ ";
-        } else {
-            registrationStatus += "\\: ✗ ";
-            allRegistered = false;
-        }
-        
+
         if (m_devToolsHotkeyF12->isRegistered()) {
             registrationStatus += "F12: ✓";
         } else {

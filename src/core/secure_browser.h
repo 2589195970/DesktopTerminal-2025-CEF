@@ -165,7 +165,6 @@ private:
 
     // 热键管理
     QHotkey* m_exitHotkeyF10;
-    QHotkey* m_exitHotkeyBackslash;
     QHotkey* m_devToolsHotkeyF12;
 
     // 定时器
