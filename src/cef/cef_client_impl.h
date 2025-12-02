@@ -110,11 +110,13 @@ private:
     void logKeyboardEvent(const CefKeyEvent& event, bool allowed);
 
 public:
-    // 开发者工具管理（修夏访问权限问题）
+    // 开发者工具管理
     void showDevTools();
     void closeDevTools();
 
 private:
+    void showDevToolsOnUIThread();
+    void closeDevToolsOnUIThread();
 
     // Windows 7兼容性处理
     void applyWindows7Optimizations();

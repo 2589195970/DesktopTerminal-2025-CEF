@@ -25,9 +25,9 @@ PasswordDialog::PasswordDialog(const QString& title, const QString& label, QWidg
     setupUI(title, label);
     applyStyles();
 
-    // 居中显示 - 增大尺寸
-    int dialogWidth = 480;
-    int dialogHeight = 280;
+    // 居中显示 - 紧凑尺寸
+    int dialogWidth = 320;
+    int dialogHeight = 180;
     setFixedSize(dialogWidth, dialogHeight);
 
     if (QScreen *screen = QApplication::primaryScreen()) {
@@ -60,15 +60,15 @@ void PasswordDialog::setupUI(const QString& title, const QString& label)
     outerLayout->addWidget(m_backgroundFrame);
 
     auto* backgroundLayout = new QVBoxLayout(m_backgroundFrame);
-    backgroundLayout->setContentsMargins(32, 32, 32, 32);
+    backgroundLayout->setContentsMargins(12, 12, 12, 12);
     backgroundLayout->setSpacing(0);
 
     // 内容卡片
     m_contentCard = new QFrame(m_backgroundFrame);
     m_contentCard->setObjectName("passwordCard");
     auto* cardLayout = new QVBoxLayout(m_contentCard);
-    cardLayout->setContentsMargins(32, 28, 32, 28);
-    cardLayout->setSpacing(20);
+    cardLayout->setContentsMargins(16, 12, 16, 12);
+    cardLayout->setSpacing(10);
 
     // 标题
     m_titleLabel = new QLabel(title, m_contentCard);
@@ -99,13 +99,13 @@ void PasswordDialog::setupUI(const QString& title, const QString& label)
 
     m_cancelButton = new QPushButton("取消", m_contentCard);
     m_cancelButton->setObjectName("passwordCancelButton");
-    m_cancelButton->setMinimumSize(120, 44);
+    m_cancelButton->setMinimumSize(70, 28);
     connect(m_cancelButton, &QPushButton::clicked, this, &QDialog::reject);
     buttonLayout->addWidget(m_cancelButton);
 
     m_confirmButton = new QPushButton("确认", m_contentCard);
     m_confirmButton->setObjectName("passwordConfirmButton");
-    m_confirmButton->setMinimumSize(120, 44);
+    m_confirmButton->setMinimumSize(70, 28);
     m_confirmButton->setDefault(true);
     connect(m_confirmButton, &QPushButton::clicked, this, &QDialog::accept);
     buttonLayout->addWidget(m_confirmButton);
@@ -124,85 +124,65 @@ void PasswordDialog::applyStyles()
 {
     setStyleSheet(R"(
         PasswordDialog#passwordDialogRoot {
-            background-color: transparent;
+            background-color: #f5f5f7;
         }
 
         QFrame#passwordBackgroundFrame {
-            border-radius: 20px;
-            background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1,
-                stop:0 #fafafa,
-                stop:1 #f0f0f2);
-            border: 1px solid #e5e5e7;
+            background-color: #f5f5f7;
+            border: 1px solid #d2d2d7;
         }
 
         QFrame#passwordCard {
             background-color: #ffffff;
-            border-radius: 16px;
             border: 1px solid #e8e8ea;
         }
 
         QLabel#passwordTitle {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 600;
             color: #1d1d1f;
-            padding-bottom: 4px;
         }
 
         QLabel#passwordPrompt {
-            font-size: 15px;
+            font-size: 13px;
             color: #6e6e73;
-            padding-bottom: 4px;
         }
 
         QLineEdit#passwordInput {
-            font-size: 18px;
+            font-size: 14px;
             color: #1d1d1f;
-            background-color: #f5f5f7;
+            background-color: #ffffff;
             border: 1px solid #d2d2d7;
-            border-radius: 10px;
-            padding: 14px 20px;
-            min-height: 24px;
+            padding: 8px 12px;
+            min-height: 20px;
         }
 
         QLineEdit#passwordInput:focus {
             border: 2px solid #007aff;
-            background-color: #ffffff;
         }
 
         QPushButton#passwordCancelButton {
-            font-size: 15px;
-            font-weight: 500;
+            font-size: 13px;
             color: #6e6e73;
             background-color: #ffffff;
             border: 1px solid #d2d2d7;
-            border-radius: 10px;
-            padding: 10px 24px;
+            padding: 6px 16px;
         }
 
         QPushButton#passwordCancelButton:hover {
             background-color: #f5f5f7;
         }
 
-        QPushButton#passwordCancelButton:pressed {
-            background-color: #e8e8ea;
-        }
-
         QPushButton#passwordConfirmButton {
-            font-size: 15px;
-            font-weight: 500;
+            font-size: 13px;
             color: #ffffff;
             background-color: #007aff;
             border: none;
-            border-radius: 10px;
-            padding: 10px 24px;
+            padding: 6px 16px;
         }
 
         QPushButton#passwordConfirmButton:hover {
             background-color: #0051d5;
-        }
-
-        QPushButton#passwordConfirmButton:pressed {
-            background-color: #004bb8;
         }
     )");
 }
