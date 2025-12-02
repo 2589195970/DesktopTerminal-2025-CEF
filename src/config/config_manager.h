@@ -106,6 +106,8 @@ private:
     ConfigManager(const ConfigManager&) = delete;
     ConfigManager& operator=(const ConfigManager&) = delete;
 
+    void migrateConfig(const QString &targetPath);
+
     QString actualConfigPath;
 };
 

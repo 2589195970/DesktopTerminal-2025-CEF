@@ -18,59 +18,106 @@ ConfigManager& ConfigManager::instance()
 ConfigManager::ConfigManager()
     : QObject(nullptr)
 {
-    loadConfig();
+    // 不在构造函数中加载配置
+    // loadConfig()需要在QApplication创建后调用
 }
 
 bool ConfigManager::loadConfig(const QString &configPath)
 {
     QString exe = QCoreApplication::applicationDirPath();
-    QStringList paths;
+    QString targetPath = exe + "/resources/config.json";
 
-    // 配置文件搜索路径
-    paths << exe + "/resources/config.json";
-    paths << exe + "/config.json";
-    paths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
+    qInfo() << "应用程序目录:" << exe;
+    qInfo() << "配置文件路径:" << targetPath;
 
-#ifdef Q_OS_UNIX
-    paths << "/etc/zdf-exam-desktop/config.json";
-#endif
-
-    paths << exe + "/" + configPath;
-    paths << exe + "/../" + configPath;
-    paths << configPath;
-
-    if (QDir::isAbsolutePath(configPath)) {
-        paths << configPath;
+    // 确保resources目录存在
+    QDir resourcesDir(exe + "/resources");
+    if (!resourcesDir.exists()) {
+        qInfo() << "resources目录不存在，创建中...";
+        resourcesDir.mkpath(".");
     }
 
-    for (const QString &path : paths) {
-        QFile file(path);
-        if (!file.exists()) {
+    // 迁移旧配置文件到目标路径
+    migrateConfig(targetPath);
+
+    // 唯一的配置文件路径
+    QFile file(targetPath);
+    if (!file.exists()) {
+        qCritical() << "配置文件不存在:" << targetPath;
+        qCritical() << "请确保config.json位于:" << targetPath;
+        return false;
+    }
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCritical() << "无法打开配置文件:" << targetPath;
+        return false;
+    }
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    file.close();
+
+    if (doc.isNull() || !doc.isObject()) {
+        qCritical() << "配置文件JSON解析失败:" << error.errorString();
+        return false;
+    }
+
+    config = doc.object();
+    if (!validateConfig()) {
+        qCritical() << "配置文件验证失败，缺少必需字段";
+        return false;
+    }
+
+    actualConfigPath = targetPath;
+    return true;
+}
+
+void ConfigManager::migrateConfig(const QString &targetPath)
+{
+    QString exe = QCoreApplication::applicationDirPath();
+    QStringList oldPaths;
+
+    // 旧配置文件可能存在的位置
+    oldPaths << exe + "/config.json";
+    oldPaths << QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.json";
+#ifdef Q_OS_UNIX
+    oldPaths << "/etc/zdf-exam-desktop/config.json";
+#endif
+
+    // 如果目标路径已存在有效配置，不需要迁移
+    QFile targetFile(targetPath);
+    if (targetFile.exists()) {
+        return;
+    }
+
+    // 尝试从旧路径迁移
+    for (const QString &oldPath : oldPaths) {
+        QFile oldFile(oldPath);
+        if (!oldFile.exists()) {
             continue;
         }
 
-        if (!file.open(QIODevice::ReadOnly)) {
+        // 验证旧配置文件是否有效
+        if (!oldFile.open(QIODevice::ReadOnly)) {
             continue;
         }
 
         QJsonParseError error;
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-        file.close();
+        QJsonDocument doc = QJsonDocument::fromJson(oldFile.readAll(), &error);
+        oldFile.close();
 
         if (doc.isNull() || !doc.isObject()) {
             continue;
         }
 
-        config = doc.object();
-        if (!validateConfig()) {
-            continue;
+        // 复制到目标路径
+        if (QFile::copy(oldPath, targetPath)) {
+            qInfo() << "配置文件已迁移:" << oldPath << "->" << targetPath;
+            // 删除旧文件
+            QFile::remove(oldPath);
+            return;
         }
-
-        actualConfigPath = path;
-        return true;
     }
-
-    return false;
 }
 
 bool ConfigManager::validateConfig() const
