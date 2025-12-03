@@ -384,6 +384,24 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
         return true;
     }
 
+    // 优先检查小键盘按键（在移除修饰符之前）
+    // 小键盘数字键 (VK_NUMPAD0=96 到 VK_NUMPAD9=105)
+    if (event.windows_key_code >= 96 && event.windows_key_code <= 105) {
+        // 只允许无修饰符或仅Shift的小键盘数字输入
+        uint32 mods = event.modifiers & ~(EVENTFLAG_NUM_LOCK_ON | EVENTFLAG_CAPS_LOCK_ON | EVENTFLAG_IS_KEY_PAD | EVENTFLAG_IS_LEFT | EVENTFLAG_IS_RIGHT);
+        if (mods == 0 || mods == EVENTFLAG_SHIFT_DOWN) {
+            return true;
+        }
+    }
+
+    // 小键盘运算符 (VK_MULTIPLY=106 到 VK_DIVIDE=111)
+    if (event.windows_key_code >= 106 && event.windows_key_code <= 111) {
+        uint32 mods = event.modifiers & ~(EVENTFLAG_NUM_LOCK_ON | EVENTFLAG_CAPS_LOCK_ON | EVENTFLAG_IS_KEY_PAD | EVENTFLAG_IS_LEFT | EVENTFLAG_IS_RIGHT);
+        if (mods == 0 || mods == EVENTFLAG_SHIFT_DOWN) {
+            return true;
+        }
+    }
+
     // 移除所有非安全相关的修饰符（NumLock、CapsLock、小键盘标志等）
     uint32 modifiersWithoutLocks = event.modifiers & ~(
         EVENTFLAG_NUM_LOCK_ON |
@@ -393,7 +411,7 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
         EVENTFLAG_IS_RIGHT
     );
 
-    // 允许普通字符输入（包括小键盘）
+    // 允许普通字符输入
     if (modifiersWithoutLocks == 0 || modifiersWithoutLocks == EVENTFLAG_SHIFT_DOWN) {
         return true;
     }
@@ -405,16 +423,6 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
 
     if (event.windows_key_code == 13 || event.windows_key_code == 8 ||
         event.windows_key_code == 9 || event.windows_key_code == 27) {
-        return true;
-    }
-
-    // 允许小键盘数字键 (VK_NUMPAD0=96 到 VK_NUMPAD9=105)
-    if (event.windows_key_code >= 96 && event.windows_key_code <= 105) {
-        return true;
-    }
-
-    // 允许小键盘运算符 (VK_MULTIPLY=106 到 VK_DIVIDE=111)
-    if (event.windows_key_code >= 106 && event.windows_key_code <= 111) {
         return true;
     }
 
