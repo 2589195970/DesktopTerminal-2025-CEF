@@ -214,14 +214,23 @@ bool CEFClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& 
         return handleWindows7KeyEvent(event);
     }
     
+    // 临时调试：记录所有键盘事件
+    if (event.modifiers & EVENTFLAG_IS_KEY_PAD) {
+        QString debugInfo = QString("小键盘事件 - keycode:%1, modifiers:0x%2, type:%3")
+            .arg(event.windows_key_code)
+            .arg(event.modifiers, 0, 16)
+            .arg(event.type);
+        m_logger->appEvent(debugInfo);
+    }
+
     // 检查是否是被允许的按键事件
     bool allowed = isKeyEventAllowed(event);
-    
+
     if (!allowed) {
         logKeyboardEvent(event, false);
         return true; // 阻止事件
     }
-    
+
     return false; // 允许事件
 }
 
