@@ -375,8 +375,14 @@ bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
         return true;
     }
 
-    // 移除NumLock和CapsLock修饰符进行判断（这些不影响安全性）
-    uint32 modifiersWithoutLocks = event.modifiers & ~(EVENTFLAG_NUM_LOCK_ON | EVENTFLAG_CAPS_LOCK_ON);
+    // 移除所有非安全相关的修饰符（NumLock、CapsLock、小键盘标志等）
+    uint32 modifiersWithoutLocks = event.modifiers & ~(
+        EVENTFLAG_NUM_LOCK_ON |
+        EVENTFLAG_CAPS_LOCK_ON |
+        EVENTFLAG_IS_KEY_PAD |
+        EVENTFLAG_IS_LEFT |
+        EVENTFLAG_IS_RIGHT
+    );
 
     // 允许普通字符输入（包括小键盘）
     if (modifiersWithoutLocks == 0 || modifiersWithoutLocks == EVENTFLAG_SHIFT_DOWN) {
@@ -548,16 +554,26 @@ bool CEFClient::handleWindows7KeyEvent(const CefKeyEvent& event)
 {
     // Windows 7特殊键盘事件处理
     // 更严格的过滤以避免兼容性问题
-    
+
+    // 允许的快捷键：Ctrl+R（刷新）
     if (isAllowedShortcut(event)) {
         return false; // 允许
     }
-    
-    // 基本输入键
-    if (event.modifiers == 0 || event.modifiers == EVENTFLAG_SHIFT_DOWN) {
+
+    // 移除所有非安全相关的修饰符（NumLock、CapsLock、小键盘标志等）
+    uint32 modifiersWithoutLocks = event.modifiers & ~(
+        EVENTFLAG_NUM_LOCK_ON |
+        EVENTFLAG_CAPS_LOCK_ON |
+        EVENTFLAG_IS_KEY_PAD |
+        EVENTFLAG_IS_LEFT |
+        EVENTFLAG_IS_RIGHT
+    );
+
+    // 基本输入键（包括小键盘）
+    if (modifiersWithoutLocks == 0 || modifiersWithoutLocks == EVENTFLAG_SHIFT_DOWN) {
         return false; // 允许
     }
-    
+
     // 其他都阻止
     return true;
 }
