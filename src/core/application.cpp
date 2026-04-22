@@ -11,10 +11,13 @@
 #include <QSysInfo>
 #include <QVersionNumber>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QEventLoop>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <versionhelpers.h>
+#include "../security/windows_key_blocker.h"
 #endif
 
 // 静态成员初始化
@@ -32,6 +35,11 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     , m_configManager(nullptr)
     , m_networkChecker(nullptr)
     , m_keyboardFilter(nullptr) // 初始化
+#ifdef Q_OS_WIN
+    , m_windowsKeyBlocker(nullptr) // 初始化Windows键拦截器
+#endif
+    , m_lockFile(nullptr)
+    , m_lockAcquired(false)
     , m_initialized(false)
     , m_shutdownRequested(false)
     , m_sharedCEFApp(nullptr)
@@ -48,6 +56,24 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     // 设置退出策略
     setQuitOnLastWindowClosed(false);
 
+    // 单实例检测
+    QString lockPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                       + "/DesktopTerminal-CEF.lock";
+    m_lockFile = new QLockFile(lockPath);
+    m_lockFile->setStaleLockTime(0);
+
+    if (!m_lockFile->tryLock(100)) {
+        QMessageBox::warning(
+            nullptr,
+            "程序已运行",
+            "应用程序已经在运行中，不允许重复启动。"
+        );
+        QTimer::singleShot(0, this, &QApplication::quit);
+        return;
+    }
+
+    m_lockAcquired = true;
+
     // 检测系统信息
     detectSystemInfo();
 
@@ -57,6 +83,13 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
 
 Application::~Application()
 {
+    // 释放单实例锁
+    if (m_lockFile) {
+        m_lockFile->unlock();
+        delete m_lockFile;
+        m_lockFile = nullptr;
+    }
+
     shutdown();
 }
 
@@ -69,6 +102,11 @@ bool Application::initialize()
 {
     if (m_initialized) {
         return true;
+    }
+
+    // 检查单实例锁是否成功获取
+    if (!m_lockAcquired) {
+        return false;
     }
 
     // 1. 初始化日志系统
@@ -119,6 +157,12 @@ bool Application::initialize()
         emit initializationError("CEF浏览器引擎初始化失败");
         return false;
     }
+
+#ifdef Q_OS_WIN
+    // 7. 安装Windows键拦截器
+    emit initializationProgress("正在启用系统级安全控制...");
+    initializeWindowsSecurityControls();
+#endif
 
     m_initialized = true;
     m_logger->appEvent("应用程序初始化完成");
@@ -171,6 +215,15 @@ void Application::shutdown()
         m_keyboardFilter = nullptr;
     }
 
+#ifdef Q_OS_WIN
+    // 卸载Windows键拦截器
+    if (m_windowsKeyBlocker) {
+        m_windowsKeyBlocker->uninstall();
+        delete m_windowsKeyBlocker;
+        m_windowsKeyBlocker = nullptr;
+    }
+#endif
+
     // 关闭主窗口
     if (m_mainWindow) {
         m_mainWindow->close();
@@ -199,6 +252,30 @@ void Application::shutdown()
         m_configManager = nullptr;
     }
 }
+
+#ifdef Q_OS_WIN
+bool Application::initializeWindowsSecurityControls()
+{
+    if (!m_windowsKeyBlocker) {
+        m_windowsKeyBlocker = new WindowsKeyBlocker(this);
+    }
+
+    // 尝试安装钩子，采用软失败策略
+    // 注意：install() 返回false仅表示本次未立即安装成功
+    // 后台恢复机制已自动启动，无需在此额外等待或补偿
+    if (m_windowsKeyBlocker->install()) {
+        m_logger->appEvent("Windows键拦截器初始化成功");
+    } else {
+        const unsigned long errorCode = m_windowsKeyBlocker->lastErrorCode();
+        m_logger->errorEvent(QString("Windows键拦截器初始化失败，错误码: %1").arg(errorCode));
+        m_logger->appEvent("系统级安全控制将在后台自动重试恢复");
+    }
+
+    // 软失败：总是返回true，不阻止程序启动
+    // 后台恢复机制包括：快速重试、定时重试、定时重装
+    return true;
+}
+#endif
 
 Application::ArchType Application::getSystemArchitecture()
 {
@@ -533,75 +610,8 @@ void Application::detectSystemInfoStatic()
 
 void Application::detectSystemInfo()
 {
-    if (s_systemInfoDetected) {
-        return;
-    }
-
-    // 检测平台
-#ifdef Q_OS_WIN
-    s_platform = PlatformType::Windows;
-#elif defined(Q_OS_MAC)
-    s_platform = PlatformType::MacOS;
-#elif defined(Q_OS_LINUX)
-    s_platform = PlatformType::Linux;
-#else
-    s_platform = PlatformType::Unknown;
-#endif
-
-    // 检测架构
-    if (sizeof(void*) == 8) {
-        QString arch = QSysInfo::currentCpuArchitecture();
-        if (arch.contains("arm", Qt::CaseInsensitive)) {
-            s_architecture = ArchType::ARM64;
-        } else {
-            s_architecture = ArchType::X86_64;
-        }
-    } else {
-        s_architecture = ArchType::X86_32;
-    }
-
-    // 检测兼容性级别
-    QString product = QSysInfo::productType();
-    QString version = QSysInfo::productVersion();
-    
-    if (s_platform == PlatformType::Windows) {
-        QVersionNumber winVersion = QVersionNumber::fromString(version);
-        
-        if (winVersion.majorVersion() < 6 || 
-            (winVersion.majorVersion() == 6 && winVersion.minorVersion() < 1)) {
-            // Windows Vista或更早版本
-            s_compatibility = CompatibilityLevel::Unknown;
-        } else if (winVersion.majorVersion() == 6 && winVersion.minorVersion() == 1) {
-            // Windows 7
-            s_compatibility = CompatibilityLevel::LegacySystem;
-        } else if (winVersion.majorVersion() == 6 || winVersion.majorVersion() == 10) {
-            // Windows 8/8.1/10
-            s_compatibility = CompatibilityLevel::ModernSystem;
-        } else {
-            // Windows 11+
-            s_compatibility = CompatibilityLevel::OptimalSystem;
-        }
-    } else if (s_platform == PlatformType::MacOS) {
-        QVersionNumber macVersion = QVersionNumber::fromString(version);
-        
-        if (macVersion < QVersionNumber(10, 14)) {
-            s_compatibility = CompatibilityLevel::LegacySystem;
-        } else if (macVersion < QVersionNumber(12, 0)) {
-            s_compatibility = CompatibilityLevel::ModernSystem;
-        } else {
-            s_compatibility = CompatibilityLevel::OptimalSystem;
-        }
-    } else {
-        s_compatibility = CompatibilityLevel::ModernSystem; // Linux一般都是现代系统
-    }
-
-    // 构建系统描述
-    s_systemDescription = QString("%1 %2 (%3)")
-        .arg(QSysInfo::prettyProductName())
-        .arg(QSysInfo::currentCpuArchitecture())
-        .arg(s_architecture == ArchType::X86_32 ? "32位" : "64位");
-
-    s_systemInfoDetected = true;
+    // 直接调用静态版本，避免代码重复
+    detectSystemInfoStatic();
 }
 
 void Application::applyCompatibilitySettings()

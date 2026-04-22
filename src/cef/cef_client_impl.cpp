@@ -165,13 +165,12 @@ bool CEFClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame
 {
     QString url = QString::fromStdString(request->GetURL().ToString());
     
-    // 只在主框架中检测退出模式（修复误检测logout问题）
-    if (frame->IsMain() && user_gesture && !is_redirect) {
-        // 只检测用户手动导航，不检测JavaScript导航和重定向
+    // 只在主框架中检测退出模式，避免子资源和子框架误触发
+    if (frame->IsMain()) {
         if (m_configManager->isUrlExitEnabled() && m_cefManager) {
             QString exitPattern = m_configManager->getUrlExitPattern();
             if (!exitPattern.isEmpty() && url.contains(exitPattern, Qt::CaseInsensitive)) {
-                m_logger->appEvent(QString("检测到用户手动导航到退出模式 URL '%1': %2").arg(exitPattern, url));
+                m_logger->appEvent(QString("检测到主框架导航命中退出模式 URL '%1': %2").arg(exitPattern, url));
                 m_cefManager->notifyUrlExitTriggered(url);
                 return true; // 阻止导航并退出
             }
