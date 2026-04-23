@@ -91,6 +91,14 @@ public:
     bool resizeBrowser(int browserId, int width, int height);
 
     /**
+     * @brief 设置浏览器页面缩放级别
+     * @param browserId 浏览器ID
+     * @param zoomLevel CEF缩放级别，0表示100%
+     * @return 成功返回true
+     */
+    bool setBrowserZoomLevel(int browserId, double zoomLevel);
+
+    /**
      * @brief 通知URL退出事件（由CEFClient调用）
      * @param url 触发退出的URL
      */

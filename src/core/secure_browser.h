@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include <QCloseEvent>
 #include <QFocusEvent>
+#include <QSize>
 #include <QWindowStateChangeEvent>
 
 #include "../security/keyboard_filter.h"
@@ -147,6 +148,8 @@ private:
     void createCEFBrowser();
     void destroyCEFBrowser();
     void resizeCEFBrowser();
+    void lockViewportIfNeeded();
+    double calculateZoomLevelForSize(const QSize& currentSize) const;
 
     // 开发者工具管理
     void toggleDevTools();
@@ -189,6 +192,11 @@ private:
 
     // 窗口句柄（用于CEF集成）
     void* m_windowHandle;
+
+    // 视口锁定状态：首次全屏创建后固定网页基准宽度，避免后续分辨率变化触发布局重排
+    QSize m_lockedViewportSize;
+    bool m_viewportLocked;
+    double m_lastAppliedZoomLevel;
     
     // CEF消息循环日志计数器（避免日志过多）
     int m_cefMessageLoopLogCounter;

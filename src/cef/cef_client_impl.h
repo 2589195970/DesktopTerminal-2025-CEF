@@ -114,11 +114,13 @@ public:
     void showDevTools();
     void closeDevTools();
     void resizeBrowser(int width, int height);
+    void setBrowserZoomLevel(double zoomLevel);
 
 private:
     void showDevToolsOnUIThread();
     void closeDevToolsOnUIThread();
     void resizeBrowserOnUIThread(int width, int height);
+    void setBrowserZoomLevelOnUIThread(double zoomLevel);
 
     // Windows 7兼容性处理
     void applyWindows7Optimizations();

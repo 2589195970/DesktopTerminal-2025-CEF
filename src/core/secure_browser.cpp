@@ -13,6 +13,8 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QHotkey>
+#include <algorithm>
+#include <cmath>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -38,6 +40,8 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_contextMenuEnabled(false)
     , m_devToolsOpen(false)
     , m_keyboardFilter(nullptr) // 初始化为空指针
+    , m_viewportLocked(false)
+    , m_lastAppliedZoomLevel(0.0)
     , m_cefMessageLoopLogCounter(0)
 {
     m_logger->appEvent("SecureBrowser创建开始");
@@ -490,6 +494,7 @@ void SecureBrowser::onBrowserCreated()
     m_logger->appEvent("CEF浏览器创建完成");
     m_logger->appEvent("CEF消息循环现在应该开始处理页面内容 - 白屏问题修复关键点");
 
+    lockViewportIfNeeded();
     resizeCEFBrowser();
     
     // 重置计数器，开始新的日志周期
@@ -718,9 +723,20 @@ void SecureBrowser::setFullscreenMode()
 
 void SecureBrowser::setAlwaysOnTop()
 {
-    // 确保窗口始终置顶
+    // 重新应用窗口标志时要保留全屏状态，不能无条件 show()
+    const bool wasVisible = isVisible();
+    const bool wasFullScreen = isFullScreen() || (windowState() & Qt::WindowFullScreen);
+
     setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
-    show(); // 重新显示以应用标志
+
+    if (wasVisible) {
+        if (wasFullScreen) {
+            setWindowState(Qt::WindowFullScreen);
+            showFullScreen();
+        } else {
+            show();
+        }
+    }
 }
 
 void SecureBrowser::disableWindowControls()
@@ -790,9 +806,13 @@ void SecureBrowser::destroyCEFBrowser()
 void SecureBrowser::resizeCEFBrowser()
 {
     if (m_cefBrowserCreated) {
-        // 调整CEF浏览器大小以匹配窗口
         QSize windowSize = size();
-        m_logger->appEvent(QString("调整CEF浏览器大小: %1x%2").arg(windowSize.width()).arg(windowSize.height()));
+        lockViewportIfNeeded();
+
+        if (!windowSize.isValid()) {
+            m_logger->errorEvent("调整CEF浏览器大小失败：当前窗口尺寸无效");
+            return;
+        }
 
         if (!m_cefManager) {
             m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器未初始化");
@@ -801,8 +821,62 @@ void SecureBrowser::resizeCEFBrowser()
 
         if (!m_cefManager->resizeBrowser(m_cefBrowserId, windowSize.width(), windowSize.height())) {
             m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器返回失败");
+            return;
+        }
+
+        const double zoomLevel = calculateZoomLevelForSize(windowSize);
+        if (!m_cefManager->setBrowserZoomLevel(m_cefBrowserId, zoomLevel)) {
+            m_logger->errorEvent("调整CEF浏览器缩放失败：CEF管理器返回失败");
+            return;
+        }
+
+        if (std::abs(zoomLevel - m_lastAppliedZoomLevel) > 0.01) {
+            m_logger->appEvent(QString("应用固定视口缩放: 当前窗口=%1x%2, 锁定视口=%3x%4, zoomLevel=%5")
+                .arg(windowSize.width())
+                .arg(windowSize.height())
+                .arg(m_lockedViewportSize.width())
+                .arg(m_lockedViewportSize.height())
+                .arg(zoomLevel, 0, 'f', 3));
+            m_lastAppliedZoomLevel = zoomLevel;
         }
     }
+}
+
+void SecureBrowser::lockViewportIfNeeded()
+{
+    if (m_viewportLocked) {
+        return;
+    }
+
+    const QSize currentSize = size();
+    if (!currentSize.isValid()) {
+        return;
+    }
+
+    m_lockedViewportSize = currentSize;
+    m_viewportLocked = true;
+    m_lastAppliedZoomLevel = 0.0;
+
+    m_logger->appEvent(QString("锁定网页基准视口: %1x%2")
+        .arg(m_lockedViewportSize.width())
+        .arg(m_lockedViewportSize.height()));
+}
+
+double SecureBrowser::calculateZoomLevelForSize(const QSize& currentSize) const
+{
+    if (!m_viewportLocked || !m_lockedViewportSize.isValid() || !currentSize.isValid()) {
+        return 0.0;
+    }
+
+    const double lockedWidth = static_cast<double>(m_lockedViewportSize.width());
+    const double currentWidth = static_cast<double>(currentSize.width());
+    const double scale = std::max(currentWidth / lockedWidth, 0.25);
+
+    if (std::abs(scale - 1.0) < 0.001) {
+        return 0.0;
+    }
+
+    return std::log(scale) / std::log(1.2);
 }
 
 void SecureBrowser::handleBrowserError(const QString& error)

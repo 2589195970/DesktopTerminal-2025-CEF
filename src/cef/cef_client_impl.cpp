@@ -576,6 +576,21 @@ void CEFClient::resizeBrowser(int width, int height)
     resizeBrowserOnUIThread(width, height);
 }
 
+void CEFClient::setBrowserZoomLevel(double zoomLevel)
+{
+    if (!m_browser) {
+        m_logger->errorEvent("浏览器缩放调整失败：浏览器实例未初始化");
+        return;
+    }
+
+    if (!CefCurrentlyOn(TID_UI)) {
+        CefPostTask(TID_UI, base::Bind(&CEFClient::setBrowserZoomLevelOnUIThread, this, zoomLevel));
+        return;
+    }
+
+    setBrowserZoomLevelOnUIThread(zoomLevel);
+}
+
 void CEFClient::closeDevToolsOnUIThread()
 {
     if (!m_browser) {
@@ -610,6 +625,20 @@ void CEFClient::resizeBrowserOnUIThread(int width, int height)
 #endif
 
     host->WasResized();
+}
+
+void CEFClient::setBrowserZoomLevelOnUIThread(double zoomLevel)
+{
+    if (!m_browser) {
+        return;
+    }
+
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host) {
+        return;
+    }
+
+    host->SetZoomLevel(zoomLevel);
 }
 
 bool CEFClient::handleWindows7KeyEvent(const CefKeyEvent& event)

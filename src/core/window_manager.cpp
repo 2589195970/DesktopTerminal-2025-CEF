@@ -122,12 +122,24 @@ void WindowManager::enforceAlwaysOnTop()
     
     if (!isWindowOnTop()) {
         m_logger->appEvent("强制窗口置顶");
-        
-        // 重新设置窗口标志以确保置顶
+
+        const bool wasVisible = m_targetWindow->isVisible();
+        const bool wasFullScreen = m_targetWindow->isFullScreen() ||
+            (m_targetWindow->windowState() & Qt::WindowFullScreen);
+
+        // 重新设置窗口标志以确保置顶，同时保留显示状态
         Qt::WindowFlags flags = m_targetWindow->windowFlags();
         flags |= Qt::WindowStaysOnTopHint;
         m_targetWindow->setWindowFlags(flags);
-        m_targetWindow->show();
+
+        if (wasVisible) {
+            if (wasFullScreen) {
+                m_targetWindow->setWindowState(Qt::WindowFullScreen);
+                m_targetWindow->showFullScreen();
+            } else {
+                m_targetWindow->show();
+            }
+        }
         
         emit windowStateFixed("恢复窗口置顶");
     }
@@ -367,8 +379,22 @@ bool WindowManager::isWindowOnTop() const
 
 void WindowManager::fixWindowFlags()
 {
+    const bool wasVisible = m_targetWindow && m_targetWindow->isVisible();
+    const bool wasFullScreen = m_targetWindow &&
+        (m_targetWindow->isFullScreen() || (m_targetWindow->windowState() & Qt::WindowFullScreen));
+
     setupWindowFlags();
-    m_targetWindow->show();
+
+    if (!m_targetWindow || !wasVisible) {
+        return;
+    }
+
+    if (wasFullScreen) {
+        m_targetWindow->setWindowState(Qt::WindowFullScreen);
+        m_targetWindow->showFullScreen();
+    } else {
+        m_targetWindow->show();
+    }
 }
 
 void WindowManager::fixWindowGeometry()

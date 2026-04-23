@@ -222,10 +222,6 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         // 禁用图像加载缩放以避免网页变形
         browserSettings.image_loading = STATE_ENABLED;
 
-        // 设置默认字体大小以确保正常显示
-        browserSettings.default_font_size = 16;
-        browserSettings.default_fixed_font_size = 13;
-
         // 创建CEF客户端并保存引用（修夏开发者工具问题）
         m_cefClient = new CEFClient(this);
 
@@ -283,6 +279,24 @@ bool CEFManager::resizeBrowser(int browserId, int width, int height)
     }
 
     m_cefClient->resizeBrowser(width, height);
+    return true;
+}
+
+bool CEFManager::setBrowserZoomLevel(int browserId, double zoomLevel)
+{
+    Q_UNUSED(browserId);
+
+    if (!m_initialized) {
+        m_logger->errorEvent("浏览器缩放调整失败：CEF未初始化");
+        return false;
+    }
+
+    if (!m_cefClient) {
+        m_logger->errorEvent("浏览器缩放调整失败：CEF客户端未初始化");
+        return false;
+    }
+
+    m_cefClient->setBrowserZoomLevel(zoomLevel);
     return true;
 }
 
