@@ -225,6 +225,24 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         // 创建CEF客户端并保存引用（修夏开发者工具问题）
         m_cefClient = new CEFClient(this);
 
+        // ==== 关键：在 CreateBrowser 前把调用线程切到 PerMonitorV2 ====
+        // CEF 子 HWND 继承创建线程的 DPI awareness context。
+        // 若不显式切，CEF 75 内部可能用非感知上下文创建子 HWND，
+        // 后续 MoveWindow/GetWindowRect 都被 Windows 按 96 DPI 虚拟化。
+#ifdef Q_OS_WIN
+        typedef HANDLE (WINAPI *SetThreadDpiAwarenessContextFn)(HANDLE);
+        HANDLE prevCtx = nullptr;
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        SetThreadDpiAwarenessContextFn pSetThreadDpi = nullptr;
+        if (hUser32) {
+            pSetThreadDpi = reinterpret_cast<SetThreadDpiAwarenessContextFn>(
+                GetProcAddress(hUser32, "SetThreadDpiAwarenessContext"));
+        }
+        if (pSetThreadDpi) {
+            prevCtx = pSetThreadDpi(reinterpret_cast<HANDLE>(-4)); // V2
+        }
+#endif
+
         // 创建浏览器
         bool result = CefBrowserHost::CreateBrowser(
             windowInfo,
@@ -234,6 +252,12 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
             nullptr,
             nullptr
         );
+
+#ifdef Q_OS_WIN
+        if (pSetThreadDpi && prevCtx) {
+            pSetThreadDpi(prevCtx);
+        }
+#endif
 
         if (result) {
             m_logger->appEvent(QString("浏览器创建成功，URL: %1").arg(url));

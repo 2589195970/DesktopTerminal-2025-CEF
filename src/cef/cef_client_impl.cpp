@@ -618,8 +618,67 @@ void CEFClient::resizeBrowserOnUIThread(int width, int height)
 #ifdef Q_OS_WIN
     HWND browserWindow = host->GetWindowHandle();
     if (browserWindow) {
-        if (!MoveWindow(browserWindow, 0, 0, width, height, TRUE)) {
-            m_logger->errorEvent(QString("调整CEF原生窗口大小失败，错误码: %1").arg(GetLastError()));
+        // ==== 关键修复：CEF UI 线程的 DPI awareness 不一定是 PerMonitorV2 ====
+        // CEF 75 是 2019 年版本，早于 Win10 1803 的 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2，
+        // 其内部线程创建时可能继承默认/非感知上下文。若当前线程非 V2，
+        // MoveWindow 的坐标会被 Windows 按 96 DPI 虚拟化（实际尺寸=传入/DPR），
+        // 导致 CEF 子 HWND 只占 Qt 父窗口的 1/DPR × 1/DPR（视觉上左上一块）。
+        typedef HANDLE (WINAPI *SetThreadDpiAwarenessContextFn)(HANDLE);
+        typedef HANDLE (WINAPI *GetWindowDpiAwarenessContextFn)(HWND);
+        typedef int (WINAPI *GetAwarenessFromDpiAwarenessContextFn)(HANDLE);
+
+        static SetThreadDpiAwarenessContextFn pSetThreadDpi = nullptr;
+        static GetWindowDpiAwarenessContextFn pGetWindowDpi = nullptr;
+        static GetAwarenessFromDpiAwarenessContextFn pGetAwareFromCtx = nullptr;
+        static bool apiInited = false;
+        if (!apiInited) {
+            HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+            if (hUser32) {
+                pSetThreadDpi = reinterpret_cast<SetThreadDpiAwarenessContextFn>(
+                    GetProcAddress(hUser32, "SetThreadDpiAwarenessContext"));
+                pGetWindowDpi = reinterpret_cast<GetWindowDpiAwarenessContextFn>(
+                    GetProcAddress(hUser32, "GetWindowDpiAwarenessContext"));
+                pGetAwareFromCtx = reinterpret_cast<GetAwarenessFromDpiAwarenessContextFn>(
+                    GetProcAddress(hUser32, "GetAwarenessFromDpiAwarenessContext"));
+            }
+            apiInited = true;
+        }
+
+        // 切换当前线程到 PerMonitorV2，保证 MoveWindow 按物理像素解释
+        HANDLE prevCtx = nullptr;
+        if (pSetThreadDpi) {
+            prevCtx = pSetThreadDpi(reinterpret_cast<HANDLE>(-4)); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        }
+
+        // 查询 CEF 子 HWND 原本的 DPI awareness（诊断用）
+        int hwndAware = -1;
+        if (pGetWindowDpi && pGetAwareFromCtx) {
+            HANDLE ctx = pGetWindowDpi(browserWindow);
+            if (ctx) hwndAware = pGetAwareFromCtx(ctx);
+        }
+
+        BOOL mvOk = MoveWindow(browserWindow, 0, 0, width, height, TRUE);
+        DWORD mvErr = mvOk ? 0 : GetLastError();
+
+        // 验证 MoveWindow 是否生效
+        RECT actual{};
+        GetWindowRect(browserWindow, &actual);
+        int actualW = actual.right - actual.left;
+        int actualH = actual.bottom - actual.top;
+
+        m_logger->appEvent(QString("[CEF子HWND] 传入=%1x%2 MoveWindow=%3(err=%4) 实际=%5x%6 HWND_DpiAware=%7")
+            .arg(width).arg(height)
+            .arg(mvOk ? "OK" : "FAIL").arg(mvErr)
+            .arg(actualW).arg(actualH)
+            .arg(hwndAware));
+
+        if (!mvOk) {
+            m_logger->errorEvent(QString("调整CEF原生窗口大小失败，错误码: %1").arg(mvErr));
+        }
+
+        // 恢复线程 DPI context
+        if (pSetThreadDpi && prevCtx) {
+            pSetThreadDpi(prevCtx);
         }
     }
 #endif
