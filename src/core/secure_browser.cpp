@@ -775,6 +775,47 @@ void SecureBrowser::enforceWin32Fullscreen()
 
     m_logger->appEvent(QString("Win32强制全屏成功：起点=(%1,%2) 物理尺寸=%3x%4")
         .arg(x).arg(y).arg(width).arg(height));
+
+    // ==== 诊断日志：确认DPI感知状态 + SetWindowPos实际生效尺寸 ====
+    // 如果实际窗口矩形 != 传入尺寸，说明Windows做了DPI虚拟化（进程非PerMonitor感知）
+    RECT actualRect{};
+    GetWindowRect(hwnd, &actualRect);
+    const int actualW = actualRect.right - actualRect.left;
+    const int actualH = actualRect.bottom - actualRect.top;
+
+    // GetProcessDpiAwareness（Win8.1+）：0=UNAWARE, 1=SYSTEM_AWARE, 2=PER_MONITOR_AWARE
+    int dpiAwareness = -1;
+    typedef HRESULT (WINAPI *GetProcessDpiAwarenessFn)(HANDLE, int*);
+    HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+    if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+    if (hShcore) {
+        auto pGetDpi = reinterpret_cast<GetProcessDpiAwarenessFn>(
+            GetProcAddress(hShcore, "GetProcessDpiAwareness"));
+        if (pGetDpi) {
+            pGetDpi(nullptr, &dpiAwareness);
+        }
+    }
+
+    // GetDpiForWindow（Win10 1607+）：返回窗口当前所在监视器的DPI（96=100%, 144=150%, 192=200%）
+    UINT windowDpi = 0;
+    typedef UINT (WINAPI *GetDpiForWindowFn)(HWND);
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        auto pGetDpiWin = reinterpret_cast<GetDpiForWindowFn>(
+            GetProcAddress(hUser32, "GetDpiForWindow"));
+        if (pGetDpiWin) {
+            windowDpi = pGetDpiWin(hwnd);
+        }
+    }
+
+    m_logger->appEvent(QString("[DPI诊断] 传入尺寸=%1x%2 实际窗口矩形=%3x%4 (偏差=%5x%6) DpiAwareness=%7 WindowDPI=%8 监视器矩形=(%9,%10,%11,%12) 工作区=(%13,%14,%15,%16)")
+        .arg(width).arg(height)
+        .arg(actualW).arg(actualH)
+        .arg(actualW - width).arg(actualH - height)
+        .arg(dpiAwareness)
+        .arg(windowDpi)
+        .arg(mi.rcMonitor.left).arg(mi.rcMonitor.top).arg(mi.rcMonitor.right).arg(mi.rcMonitor.bottom)
+        .arg(mi.rcWork.left).arg(mi.rcWork.top).arg(mi.rcWork.right).arg(mi.rcWork.bottom));
 }
 #endif
 

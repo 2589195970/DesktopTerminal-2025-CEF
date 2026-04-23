@@ -125,13 +125,40 @@ int main(int argc, char *argv[])
     char** originalArgv = argv;
 
 #ifdef Q_OS_WIN
+    // ==== 三重硬声明进程为PerMonitorV2 DPI感知 ====
+    // 必须在任何窗口/Qt/CEF初始化之前调用，否则manifest/API声明会被Windows锁定为首次生效的状态。
+    // 优先级：SetProcessDpiAwarenessContext(Win10 1703+) > SetProcessDpiAwareness(Win8.1+) > CefEnableHighDPISupport
+    {
+        // 1) Windows 10 1703+: SetProcessDpiAwarenessContext（最强：覆盖子窗口、动态切屏）
+        typedef BOOL (WINAPI *SetProcessDpiAwarenessContextFn)(HANDLE);
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        BOOL ctxOk = FALSE;
+        if (hUser32) {
+            auto pSetCtx = reinterpret_cast<SetProcessDpiAwarenessContextFn>(
+                GetProcAddress(hUser32, "SetProcessDpiAwarenessContext"));
+            if (pSetCtx) {
+                // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 == ((HANDLE)-4)
+                ctxOk = pSetCtx(reinterpret_cast<HANDLE>(-4));
+            }
+        }
+        // 2) 次优：Windows 8.1+ SetProcessDpiAwareness（仅当上面失败时调用）
+        if (!ctxOk) {
+            typedef HRESULT (WINAPI *SetProcessDpiAwarenessFn)(int);
+            HMODULE hShcore = LoadLibraryW(L"shcore.dll");
+            if (hShcore) {
+                auto pSetDpi = reinterpret_cast<SetProcessDpiAwarenessFn>(
+                    GetProcAddress(hShcore, "SetProcessDpiAwareness"));
+                if (pSetDpi) {
+                    pSetDpi(2); // PROCESS_PER_MONITOR_DPI_AWARE
+                }
+                // shcore保持加载，不FreeLibrary
+            }
+        }
+        // 3) 兜底：CEF内部也会调SetProcessDpiAwareness，若前两步成功此处为no-op
+        CefEnableHighDPISupport();
+    }
+
     CefMainArgs cefMainArgs(GetModuleHandle(nullptr));
-    // 进程DPI感知声明的唯一入口：CefEnableHighDPISupport()
-    // 内部调用SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)，
-    // 必须在任何窗口/Qt模块初始化之前调用，否则进程会被判定为非DPI感知，
-    // 导致SetWindowPos/GetMonitorInfo被Windows做DPI虚拟化，窗口按1/DPR缩小。
-    // 网页不会变形：--force-device-scale-factor=1 已禁用CEF对系统DPI的跟随缩放。
-    CefEnableHighDPISupport();
 #else
     CefMainArgs cefMainArgs(originalArgc, originalArgv);
 #endif
@@ -152,11 +179,12 @@ int main(int argc, char *argv[])
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
 
-    // Qt侧不开启AA_EnableHighDpiScaling：
-    // 进程已由CefEnableHighDPISupport()声明为PerMonitor DPI感知，
-    // Qt保持非感知模式下size()直接等于物理像素、devicePixelRatioF()==1.0，
-    // 与Win32 API/CEF子窗口的物理像素单位完全一致（对齐验证可用版本d9e66833）。
-    // 若再叠加AA_EnableHighDpiScaling会让Qt二次缩放，与CEF的DPI声明产生冲突。
+    // Qt高DPI感知开启（与上面的SetProcessDpiAwarenessContext=PerMonitorV2配合）：
+    // - AA_EnableHighDpiScaling：Qt按系统DPI自动缩放QWidget布局、字体、对话框
+    // - AA_UseHighDpiPixmaps：位图资源按DPR加载，避免图标/启动页模糊
+    // resizeCEFBrowser()内部已通过GetClientRect取物理像素传给CEF，换算自洽。
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
     // 创建应用程序实例（必须在使用任何Qt功能之前创建）
     Application application(argc, argv, originalArgc, originalArgv);
