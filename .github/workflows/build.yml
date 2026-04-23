@@ -59,9 +59,9 @@ jobs:
         cache: true
         cache-key-prefix: qt-5.15.2-${{ matrix.arch }}
 
-    - name: Cache CEF ${{ matrix.arch }}
+    - name: Restore CEF Cache ${{ matrix.arch }}
       id: cache-cef
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: third_party/cef
         key: cef-${{ matrix.arch }}-${{ matrix.cef_version }}-verified
@@ -88,22 +88,28 @@ jobs:
 
         REM 快速验证：只检查关键头文件
         set "CEF_VALID=false"
-        if "${{ steps.cache-cef.outputs.cache-hit }}"=="true" (
-          if exist "!CEF_HEADER!" (
-            echo "[OK] CEF缓存有效"
-            set "CEF_VALID=true"
+
+        if exist "!CEF_HEADER!" (
+          if "${{ steps.cache-cef.outputs.cache-hit }}"=="true" (
+            echo "[OK] 命中精确CEF缓存"
           ) else (
-            echo "[WARN] 缓存损坏，清理后重新下载"
-            rmdir /s /q "third_party\cef" 2>nul
+            echo "[OK] 恢复到可用CEF目录（非精确key命中）"
           )
+          set "CEF_VALID=true"
         ) else (
-          echo "[INFO] 缓存未命中，需要下载"
+          if exist "third_party\cef" (
+            echo "[WARN] 恢复到的CEF目录无效，清理后重新下载"
+            rmdir /s /q "third_party\cef" 2>nul
+          ) else (
+            echo "[INFO] 当前工作区不存在可用CEF目录，需要下载"
+          )
         )
 
         echo "cef-valid=!CEF_VALID!" >> %GITHUB_OUTPUT%
 
     - name: Download CEF
-      if: steps.cache-cef.outputs.cache-hit != 'true' || steps.verify-cef-cache.outputs.cef-valid != 'true'
+      id: download-cef
+      if: steps.verify-cef-cache.outputs.cef-valid != 'true'
       shell: cmd
       run: |
         echo "下载CEF for ${{ matrix.arch }}..."
@@ -151,6 +157,7 @@ jobs:
         )
 
     - name: Final CEF Verification
+      id: final-verify-cef-cache
       shell: cmd
       # [CHECK] 关键步骤：最终CEF完整性验证，包含多路径检查适配不同CEF版本
       # 支持多种CEF目录结构，经过实战验证的错误处理逻辑
@@ -278,7 +285,15 @@ jobs:
           echo "[SUCCESS] 找到头文件: !HEADERS_FOUND!/3"
           echo "[SUCCESS] 找到库文件: libcef.lib"
           echo "CEF安装路径: third_party\cef\!CEF_BINARY_NAME!"
+          echo "cef-valid=true" >> %GITHUB_OUTPUT%
         )
+
+    - name: Save CEF Cache ${{ matrix.arch }}
+      if: steps.cache-cef.outputs.cache-hit != 'true' && steps.final-verify-cef-cache.outputs.cef-valid == 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: third_party/cef
+        key: cef-${{ matrix.arch }}-${{ matrix.cef_version }}-verified
 
     - name: Pre-Build Environment Diagnostics
       shell: cmd
@@ -1339,9 +1354,9 @@ jobs:
         version: ${{ env.QT_VERSION }}
         cache: true
 
-    - name: Cache CEF Linux
+    - name: Restore CEF Cache Linux
       id: cache-cef-linux
-      uses: actions/cache@v3
+      uses: actions/cache/restore@v4
       with:
         path: third_party/cef
         key: cef-linux-x64-75.1.14-verified-v3
@@ -1388,11 +1403,19 @@ jobs:
         echo "cef-valid=$CEF_VALID" >> $GITHUB_OUTPUT
 
     - name: Download CEF (Linux)
-      if: steps.cache-cef-linux.outputs.cache-hit != 'true' || steps.verify-cef-cache-linux.outputs.cef-valid != 'true'
+      id: download-cef-linux
+      if: steps.verify-cef-cache-linux.outputs.cef-valid != 'true'
       run: |
         echo "下载CEF for Linux x64..."
         chmod +x scripts/download-cef.sh
         scripts/download-cef.sh --platform=linux64 --force
+
+    - name: Save CEF Cache Linux
+      if: steps.cache-cef-linux.outputs.cache-hit != 'true' && (steps.verify-cef-cache-linux.outputs.cef-valid == 'true' || steps.download-cef-linux.outcome == 'success')
+      uses: actions/cache/save@v4
+      with:
+        path: third_party/cef
+        key: cef-linux-x64-75.1.14-verified-v3
 
     - name: Configure CMake
       run: |
@@ -1462,20 +1485,49 @@ jobs:
         version: ${{ env.QT_VERSION }}
         cache: true
 
-    - name: Cache CEF macOS
+    - name: Restore CEF Cache macOS
       id: cache-cef-macos
-      uses: actions/cache@v3
+      uses: actions/cache/restore@v4
       with:
         path: third_party/cef
         key: cef-macos-x64-75.1.14
         restore-keys: |
           cef-macos-x64-
 
+    - name: Verify CEF Cache Integrity (macOS)
+      id: verify-cef-cache-macos
+      run: |
+        echo "验证macOS CEF缓存完整性..."
+        CEF_VALID=false
+        CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
+        CEF_PLATFORM="macosx64"
+        CEF_BINARY_NAME="cef_binary_${CEF_VERSION}_${CEF_PLATFORM}"
+
+        if [[ -f "third_party/cef/${CEF_BINARY_NAME}/include/cef_version.h" ]]; then
+          echo "[OK] CEF缓存有效"
+          CEF_VALID=true
+        elif [[ -d "third_party/cef" ]]; then
+          echo "[WARN] CEF目录存在但缓存无效，删除后重新下载"
+          rm -rf third_party/cef
+        else
+          echo "[INFO] 当前工作区不存在可用CEF目录，需要下载"
+        fi
+
+        echo "cef-valid=$CEF_VALID" >> $GITHUB_OUTPUT
+
     - name: Download CEF
-      if: steps.cache-cef-macos.outputs.cache-hit != 'true'
+      id: download-cef-macos
+      if: steps.verify-cef-cache-macos.outputs.cef-valid != 'true'
       run: |
         chmod +x scripts/download-cef.sh
         scripts/download-cef.sh --platform=macosx64
+
+    - name: Save CEF Cache macOS
+      if: steps.cache-cef-macos.outputs.cache-hit != 'true' && (steps.verify-cef-cache-macos.outputs.cef-valid == 'true' || steps.download-cef-macos.outcome == 'success')
+      uses: actions/cache/save@v4
+      with:
+        path: third_party/cef
+        key: cef-macos-x64-75.1.14
 
     - name: Configure CMake
       run: |
