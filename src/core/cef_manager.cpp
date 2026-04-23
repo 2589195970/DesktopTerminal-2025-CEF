@@ -191,21 +191,6 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         HWND hwnd = static_cast<HWND>(parentWidget);
         RECT rect;
         GetClientRect(hwnd, &rect);
-
-        // 获取DPI缩放因子并调整矩形
-        HDC hdc = GetDC(hwnd);
-        if (hdc) {
-            int dpiX = GetDeviceCaps(hdc, LOGPIXELSX);
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-            ReleaseDC(hwnd, hdc);
-
-            // 应用DPI缩放（96是标准DPI）
-            if (dpiX != 96 || dpiY != 96) {
-                rect.right = MulDiv(rect.right, dpiX, 96);
-                rect.bottom = MulDiv(rect.bottom, dpiY, 96);
-            }
-        }
-
         windowInfo.SetAsChild(hwnd, rect);
 #elif defined(Q_OS_MAC)
         // macOS实现 - 使用QWidget获取实际尺寸
@@ -233,6 +218,13 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         browserSettings.javascript_close_windows = STATE_DISABLED;
         browserSettings.javascript_access_clipboard = STATE_DISABLED;
         browserSettings.plugins = STATE_DISABLED;
+
+        // 禁用图像加载缩放以避免网页变形
+        browserSettings.image_loading = STATE_ENABLED;
+
+        // 设置默认字体大小以确保正常显示
+        browserSettings.default_font_size = 16;
+        browserSettings.default_fixed_font_size = 13;
 
         // 创建CEF客户端并保存引用（修夏开发者工具问题）
         m_cefClient = new CEFClient(this);
@@ -269,6 +261,29 @@ void CEFManager::doMessageLoopWork()
     if (m_initialized) {
         CefDoMessageLoopWork();
     }
+}
+
+bool CEFManager::resizeBrowser(int browserId, int width, int height)
+{
+    Q_UNUSED(browserId);
+
+    if (!m_initialized) {
+        m_logger->errorEvent("浏览器尺寸调整失败：CEF未初始化");
+        return false;
+    }
+
+    if (!m_cefClient) {
+        m_logger->errorEvent("浏览器尺寸调整失败：CEF客户端未初始化");
+        return false;
+    }
+
+    if (width <= 0 || height <= 0) {
+        m_logger->errorEvent(QString("浏览器尺寸调整失败：无效尺寸 %1x%2").arg(width).arg(height));
+        return false;
+    }
+
+    m_cefClient->resizeBrowser(width, height);
+    return true;
 }
 
 CEFManager::ProcessMode CEFManager::selectOptimalProcessMode()
@@ -311,6 +326,11 @@ QStringList CEFManager::buildCEFCommandLine()
     args << "--disable-background-timer-throttling";
     args << "--disable-renderer-backgrounding";
     args << "--disable-backgrounding-occluded-windows";
+
+    // 禁用DPI缩放以避免网页变形
+    args << "--force-device-scale-factor=1";
+    args << "--high-dpi-support=0";
+    args << "--disable-gpu-driver-bug-workarounds";
 
     // 32位系统和Windows 7特殊参数（强制单进程）
     if (Application::is32BitSystem() || Application::isWindows7SP1()) {

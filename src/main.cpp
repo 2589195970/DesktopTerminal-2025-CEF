@@ -126,7 +126,8 @@ int main(int argc, char *argv[])
 
 #ifdef Q_OS_WIN
     CefMainArgs cefMainArgs(GetModuleHandle(nullptr));
-    CefEnableHighDPISupport();
+    // 禁用CEF的高DPI支持以避免网页变形问题
+    // CefEnableHighDPISupport();
 #else
     CefMainArgs cefMainArgs(originalArgc, originalArgv);
 #endif

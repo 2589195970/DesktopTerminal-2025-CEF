@@ -311,6 +311,13 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
     command_line->AppendSwitch("--no-sandbox");
     command_line->AppendSwitch("--disable-features=VizDisplayCompositor");
     command_line->AppendSwitch("--disable-ipc-flooding-protection");
+
+    // 禁用DPI缩放以避免网页变形
+    command_line->AppendSwitchWithValue("--force-device-scale-factor", "1");
+    command_line->AppendSwitchWithValue("--high-dpi-support", "0");
+    command_line->AppendSwitch("--disable-gpu-driver-bug-workarounds");
+
+    m_logger->appEvent("应用DPI缩放修复参数：force-device-scale-factor=1");
 }
 
 void CEFApp::apply32BitOptimizations(CefRefPtr<CefCommandLine> command_line)
