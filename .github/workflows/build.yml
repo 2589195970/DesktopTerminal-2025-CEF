@@ -1201,76 +1201,133 @@ jobs:
         # Skip BUILD_INFO.txt generation to avoid PowerShell parsing issues, focus on core build functionality
         Write-Host "Build packaging complete, skipping BUILD_INFO.txt generation"
 
+    - name: Locate or Install NSIS
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        Write-Host "=== 定位makensis（仅以文件实存为判据，避免Chocolatey假成功）==="
+
+        $candidates = @(
+          "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+          "$env:ProgramFiles\NSIS\makensis.exe",
+          "C:\Program Files (x86)\NSIS\makensis.exe",
+          "C:\Program Files\NSIS\makensis.exe",
+          "C:\ProgramData\chocolatey\lib\nsis\tools\makensis.exe"
+        )
+
+        $nsis = $null
+        foreach ($p in $candidates) {
+          if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
+            $nsis = (Resolve-Path -LiteralPath $p).Path
+            Write-Host "[OK] 预装路径命中: $nsis"
+            break
+          }
+        }
+
+        if (-not $nsis) {
+          $cmd = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          if ($cmd) {
+            $nsis = $cmd.Source
+            Write-Host "[OK] PATH中找到: $nsis"
+          }
+        }
+
+        if (-not $nsis) {
+          Write-Host "[INFO] 预装路径/PATH均未命中，扫描Program Files..."
+          $scanRoots = @('C:\Program Files','C:\Program Files (x86)') | Where-Object { Test-Path $_ }
+          $hit = Get-ChildItem -Path $scanRoots -Recurse -Filter makensis.exe -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+          if ($hit) {
+            $nsis = $hit.FullName
+            Write-Host "[OK] 扫描命中: $nsis"
+          }
+        }
+
+        if (-not $nsis) {
+          Write-Host "[INFO] 尝试Chocolatey安装NSIS（最多3次）..."
+          for ($i = 1; $i -le 3 -and -not $nsis; $i++) {
+            Write-Host "第 $i 次Chocolatey尝试..."
+            & choco install nsis -y --no-progress --timeout 180 2>&1 | Write-Host
+            foreach ($p in $candidates) {
+              if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
+                $nsis = (Resolve-Path -LiteralPath $p).Path
+                Write-Host "[OK] Chocolatey第 $i 次成功: $nsis"
+                break
+              }
+            }
+            if (-not $nsis -and $i -lt 3) {
+              Write-Host "[WARN] 第 $i 次未生成makensis，30秒后重试..."
+              Start-Sleep -Seconds 30
+            }
+          }
+        }
+
+        if (-not $nsis) {
+          Write-Host "[INFO] Chocolatey失败，下载NSIS便携版作为终极兜底..."
+          $tempDir = $env:RUNNER_TEMP
+          $zipPath = Join-Path $tempDir 'nsis-portable.zip'
+          $extractDir = Join-Path $tempDir 'nsis-portable'
+          $mirrors = @(
+            'https://nchc.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
+            'https://master.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
+            'https://phoenixnap.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
+            'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip'
+          )
+          $downloaded = $false
+          foreach ($url in $mirrors) {
+            try {
+              Write-Host "尝试下载: $url"
+              Invoke-WebRequest -Uri $url -OutFile $zipPath -MaximumRedirection 10 -UseBasicParsing -TimeoutSec 180
+              if ((Get-Item $zipPath).Length -gt 1MB) {
+                $downloaded = $true
+                Write-Host "[OK] 下载成功 ($([int]((Get-Item $zipPath).Length/1MB)) MB)"
+                break
+              }
+            } catch {
+              Write-Host "  失败: $($_.Exception.Message)"
+            }
+          }
+          if ($downloaded) {
+            if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+            Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+            $hit = Get-ChildItem -Path $extractDir -Recurse -Filter makensis.exe -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+            if ($hit) {
+              $nsis = $hit.FullName
+              Write-Host "[OK] 便携版makensis: $nsis"
+            }
+          }
+        }
+
+        if (-not $nsis -or -not (Test-Path -LiteralPath $nsis -PathType Leaf)) {
+          Write-Error "所有方式均未能定位makensis.exe"
+          exit 1
+        }
+
+        # 验证可执行
+        & $nsis /VERSION
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "makensis存在但无法执行: $nsis"
+          exit 1
+        }
+
+        "NSIS_EXE=$nsis" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+        Write-Host "[OK] NSIS_EXE已写入环境: $nsis"
+
     - name: Create Windows Installer
       shell: cmd
       run: |
         setlocal enabledelayedexpansion
 
-        echo "=== 查找makensis（windows-latest已预装NSIS，优先直接使用）==="
-
-        REM 优先使用PATH中已有的makensis（runner预装）
-        set "NSIS_EXE="
-        for %%I in (makensis.exe) do (
-          if not "%%~$PATH:I"=="" (
-            set "NSIS_EXE=%%~$PATH:I"
-          )
-        )
-        if defined NSIS_EXE (
-          echo "[OK] 在PATH中找到makensis: !NSIS_EXE!"
-          goto :nsis_ready
-        )
-
-        REM 检查常见固定路径
-        set "NSIS_EXE=%ProgramFiles(x86)%\NSIS\makensis.exe"
-        if exist "!NSIS_EXE!" (
-          echo "[OK] 在Program Files(x86)中找到NSIS: !NSIS_EXE!"
-          goto :nsis_ready
-        )
-        set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
-        if exist "!NSIS_EXE!" (
-          echo "[OK] 在Program Files中找到NSIS: !NSIS_EXE!"
-          goto :nsis_ready
-        )
-
-        REM NSIS未预装，尝试通过Chocolatey安装（最多重试3次）
-        echo "[INFO] NSIS未预装，尝试通过Chocolatey安装..."
-        set "INSTALL_OK=false"
-        for /l %%i in (1,1,3) do (
-          if "!INSTALL_OK!"=="false" (
-            echo "第%%i次尝试安装NSIS..."
-            choco install nsis -y --no-progress --timeout 120 2>&1
-            if not errorlevel 1 (
-              set "INSTALL_OK=true"
-              echo "[OK] 第%%i次安装成功"
-            ) else (
-              echo "[WARN] 第%%i次安装失败，等待30秒后重试..."
-              timeout /t 30 /nobreak >nul
-            )
-          )
-        )
-        if "!INSTALL_OK!"=="false" (
-          echo "[ERROR] Chocolatey安装NSIS连续3次失败"
-          exit /b 1
-        )
-
-        REM 安装后重新查找路径
-        set "NSIS_EXE=%ProgramFiles(x86)%\NSIS\makensis.exe"
-        if exist "!NSIS_EXE!" goto :nsis_ready
-        set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
-        if exist "!NSIS_EXE!" goto :nsis_ready
-        set "NSIS_EXE=%ChocolateyInstall%\bin\makensis.exe"
-        if exist "!NSIS_EXE!" goto :nsis_ready
-        for %%I in (makensis.exe) do (
-          if not "%%~$PATH:I"=="" set "NSIS_EXE=%%~$PATH:I"
-        )
         if not defined NSIS_EXE (
-          echo "[ERROR] 安装后仍未找到makensis"
-          where makensis || echo "PATH中无makensis"
+          echo "[ERROR] NSIS_EXE环境变量未设置"
           exit /b 1
         )
-
-        :nsis_ready
-        echo "makensis路径: !NSIS_EXE!"
+        if not exist "%NSIS_EXE%" (
+          echo "[ERROR] NSIS_EXE路径不存在: %NSIS_EXE%"
+          exit /b 1
+        )
+        echo "makensis路径: %NSIS_EXE%"
         
         echo "=== 生成${{ matrix.arch }}位CEF安装包 ==="
         mkdir Output 2>nul
