@@ -365,9 +365,9 @@ QStringList CEFManager::buildCEFCommandLine()
     args << "--disable-renderer-backgrounding";
     args << "--disable-backgrounding-occluded-windows";
 
-    // 禁用DPI缩放以避免网页变形
-    args << "--force-device-scale-factor=1";
-    args << "--high-dpi-support=0";
+    // DPI 缩放由 CEFApp::applyCompatibilityFlags() 在 OnBeforeCommandLineProcessing
+    // 中按主显示器 DPI 动态注入 force-device-scale-factor；这里不再硬编码=1，
+    // 否则 200% DPI 下 CSS 视口会变成物理像素尺寸，网页只画在左上 1/4 区域。
     args << "--disable-gpu-driver-bug-workarounds";
 
     // 32位系统和Windows 7特殊参数（强制单进程）

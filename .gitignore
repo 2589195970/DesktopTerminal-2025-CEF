@@ -30,3 +30,6 @@ GEMINI.md
 # CMake相关
 compile_commands.json
 .serena/
+
+# JetBrains/Clion 索引缓存
+.cache/

@@ -7,6 +7,14 @@
 #include "include/cef_v8.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include <QGuiApplication>
+#include <QScreen>
+#include <QString>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 CEFApp::CEFApp()
     : m_logger(&Logger::instance())
     , m_lowMemoryMode(false)
@@ -312,12 +320,61 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
     command_line->AppendSwitch("--disable-features=VizDisplayCompositor");
     command_line->AppendSwitch("--disable-ipc-flooding-protection");
 
-    // 禁用DPI缩放以避免网页变形
-    command_line->AppendSwitchWithValue("--force-device-scale-factor", "1");
-    command_line->AppendSwitchWithValue("--high-dpi-support", "0");
+    // ==== 关键：device-scale-factor 必须跟随系统 DPR，而不是写死为 1 ====
+    // 进程已在 main.cpp 三重硬声明 PerMonitorV2，CEF 子 HWND 也在
+    // cef_client_impl.cpp 里用 PerMonitorV2 物理像素 MoveWindow。
+    // 若此处仍然写 force-device-scale-factor=1，在 200% DPI 下 CSS 视口
+    // 会等于物理像素（4608x2456），网页按 ~1920 CSS px 布局后只填到
+    // 左上约 1/4 区域（用户报告的"窗口只占四分之一"）。
+    // 正确做法：让 deviceScaleFactor = DPR，CSS 视口 = 物理像素 / DPR
+    // = 逻辑像素（2304x1228），与 Qt 锁定视口、showFullScreen 尺寸一致。
+    double deviceScaleFactor = 1.0;
+    UINT monitorDpi = 96;
+#ifdef Q_OS_WIN
+    // 优先用 shcore 的 GetDpiForMonitor 读主显示器实时 DPI
+    typedef HRESULT (WINAPI *GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
+    HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+    if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+    bool dpiResolved = false;
+    if (hShcore) {
+        auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
+            GetProcAddress(hShcore, "GetDpiForMonitor"));
+        if (pGetDpiForMonitor) {
+            POINT pt{0, 0};
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+            UINT dpiX = 96, dpiY = 96;
+            if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /*MDT_EFFECTIVE_DPI*/, &dpiX, &dpiY))) {
+                monitorDpi = dpiX;
+                dpiResolved = true;
+            }
+        }
+    }
+    if (!dpiResolved) {
+        // 兜底：GetDeviceCaps(LOGPIXELSX) - 任何 Windows 版本都可用
+        HDC hdc = GetDC(nullptr);
+        if (hdc) {
+            int px = GetDeviceCaps(hdc, LOGPIXELSX);
+            if (px > 0) monitorDpi = static_cast<UINT>(px);
+            ReleaseDC(nullptr, hdc);
+        }
+    }
+    deviceScaleFactor = static_cast<double>(monitorDpi) / 96.0;
+#else
+    if (QGuiApplication::primaryScreen()) {
+        deviceScaleFactor = QGuiApplication::primaryScreen()->devicePixelRatio();
+    }
+#endif
+    if (deviceScaleFactor <= 0.0) {
+        deviceScaleFactor = 1.0;
+    }
+
+    command_line->AppendSwitchWithValue("--force-device-scale-factor",
+        QString::number(deviceScaleFactor, 'f', 2).toStdString());
     command_line->AppendSwitch("--disable-gpu-driver-bug-workarounds");
 
-    m_logger->appEvent("应用DPI缩放修复参数：force-device-scale-factor=1");
+    m_logger->appEvent(QString("应用DPI缩放参数：force-device-scale-factor=%1 (主显示器DPI=%2)")
+        .arg(deviceScaleFactor, 0, 'f', 2)
+        .arg(monitorDpi));
 }
 
 void CEFApp::apply32BitOptimizations(CefRefPtr<CefCommandLine> command_line)
