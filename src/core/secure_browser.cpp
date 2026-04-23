@@ -509,6 +509,8 @@ void SecureBrowser::onBrowserCreated()
     // 延时发出内容加载完成信号，给CEF一些时间完成初始页面加载
     QTimer::singleShot(1000, this, [this]() {
         m_logger->appEvent("发出内容加载完成信号");
+        // 兜底：防止首帧DPR不一致造成1帧错位（Qt 5.15 + PerMonitorV2 + Frameless已知现象）
+        resizeCEFBrowser();
         emit contentLoadFinished();
         emit pageLoadFinished();
     });
@@ -830,11 +832,21 @@ void SecureBrowser::resizeCEFBrowser()
             lockViewportIfNeeded();
         }
 
-        if (!m_cefManager->resizeBrowser(m_cefBrowserId, windowSize.width(), windowSize.height())) {
+        // 逻辑像素 → 物理像素换算（Win32 MoveWindow在DPI感知进程中需要物理像素）
+        // 防御性处理异常DPR
+        qreal dpr = devicePixelRatioF();
+        if (dpr <= 0.0 || std::isnan(dpr)) {
+            dpr = 1.0;
+        }
+        const int physicalWidth  = static_cast<int>(std::round(windowSize.width()  * dpr));
+        const int physicalHeight = static_cast<int>(std::round(windowSize.height() * dpr));
+
+        if (!m_cefManager->resizeBrowser(m_cefBrowserId, physicalWidth, physicalHeight)) {
             m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器返回失败");
             return;
         }
 
+        // zoomLevel用逻辑像素计算比例（分子分母同单位，结果与单位无关）
         const double zoomLevel = calculateZoomLevelForSize(windowSize);
         if (!m_cefManager->setBrowserZoomLevel(m_cefBrowserId, zoomLevel)) {
             m_logger->errorEvent("调整CEF浏览器缩放失败：CEF管理器返回失败");
@@ -842,9 +854,12 @@ void SecureBrowser::resizeCEFBrowser()
         }
 
         if (std::abs(zoomLevel - m_lastAppliedZoomLevel) > 0.01) {
-            m_logger->appEvent(QString("应用固定视口缩放: 当前窗口=%1x%2, 锁定视口=%3x%4, zoomLevel=%5, 全屏=%6")
+            m_logger->appEvent(QString("应用固定视口缩放: 逻辑=%1x%2, 物理=%3x%4, DPR=%5, 锁定=%6x%7, zoomLevel=%8, 全屏=%9")
                 .arg(windowSize.width())
                 .arg(windowSize.height())
+                .arg(physicalWidth)
+                .arg(physicalHeight)
+                .arg(dpr, 0, 'f', 2)
                 .arg(m_lockedViewportSize.width())
                 .arg(m_lockedViewportSize.height())
                 .arg(zoomLevel, 0, 'f', 3)

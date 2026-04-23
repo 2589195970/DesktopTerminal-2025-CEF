@@ -148,10 +148,12 @@ int main(int argc, char *argv[])
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
 
-    // 禁用Qt的高DPI缩放以避免与CEF的DPI设置冲突
+    // 启用Qt高DPI感知（与manifest的PerMonitorV2配合），保证showFullScreen()正确
+    // size()返回逻辑像素，devicePixelRatioF()返回真实DPR（100%=1.0, 150%=1.5, 200%=2.0）
+    // 物理像素换算在resizeCEFBrowser()内完成
     // 必须在创建QApplication之前设置
-    QApplication::setAttribute(Qt::AA_DisableHighDpiScaling);
-    QApplication::setAttribute(Qt::AA_Use96Dpi);
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
     // 创建应用程序实例（必须在使用任何Qt功能之前创建）
     Application application(argc, argv, originalArgc, originalArgv);
