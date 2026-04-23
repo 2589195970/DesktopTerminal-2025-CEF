@@ -126,8 +126,12 @@ int main(int argc, char *argv[])
 
 #ifdef Q_OS_WIN
     CefMainArgs cefMainArgs(GetModuleHandle(nullptr));
-    // 禁用CEF的高DPI支持以避免网页变形问题
-    // CefEnableHighDPISupport();
+    // 进程DPI感知声明的唯一入口：CefEnableHighDPISupport()
+    // 内部调用SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)，
+    // 必须在任何窗口/Qt模块初始化之前调用，否则进程会被判定为非DPI感知，
+    // 导致SetWindowPos/GetMonitorInfo被Windows做DPI虚拟化，窗口按1/DPR缩小。
+    // 网页不会变形：--force-device-scale-factor=1 已禁用CEF对系统DPI的跟随缩放。
+    CefEnableHighDPISupport();
 #else
     CefMainArgs cefMainArgs(originalArgc, originalArgv);
 #endif
@@ -148,12 +152,11 @@ int main(int argc, char *argv[])
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
 
-    // 启用Qt高DPI感知（与manifest的PerMonitorV2配合），保证showFullScreen()正确
-    // size()返回逻辑像素，devicePixelRatioF()返回真实DPR（100%=1.0, 150%=1.5, 200%=2.0）
-    // 物理像素换算在resizeCEFBrowser()内完成
-    // 必须在创建QApplication之前设置
-    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    // Qt侧不开启AA_EnableHighDpiScaling：
+    // 进程已由CefEnableHighDPISupport()声明为PerMonitor DPI感知，
+    // Qt保持非感知模式下size()直接等于物理像素、devicePixelRatioF()==1.0，
+    // 与Win32 API/CEF子窗口的物理像素单位完全一致（对齐验证可用版本d9e66833）。
+    // 若再叠加AA_EnableHighDpiScaling会让Qt二次缩放，与CEF的DPI声明产生冲突。
 
     // 创建应用程序实例（必须在使用任何Qt功能之前创建）
     Application application(argc, argv, originalArgc, originalArgv);
