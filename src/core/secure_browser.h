@@ -145,11 +145,16 @@ private:
     void disableWindowControls();
 #ifdef Q_OS_WIN
     /**
-     * @brief 用Win32 API强制窗口占满当前监视器（物理像素）
-     * 绕过Qt在AA_EnableHighDpiScaling+PerMonitorV2+Frameless下
-     * showFullScreen()可能得不到正确屏幕尺寸的问题
+     * @brief 用Win32 API强制窗口占满当前监视器（物理像素，保留未启用）
+     * 当前setFullscreenMode不再调用此函数，仅保留以备诊断/回滚。
      */
     void enforceWin32Fullscreen();
+
+    /**
+     * @brief 打印Qt全屏几何诊断：对比Qt geometry vs Win32 GetWindowRect
+     * 用于定位"Qt逻辑尺寸、Win32物理尺寸、Screen尺寸"是否一致
+     */
+    void logFullscreenGeometry();
 #endif
 
     // CEF集成

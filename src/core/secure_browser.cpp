@@ -5,6 +5,9 @@
 
 #include <QApplication>
 #include <QDesktopWidget>
+#include <QScreen>
+#include <QGuiApplication>
+#include <QWindow>
 #include <QUrl>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -643,10 +646,10 @@ void SecureBrowser::enforceFullscreen()
         m_logger->appEvent("强制恢复全屏模式");
     }
 
-#ifdef Q_OS_WIN
-    // 额外Win32强制：应对showFullScreen()未能真正覆盖屏幕的情况
-    enforceWin32Fullscreen();
-#endif
+    // Win32强制已停用：SWP_FRAMECHANGED会触发WM_NCCALCSIZE，
+    // 在Frameless+StaysOnTop窗口上与Qt showFullScreen的布局冲突，
+    // 导致视觉窗口被限制到左上区域（虽然GetWindowRect显示全屏）。
+    // 对齐d9e66833的纯Qt showFullScreen路径。
 }
 
 void SecureBrowser::enforceFocus()
@@ -727,10 +730,14 @@ void SecureBrowser::setFullscreenMode()
     showFullScreen();
     setAlwaysOnTop();
 
+    // Win32强制已停用：与Qt showFullScreen在Frameless+StaysOnTop上
+    // 争夺窗口布局（SWP_FRAMECHANGED触发WM_NCCALCSIZE导致视觉裁剪到
+    // 左上区域）。进程DPI感知由main.cpp三重硬声明保证，Qt showFullScreen
+    // 已能在PerMonitorV2进程里正确铺满物理屏幕（对齐d9e66833路径）。
+
 #ifdef Q_OS_WIN
-    // Qt showFullScreen() 在某些DPI场景下无法正确覆盖整个监视器
-    // 用Win32 API直接设置窗口占满物理屏幕（32位/64位Windows均支持）
-    enforceWin32Fullscreen();
+    // 仅保留Qt窗口几何诊断，不再强制覆盖
+    logFullscreenGeometry();
 #endif
 }
 
@@ -816,6 +823,52 @@ void SecureBrowser::enforceWin32Fullscreen()
         .arg(windowDpi)
         .arg(mi.rcMonitor.left).arg(mi.rcMonitor.top).arg(mi.rcMonitor.right).arg(mi.rcMonitor.bottom)
         .arg(mi.rcWork.left).arg(mi.rcWork.top).arg(mi.rcWork.right).arg(mi.rcWork.bottom));
+}
+
+void SecureBrowser::logFullscreenGeometry()
+{
+    // Qt视角几何
+    const QRect qtGeo = geometry();
+    const QRect qtFrameGeo = frameGeometry();
+    const qreal dpr = devicePixelRatioF();
+
+    // Qt视角Screen信息
+    QScreen* screen = QGuiApplication::primaryScreen();
+    if (QWindow* win = windowHandle()) {
+        if (QScreen* s = win->screen()) screen = s;
+    }
+    QRect screenGeo, screenAvail;
+    QString screenName = "null";
+    if (screen) {
+        screenGeo = screen->geometry();
+        screenAvail = screen->availableGeometry();
+        screenName = screen->name();
+    }
+
+    // Win32视角几何
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    RECT winRect{}, clientRect{};
+    int sm_cxScreen = GetSystemMetrics(SM_CXSCREEN);
+    int sm_cyScreen = GetSystemMetrics(SM_CYSCREEN);
+    int sm_cxVirt   = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int sm_cyVirt   = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (hwnd) {
+        GetWindowRect(hwnd, &winRect);
+        GetClientRect(hwnd, &clientRect);
+    }
+
+    m_logger->appEvent(QString("[几何诊断] Qt geometry=%1x%2@(%3,%4) frameGeometry=%5x%6 DPR=%7 | Screen[%8] geometry=%9x%10 available=%11x%12 | Win32 GetWindowRect=%13x%14@(%15,%16) GetClientRect=%17x%18 | SM_Screen=%19x%20 SM_Virtual=%21x%22")
+        .arg(qtGeo.width()).arg(qtGeo.height()).arg(qtGeo.x()).arg(qtGeo.y())
+        .arg(qtFrameGeo.width()).arg(qtFrameGeo.height())
+        .arg(dpr, 0, 'f', 2)
+        .arg(screenName)
+        .arg(screenGeo.width()).arg(screenGeo.height())
+        .arg(screenAvail.width()).arg(screenAvail.height())
+        .arg(winRect.right - winRect.left).arg(winRect.bottom - winRect.top)
+        .arg(winRect.left).arg(winRect.top)
+        .arg(clientRect.right).arg(clientRect.bottom)
+        .arg(sm_cxScreen).arg(sm_cyScreen)
+        .arg(sm_cxVirt).arg(sm_cyVirt));
 }
 #endif
 
