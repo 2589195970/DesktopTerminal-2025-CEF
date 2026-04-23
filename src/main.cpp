@@ -138,16 +138,21 @@ int main(int argc, char *argv[])
     }
 
     // 注意：不在这里创建QApplication，而是使用Application类（继承自QApplication）
-    
+
 #ifdef Q_OS_WIN
     // Windows下设置UTF-8编码
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    
+
     // 禁用Windows错误对话框
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
-    
+
+    // 禁用Qt的高DPI缩放以避免与CEF的DPI设置冲突
+    // 必须在创建QApplication之前设置
+    QApplication::setAttribute(Qt::AA_DisableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_Use96Dpi);
+
     // 创建应用程序实例（必须在使用任何Qt功能之前创建）
     Application application(argc, argv, originalArgc, originalArgv);
     application.setSharedCEFApp(sharedCefApp);
