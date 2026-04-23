@@ -229,7 +229,7 @@ void SecureBrowser::keyPressEvent(QKeyEvent *event)
 {
     QString keySequence = QKeySequence(event->key() | event->modifiers()).toString();
 
-    if (!m_logger->getLogLevel() == L_DEBUG) {
+    if (m_logger->getLogLevel() == L_DEBUG) {
         m_logger->appEvent(QString("按键事件: %1").arg(keySequence));
     }
 
@@ -494,9 +494,9 @@ void SecureBrowser::onBrowserCreated()
     m_logger->appEvent("CEF浏览器创建完成");
     m_logger->appEvent("CEF消息循环现在应该开始处理页面内容 - 白屏问题修复关键点");
 
-    lockViewportIfNeeded();
+    // 不在这里锁定视口，等待窗口真正全屏后再锁定
     resizeCEFBrowser();
-    
+
     // 重置计数器，开始新的日志周期
     m_cefMessageLoopLogCounter = 0;
     
@@ -723,7 +723,13 @@ void SecureBrowser::setFullscreenMode()
 
 void SecureBrowser::setAlwaysOnTop()
 {
-    // 重新应用窗口标志时要保留全屏状态，不能无条件 show()
+    // 检查是否已经设置了置顶标志
+    if (windowFlags() & Qt::WindowStaysOnTopHint) {
+        // 已经设置，无需重复操作
+        return;
+    }
+
+    // 重新应用窗口标志时要保留全屏状态
     const bool wasVisible = isVisible();
     const bool wasFullScreen = isFullScreen() || (windowState() & Qt::WindowFullScreen);
 
@@ -807,7 +813,6 @@ void SecureBrowser::resizeCEFBrowser()
 {
     if (m_cefBrowserCreated) {
         QSize windowSize = size();
-        lockViewportIfNeeded();
 
         if (!windowSize.isValid()) {
             m_logger->errorEvent("调整CEF浏览器大小失败：当前窗口尺寸无效");
@@ -817,6 +822,12 @@ void SecureBrowser::resizeCEFBrowser()
         if (!m_cefManager) {
             m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器未初始化");
             return;
+        }
+
+        // 只在窗口真正全屏时才锁定视口
+        const bool isFullScreen = (windowState() & Qt::WindowFullScreen) != 0;
+        if (isFullScreen && !m_viewportLocked) {
+            lockViewportIfNeeded();
         }
 
         if (!m_cefManager->resizeBrowser(m_cefBrowserId, windowSize.width(), windowSize.height())) {
@@ -831,12 +842,13 @@ void SecureBrowser::resizeCEFBrowser()
         }
 
         if (std::abs(zoomLevel - m_lastAppliedZoomLevel) > 0.01) {
-            m_logger->appEvent(QString("应用固定视口缩放: 当前窗口=%1x%2, 锁定视口=%3x%4, zoomLevel=%5")
+            m_logger->appEvent(QString("应用固定视口缩放: 当前窗口=%1x%2, 锁定视口=%3x%4, zoomLevel=%5, 全屏=%6")
                 .arg(windowSize.width())
                 .arg(windowSize.height())
                 .arg(m_lockedViewportSize.width())
                 .arg(m_lockedViewportSize.height())
-                .arg(zoomLevel, 0, 'f', 3));
+                .arg(zoomLevel, 0, 'f', 3)
+                .arg(isFullScreen ? "是" : "否"));
             m_lastAppliedZoomLevel = zoomLevel;
         }
     }
@@ -845,6 +857,13 @@ void SecureBrowser::resizeCEFBrowser()
 void SecureBrowser::lockViewportIfNeeded()
 {
     if (m_viewportLocked) {
+        return;
+    }
+
+    // 必须在全屏状态下才锁定视口
+    const bool isFullScreen = (windowState() & Qt::WindowFullScreen) != 0;
+    if (!isFullScreen) {
+        m_logger->appEvent("跳过视口锁定：窗口尚未全屏");
         return;
     }
 
@@ -857,7 +876,7 @@ void SecureBrowser::lockViewportIfNeeded()
     m_viewportLocked = true;
     m_lastAppliedZoomLevel = 0.0;
 
-    m_logger->appEvent(QString("锁定网页基准视口: %1x%2")
+    m_logger->appEvent(QString("锁定网页基准视口: %1x%2 (全屏状态)")
         .arg(m_lockedViewportSize.width())
         .arg(m_lockedViewportSize.height()));
 }
