@@ -113,10 +113,12 @@ public:
     // 开发者工具管理
     void showDevTools();
     void closeDevTools();
+    void resizeBrowser(int width, int height);
 
 private:
     void showDevToolsOnUIThread();
     void closeDevToolsOnUIThread();
+    void resizeBrowserOnUIThread(int width, int height);
 
     // Windows 7兼容性处理
     void applyWindows7Optimizations();

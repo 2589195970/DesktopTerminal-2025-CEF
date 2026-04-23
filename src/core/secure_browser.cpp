@@ -489,6 +489,8 @@ void SecureBrowser::onBrowserCreated()
     m_cefBrowserCreated = true;
     m_logger->appEvent("CEF浏览器创建完成");
     m_logger->appEvent("CEF消息循环现在应该开始处理页面内容 - 白屏问题修复关键点");
+
+    resizeCEFBrowser();
     
     // 重置计数器，开始新的日志周期
     m_cefMessageLoopLogCounter = 0;
@@ -791,8 +793,15 @@ void SecureBrowser::resizeCEFBrowser()
         // 调整CEF浏览器大小以匹配窗口
         QSize windowSize = size();
         m_logger->appEvent(QString("调整CEF浏览器大小: %1x%2").arg(windowSize.width()).arg(windowSize.height()));
-        
-        // 这里需要调用CEF API调整浏览器大小
+
+        if (!m_cefManager) {
+            m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器未初始化");
+            return;
+        }
+
+        if (!m_cefManager->resizeBrowser(m_cefBrowserId, windowSize.width(), windowSize.height())) {
+            m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器返回失败");
+        }
     }
 }
 

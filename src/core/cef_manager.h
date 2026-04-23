@@ -82,6 +82,15 @@ public:
     void doMessageLoopWork();
 
     /**
+     * @brief 调整浏览器原生子窗口大小
+     * @param browserId 浏览器ID
+     * @param width 目标宽度
+     * @param height 目标高度
+     * @return 成功返回true
+     */
+    bool resizeBrowser(int browserId, int width, int height);
+
+    /**
      * @brief 通知URL退出事件（由CEFClient调用）
      * @param url 触发退出的URL
      */

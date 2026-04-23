@@ -4,9 +4,14 @@
 #include "../core/application.h"
 #include "../core/cef_manager.h"
 
+#include <algorithm>
 #include <QUrl>
 #include "include/base/cef_bind.h"
 #include "include/wrapper/cef_closure_task.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 CEFClient::CEFClient(CEFManager* cefManager)
     : m_logger(&Logger::instance())
@@ -553,6 +558,24 @@ void CEFClient::closeDevTools()
     closeDevToolsOnUIThread();
 }
 
+void CEFClient::resizeBrowser(int width, int height)
+{
+    if (!m_browser) {
+        m_logger->errorEvent("浏览器尺寸调整失败：浏览器实例未初始化");
+        return;
+    }
+
+    width = std::max(width, 1);
+    height = std::max(height, 1);
+
+    if (!CefCurrentlyOn(TID_UI)) {
+        CefPostTask(TID_UI, base::Bind(&CEFClient::resizeBrowserOnUIThread, this, width, height));
+        return;
+    }
+
+    resizeBrowserOnUIThread(width, height);
+}
+
 void CEFClient::closeDevToolsOnUIThread()
 {
     if (!m_browser) {
@@ -564,6 +587,29 @@ void CEFClient::closeDevToolsOnUIThread()
         host->CloseDevTools();
         m_logger->appEvent("CEF DevTools窗口已关闭");
     }
+}
+
+void CEFClient::resizeBrowserOnUIThread(int width, int height)
+{
+    if (!m_browser) {
+        return;
+    }
+
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host) {
+        return;
+    }
+
+#ifdef Q_OS_WIN
+    HWND browserWindow = host->GetWindowHandle();
+    if (browserWindow) {
+        if (!MoveWindow(browserWindow, 0, 0, width, height, TRUE)) {
+            m_logger->errorEvent(QString("调整CEF原生窗口大小失败，错误码: %1").arg(GetLastError()));
+        }
+    }
+#endif
+
+    host->WasResized();
 }
 
 bool CEFClient::handleWindows7KeyEvent(const CefKeyEvent& event)
