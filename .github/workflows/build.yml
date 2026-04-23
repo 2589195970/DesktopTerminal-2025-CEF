@@ -1264,27 +1264,39 @@ jobs:
 
         if (-not $nsis) {
           Write-Host "[INFO] Chocolatey失败，下载NSIS便携版作为终极兜底..."
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
           $tempDir = $env:RUNNER_TEMP
           $zipPath = Join-Path $tempDir 'nsis-portable.zip'
           $extractDir = Join-Path $tempDir 'nsis-portable'
+          # 优先GitHub镜像（稳定），SourceForge作次优（浏览器可下但CI有时命中重定向页）
           $mirrors = @(
-            'https://nchc.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
+            'https://github.com/idleberg/NSIS-Releases/releases/download/v3.10/nsis-3.10.zip',
+            'https://github.com/idleberg/NSIS-Releases/releases/download/v3.09/nsis-3.09.zip',
+            'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
             'https://master.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
-            'https://phoenixnap.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip',
-            'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip'
+            'https://phoenixnap.dl.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip'
           )
           $downloaded = $false
           foreach ($url in $mirrors) {
-            try {
-              Write-Host "尝试下载: $url"
-              Invoke-WebRequest -Uri $url -OutFile $zipPath -MaximumRedirection 10 -UseBasicParsing -TimeoutSec 180
-              if ((Get-Item $zipPath).Length -gt 1MB) {
+            Write-Host "尝试下载: $url"
+            if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+            # curl.exe比Invoke-WebRequest更稳：默认跟随重定向、超时/重试可控、进度输出
+            & curl.exe -L --fail --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 180 `
+                -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' `
+                -o $zipPath $url 2>&1 | Write-Host
+            $exit = $LASTEXITCODE
+            if (Test-Path $zipPath) {
+              $size = (Get-Item $zipPath).Length
+              Write-Host "  curl exit=$exit 文件大小=$([int]($size/1KB)) KB"
+              if ($size -gt 1MB) {
                 $downloaded = $true
-                Write-Host "[OK] 下载成功 ($([int]((Get-Item $zipPath).Length/1MB)) MB)"
+                Write-Host "[OK] 下载成功: $url ($([int]($size/1MB)) MB)"
                 break
+              } else {
+                Write-Host "  文件过小，视为失败（可能是错误页）"
               }
-            } catch {
-              Write-Host "  失败: $($_.Exception.Message)"
+            } else {
+              Write-Host "  curl exit=$exit 未产生文件"
             }
           }
           if ($downloaded) {
@@ -1295,7 +1307,22 @@ jobs:
             if ($hit) {
               $nsis = $hit.FullName
               Write-Host "[OK] 便携版makensis: $nsis"
+            } else {
+              Write-Host "[ERROR] zip解压后未找到makensis.exe"
+              Get-ChildItem -Path $extractDir -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
             }
+          }
+        }
+
+        # 再兜底：全盘扫描常见位置（runner可能把NSIS放在非标准路径）
+        if (-not $nsis) {
+          Write-Host "[INFO] 兜底：扫描整个C盘查找makensis.exe..."
+          $hit = Get-ChildItem -Path 'C:\','D:\' -Recurse -Filter makensis.exe `
+                   -ErrorAction SilentlyContinue -Force |
+                 Select-Object -First 1
+          if ($hit) {
+            $nsis = $hit.FullName
+            Write-Host "[OK] 全盘扫描命中: $nsis"
           }
         }
 
