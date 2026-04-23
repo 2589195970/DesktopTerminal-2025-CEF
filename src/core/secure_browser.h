@@ -143,6 +143,14 @@ private:
     void setFullscreenMode();
     void setAlwaysOnTop();
     void disableWindowControls();
+#ifdef Q_OS_WIN
+    /**
+     * @brief 用Win32 API强制窗口占满当前监视器（物理像素）
+     * 绕过Qt在AA_EnableHighDpiScaling+PerMonitorV2+Frameless下
+     * showFullScreen()可能得不到正确屏幕尺寸的问题
+     */
+    void enforceWin32Fullscreen();
+#endif
 
     // CEF集成
     void createCEFBrowser();

@@ -642,6 +642,11 @@ void SecureBrowser::enforceFullscreen()
         showFullScreen();
         m_logger->appEvent("强制恢复全屏模式");
     }
+
+#ifdef Q_OS_WIN
+    // 额外Win32强制：应对showFullScreen()未能真正覆盖屏幕的情况
+    enforceWin32Fullscreen();
+#endif
 }
 
 void SecureBrowser::enforceFocus()
@@ -721,7 +726,57 @@ void SecureBrowser::setFullscreenMode()
     setWindowState(Qt::WindowFullScreen);
     showFullScreen();
     setAlwaysOnTop();
+
+#ifdef Q_OS_WIN
+    // Qt showFullScreen() 在某些DPI场景下无法正确覆盖整个监视器
+    // 用Win32 API直接设置窗口占满物理屏幕（32位/64位Windows均支持）
+    enforceWin32Fullscreen();
+#endif
 }
+
+#ifdef Q_OS_WIN
+void SecureBrowser::enforceWin32Fullscreen()
+{
+    // winId()在Windows上返回HWND（32位/64位通用，都是指针类型）
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    if (!hwnd) {
+        m_logger->errorEvent("Win32强制全屏失败：HWND无效");
+        return;
+    }
+
+    // 获取当前窗口所在的监视器
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+    if (!monitor) {
+        m_logger->errorEvent("Win32强制全屏失败：MonitorFromWindow返回空");
+        return;
+    }
+
+    MONITORINFO mi;
+    mi.cbSize = sizeof(MONITORINFO);
+    if (!GetMonitorInfoW(monitor, &mi)) {
+        m_logger->errorEvent(QString("Win32强制全屏失败：GetMonitorInfo错误码=%1")
+            .arg(static_cast<uint>(GetLastError())));
+        return;
+    }
+
+    // 使用rcMonitor而非rcWork，确保覆盖任务栏（物理像素坐标）
+    const int x = mi.rcMonitor.left;
+    const int y = mi.rcMonitor.top;
+    const int width  = mi.rcMonitor.right  - mi.rcMonitor.left;
+    const int height = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+    // HWND_TOPMOST保持置顶；SWP_FRAMECHANGED确保无边框样式生效
+    if (!SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height,
+                      SWP_SHOWWINDOW | SWP_FRAMECHANGED | SWP_NOSENDCHANGING)) {
+        m_logger->errorEvent(QString("Win32强制全屏失败：SetWindowPos错误码=%1")
+            .arg(static_cast<uint>(GetLastError())));
+        return;
+    }
+
+    m_logger->appEvent(QString("Win32强制全屏成功：起点=(%1,%2) 物理尺寸=%3x%4")
+        .arg(x).arg(y).arg(width).arg(height));
+}
+#endif
 
 void SecureBrowser::setAlwaysOnTop()
 {
@@ -832,14 +887,36 @@ void SecureBrowser::resizeCEFBrowser()
             lockViewportIfNeeded();
         }
 
-        // 逻辑像素 → 物理像素换算（Win32 MoveWindow在DPI感知进程中需要物理像素）
-        // 防御性处理异常DPR
+        // 计算传给CEF的物理像素尺寸
+        // Windows：直接从Win32 GetClientRect取（与createBrowser初始化逻辑一致，32/64位通用）
+        // 其他平台：用Qt的size()*devicePixelRatioF()
+        int physicalWidth = 0;
+        int physicalHeight = 0;
         qreal dpr = devicePixelRatioF();
         if (dpr <= 0.0 || std::isnan(dpr)) {
             dpr = 1.0;
         }
-        const int physicalWidth  = static_cast<int>(std::round(windowSize.width()  * dpr));
-        const int physicalHeight = static_cast<int>(std::round(windowSize.height() * dpr));
+#ifdef Q_OS_WIN
+        HWND hwnd = reinterpret_cast<HWND>(winId());
+        RECT rc;
+        if (hwnd && GetClientRect(hwnd, &rc)) {
+            physicalWidth  = rc.right  - rc.left;
+            physicalHeight = rc.bottom - rc.top;
+        } else {
+            // 回退：用Qt size()*DPR换算
+            physicalWidth  = static_cast<int>(std::round(windowSize.width()  * dpr));
+            physicalHeight = static_cast<int>(std::round(windowSize.height() * dpr));
+        }
+#else
+        physicalWidth  = static_cast<int>(std::round(windowSize.width()  * dpr));
+        physicalHeight = static_cast<int>(std::round(windowSize.height() * dpr));
+#endif
+
+        if (physicalWidth <= 0 || physicalHeight <= 0) {
+            m_logger->errorEvent(QString("调整CEF浏览器大小失败：物理尺寸无效 %1x%2")
+                .arg(physicalWidth).arg(physicalHeight));
+            return;
+        }
 
         if (!m_cefManager->resizeBrowser(m_cefBrowserId, physicalWidth, physicalHeight)) {
             m_logger->errorEvent("调整CEF浏览器大小失败：CEF管理器返回失败");
