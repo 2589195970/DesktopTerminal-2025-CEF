@@ -1205,30 +1205,72 @@ jobs:
       shell: cmd
       run: |
         setlocal enabledelayedexpansion
-        echo "=== 安装NSIS ==="
-        choco install nsis -y
-        if errorlevel 1 (
-          echo "[ERROR] Chocolatey安装NSIS失败"
-          exit /b 1
+
+        echo "=== 查找makensis（windows-latest已预装NSIS，优先直接使用）==="
+
+        REM 优先使用PATH中已有的makensis（runner预装）
+        set "NSIS_EXE="
+        for %%I in (makensis.exe) do (
+          if not "%%~$PATH:I"=="" (
+            set "NSIS_EXE=%%~$PATH:I"
+          )
+        )
+        if defined NSIS_EXE (
+          echo "[OK] 在PATH中找到makensis: !NSIS_EXE!"
+          goto :nsis_ready
         )
 
-        echo "=== 检查makensis可用性 ==="
+        REM 检查常见固定路径
         set "NSIS_EXE=%ProgramFiles(x86)%\NSIS\makensis.exe"
-        if not exist "%NSIS_EXE%" set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
-        if not exist "%NSIS_EXE%" set "NSIS_EXE=%ChocolateyInstall%\bin\makensis.exe"
-        if not exist "%NSIS_EXE%" (
-          for %%I in (makensis.exe) do (
-            if not "%%~$PATH:I"=="" (
-              set "NSIS_EXE=%%~$PATH:I"
+        if exist "!NSIS_EXE!" (
+          echo "[OK] 在Program Files(x86)中找到NSIS: !NSIS_EXE!"
+          goto :nsis_ready
+        )
+        set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
+        if exist "!NSIS_EXE!" (
+          echo "[OK] 在Program Files中找到NSIS: !NSIS_EXE!"
+          goto :nsis_ready
+        )
+
+        REM NSIS未预装，尝试通过Chocolatey安装（最多重试3次）
+        echo "[INFO] NSIS未预装，尝试通过Chocolatey安装..."
+        set "INSTALL_OK=false"
+        for /l %%i in (1,1,3) do (
+          if "!INSTALL_OK!"=="false" (
+            echo "第%%i次尝试安装NSIS..."
+            choco install nsis -y --no-progress --timeout 120 2>&1
+            if not errorlevel 1 (
+              set "INSTALL_OK=true"
+              echo "[OK] 第%%i次安装成功"
+            ) else (
+              echo "[WARN] 第%%i次安装失败，等待30秒后重试..."
+              timeout /t 30 /nobreak >nul
             )
           )
         )
-        if not exist "%NSIS_EXE%" (
-          echo "[ERROR] makensis未安装到任何已知路径"
-          where makensis || echo "PATH中未找到makensis可执行文件"
+        if "!INSTALL_OK!"=="false" (
+          echo "[ERROR] Chocolatey安装NSIS连续3次失败"
           exit /b 1
         )
-        echo "makensis路径: %NSIS_EXE%"
+
+        REM 安装后重新查找路径
+        set "NSIS_EXE=%ProgramFiles(x86)%\NSIS\makensis.exe"
+        if exist "!NSIS_EXE!" goto :nsis_ready
+        set "NSIS_EXE=%ProgramFiles%\NSIS\makensis.exe"
+        if exist "!NSIS_EXE!" goto :nsis_ready
+        set "NSIS_EXE=%ChocolateyInstall%\bin\makensis.exe"
+        if exist "!NSIS_EXE!" goto :nsis_ready
+        for %%I in (makensis.exe) do (
+          if not "%%~$PATH:I"=="" set "NSIS_EXE=%%~$PATH:I"
+        )
+        if not defined NSIS_EXE (
+          echo "[ERROR] 安装后仍未找到makensis"
+          where makensis || echo "PATH中无makensis"
+          exit /b 1
+        )
+
+        :nsis_ready
+        echo "makensis路径: !NSIS_EXE!"
         
         echo "=== 生成${{ matrix.arch }}位CEF安装包 ==="
         mkdir Output 2>nul
