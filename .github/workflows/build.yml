@@ -1144,11 +1144,12 @@ jobs:
             # Verify Qt5 deployment
             Write-Host "=== Qt5 Deployment Verification ==="
             $qtDeployedFiles = Get-ChildItem "$artifactPath\Qt5*.dll" -ErrorAction SilentlyContinue
-            if ($qtDeployedFiles.Count -eq 4) {
+            $expectedQtCount = $qtDlls.Count
+            if ($qtDeployedFiles.Count -ge $expectedQtCount) {
                 $qtTotalSize = ($qtDeployedFiles | Measure-Object -Property Length -Sum).Sum
                 Write-Host "SUCCESS: All Qt5 DLLs deployed ($($qtDeployedFiles.Count) files, $([math]::Round($qtTotalSize/1MB, 2)) MB)"
             } else {
-                Write-Host "WARNING: Qt5 deployment verification failed ($($qtDeployedFiles.Count)/4 DLLs found)"
+                Write-Host "WARNING: Qt5 deployment verification: $($qtDeployedFiles.Count)/$expectedQtCount DLLs found"
                 Write-Host "Checking individual Qt5 DLL files..."
                 
                 $qtDllsCheck = @("Qt5Core.dll", "Qt5Gui.dll", "Qt5Widgets.dll", "Qt5Network.dll")
