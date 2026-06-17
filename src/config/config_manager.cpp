@@ -8,6 +8,9 @@
 #include <QJsonArray>
 #include <QJsonParseError>
 #include <QInputDialog>
+#ifdef Q_OS_WIN
+#include <QTextCodec>
+#endif
 
 ConfigManager& ConfigManager::instance()
 {
@@ -62,6 +65,17 @@ bool ConfigManager::loadConfig(const QString &configPath)
 
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+
+#ifdef Q_OS_WIN
+    if (doc.isNull() || !doc.isObject()) {
+        QTextCodec *legacyCodec = QTextCodec::codecForName("GB18030");
+        if (legacyCodec) {
+            const QByteArray utf8Data = legacyCodec->toUnicode(data).toUtf8();
+            error = QJsonParseError();
+            doc = QJsonDocument::fromJson(utf8Data, &error);
+        }
+    }
+#endif
 
     if (doc.isNull() || !doc.isObject()) {
         m_lastError = QString("JSON解析失败\n路径: %1\n错误: %2\n位置: %3").arg(targetPath, error.errorString()).arg(error.offset);

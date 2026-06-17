@@ -481,3 +481,6 @@ def main_workflow(user_input):
 - Default to secure posture: keep `strictSecurityMode` and `keyboardFilterEnabled` true; do not add escape hatches that bypass exam constraints.
 - When modifying CEF or Qt flags, re-check kiosk behavior (fullscreen persistence, devtools blocked, context menu disabled).
 - Ensure `chrome-sandbox` permissions remain correct on Linux packages; document any required `setuid` steps in release notes.
+
+## Installer Notes (Windows NSIS)
+- **禁止**在 `installer.nsi` 中用 `FileWrite` 手写含中文或 JSON 文本（会写成 GBK，与 UTF-8 BOM 混编导致 `config.json` 解析失败）。必须使用 UTF-8 模板 + `scripts/patch-install-config.ps1` 补丁。详见 [docs/INSTALLER_NSIS_ENCODING.md](docs/INSTALLER_NSIS_ENCODING.md)。

@@ -295,46 +295,31 @@ Section "主程序" SecMain
     CreateDirectory "$INSTDIR\resources"
     DetailPrint "正在配置应用程序..."
 
-    ; 使用用户输入的配置生成config.json（覆盖artifacts中的旧配置）
-    DetailPrint "生成配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
-    FileOpen $0 "$INSTDIR\resources\config.json" w
-    ; 写入UTF-8 BOM
-    FileWriteByte $0 0xEF
-    FileWriteByte $0 0xBB
-    FileWriteByte $0 0xBF
-    ; JSON内容（与 resources/config.json 保持一致，desktopAuth 密钥预置）
-    FileWrite $0 '{$\r$\n'
-    FileWrite $0 '  "url": "$ConfigURL",$\r$\n'
-    FileWrite $0 '  "exitPassword": "$ConfigPassword",$\r$\n'
-    FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
-    FileWrite $0 '  "iconPath": "logo.ico",$\r$\n'
-    FileWrite $0 '  "appVersion": "1.0.0",$\r$\n'
-    FileWrite $0 '  "configVersion": "20260617",$\r$\n'
-    FileWrite $0 '  "urlExitEnabled": true,$\r$\n'
-    FileWrite $0 '  "urlExitPattern": "/logout",$\r$\n'
-    FileWrite $0 '  "strictSecurityMode": false,$\r$\n'
-    ; sensitiveOperationRequirePassword: 1=checked, 0=unchecked
-    ${If} $RequirePassword == 1
-        FileWrite $0 '  "sensitiveOperationRequirePassword": true,$\r$\n'
-    ${Else}
-        FileWrite $0 '  "sensitiveOperationRequirePassword": false,$\r$\n'
+    ; 使用 UTF-8 模板 + PowerShell 补丁，避免 NSIS FileWrite 将中文写成 GBK
+    ; 详见 docs/INSTALLER_NSIS_ENCODING.md
+    DetailPrint "更新配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
+    ${IfNot} ${FileExists} "$INSTDIR\resources\config.json"
+        File /oname=$INSTDIR\resources\config.json "resources\config.json"
     ${EndIf}
-    FileWrite $0 '  "desktopAuth": {$\r$\n'
-    FileWrite $0 '    "clientId": "DesktopTerminal-CEF",$\r$\n'
-    FileWrite $0 '    "clientSecret": "DesktopAuthKey",$\r$\n'
-    FileWrite $0 '    "authEndpoint": "",$\r$\n'
-    FileWrite $0 '    "apiBaseUrl": "$ConfigApiBaseUrl"$\r$\n'
-    FileWrite $0 '  },$\r$\n'
-    FileWrite $0 '  "cefSettings": {$\r$\n'
-    FileWrite $0 '    "enableGPU": true,$\r$\n'
-    FileWrite $0 '    "enableWebSecurity": true,$\r$\n'
-    FileWrite $0 '    "enableJavaScript": true,$\r$\n'
-    FileWrite $0 '    "debugPort": 0,$\r$\n'
-    FileWrite $0 '    "multiThreadedMessageLoop": true$\r$\n'
-    FileWrite $0 '  }$\r$\n'
-    FileWrite $0 '}$\r$\n'
-    FileClose $0
-    DetailPrint "✓ 配置文件已生成"
+
+    ${If} $RequirePassword == 1
+        StrCpy $R9 "true"
+    ${Else}
+        StrCpy $R9 "false"
+    ${EndIf}
+
+    CreateDirectory "$INSTDIR\scripts"
+    SetOutPath "$INSTDIR\scripts"
+    File "scripts\patch-install-config.ps1"
+
+    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\scripts\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -Url "$ConfigURL" -ExitPassword "$ConfigPassword" -ApiBaseUrl "$ConfigApiBaseUrl" -RequirePassword $R9' $R1
+    ${If} $R1 == 0
+        DetailPrint "✓ 配置文件已更新"
+        Delete "$INSTDIR\scripts\patch-install-config.ps1"
+        RMDir "$INSTDIR\scripts"
+    ${Else}
+        DetailPrint "警告: 配置文件更新失败(代码 $R1)，请检查 resources\config.json 编码"
+    ${EndIf}
     
     ; 复制资源文件到resources目录
     SetOutPath "$INSTDIR\resources"
