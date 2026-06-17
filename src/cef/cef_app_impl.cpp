@@ -329,7 +329,7 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
     // 正确做法：让 deviceScaleFactor = DPR，CSS 视口 = 物理像素 / DPR
     // = 逻辑像素（2304x1228），与 Qt 锁定视口、showFullScreen 尺寸一致。
     double deviceScaleFactor = 1.0;
-    unsigned int monitorDpi = 96;
+    UINT monitorDpi = 96;
 #ifdef Q_OS_WIN
     // 优先用 shcore 的 GetDpiForMonitor 读主显示器实时 DPI
     typedef HRESULT (WINAPI *GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
@@ -354,7 +354,7 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
         HDC hdc = GetDC(nullptr);
         if (hdc) {
             int px = GetDeviceCaps(hdc, LOGPIXELSX);
-            if (px > 0) monitorDpi = static_cast<unsigned int>(px);
+            if (px > 0) monitorDpi = static_cast<UINT>(px);
             ReleaseDC(nullptr, hdc);
         }
     }
@@ -362,7 +362,6 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
 #else
     if (QGuiApplication::primaryScreen()) {
         deviceScaleFactor = QGuiApplication::primaryScreen()->devicePixelRatio();
-        monitorDpi = static_cast<unsigned int>(deviceScaleFactor * 96.0 + 0.5);
     }
 #endif
     if (deviceScaleFactor <= 0.0) {

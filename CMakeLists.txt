@@ -20,11 +20,9 @@ else()
     message(STATUS "32位架构检测")
 endif()
 
-# 全平台默认 CEF 75；macOS Apple Silicon 打包可通过 -DCEF_VERSION 覆盖为 118
-if(NOT CEF_VERSION)
-    set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
-endif()
-message(STATUS "使用CEF版本: ${CEF_VERSION}")
+# 全平台统一使用CEF 75以获得最大兼容性
+set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
+message(STATUS "使用CEF 75.1.14版本 - 全平台最大兼容性模式")
 
 # 为所有平台设置CEF 75兼容性优化
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
