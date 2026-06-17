@@ -156,18 +156,50 @@ Function ConfigPageLeave
 FunctionEnd
 
 ; ─────────────────────────────────────────────
+; 日志宏：同时写 DetailPrint 和文件
+; ─────────────────────────────────────────────
+Var /GLOBAL InstallLogHandle
+
+!macro LOG_INIT
+    CreateDirectory "$INSTDIR"
+    FileOpen $InstallLogHandle "$INSTDIR\install.log" w
+    FileWrite $InstallLogHandle "=== Install Log ===$\r$\n"
+    FileWrite $InstallLogHandle "Time: $EXEDIR$\r$\n"
+    FileWrite $InstallLogHandle "InstDir: $INSTDIR$\r$\n"
+    FileWrite $InstallLogHandle "Arch: ${ARCH}$\r$\n"
+    FileWrite $InstallLogHandle "===$\r$\n"
+!macroend
+
+!macro LOG_CLOSE
+    ${If} $InstallLogHandle != ""
+        FileWrite $InstallLogHandle "=== Install Complete ===$\r$\n"
+        FileClose $InstallLogHandle
+    ${EndIf}
+!macroend
+
+!macro LOG_MSG _MSG
+    DetailPrint "${_MSG}"
+    ${If} $InstallLogHandle != ""
+        FileWrite $InstallLogHandle "${_MSG}$\r$\n"
+    ${EndIf}
+!macroend
+
+!define Log "!insertmacro LOG_MSG"
+
+; ─────────────────────────────────────────────
 ; 安装部分
 ; ─────────────────────────────────────────────
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
+    !insertmacro LOG_INIT
     
     ; 直接安装程序文件 - 使用正确的编译时源路径
     ; GitHub Actions构建文件位于artifacts\windows-${ARCH}\目录
-    DetailPrint "正在安装DesktopTerminal-CEF应用程序..."
+    ${Log} "正在安装DesktopTerminal-CEF应用程序..."
     
     ; 安装主程序文件（从artifacts目录）
     File "artifacts\windows-${ARCH}\DesktopTerminal-CEF.exe"
-    DetailPrint "✓ 主程序已安装: DesktopTerminal-CEF.exe"
+    ${Log} "✓ 主程序已安装: DesktopTerminal-CEF.exe"
     
     ; 安装CEF核心库文件
     File /nonfatal "artifacts\windows-${ARCH}\libcef.dll"
@@ -175,7 +207,7 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\d3dcompiler_47.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libEGL.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libGLESv2.dll"
-    DetailPrint "✓ CEF核心库已安装"
+    ${Log} "✓ CEF核心库已安装"
     
     ; 注意：移除cef_sandbox.lib安装，因为它是静态链接库，运行时不需要
     
@@ -189,14 +221,14 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\libcrypto-1_1-x64.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libssl-1_1.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libcrypto-1_1.dll"
-    DetailPrint "✓ Qt5运行时库已安装"
+    ${Log} "✓ Qt5运行时库已安装"
     
     ; 安装CEF数据文件（根据实际构建输出调整）
     File /nonfatal "artifacts\windows-${ARCH}\icudtl.dat"
     File /nonfatal "artifacts\windows-${ARCH}\snapshot_blob.bin"
     File /nonfatal "artifacts\windows-${ARCH}\v8_context_snapshot.bin"
     File /nonfatal "artifacts\windows-${ARCH}\natives_blob.bin"
-    DetailPrint "✓ CEF数据文件已安装"
+    ${Log} "✓ CEF数据文件已安装"
     
     ; 安装CEF资源文件
     File /nonfatal "artifacts\windows-${ARCH}\cef.pak"
@@ -204,38 +236,38 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\cef_200_percent.pak"
     File /nonfatal "artifacts\windows-${ARCH}\cef_extensions.pak"
     File /nonfatal "artifacts\windows-${ARCH}\devtools_resources.pak"
-    DetailPrint "✓ CEF资源文件已安装"
+    ${Log} "✓ CEF资源文件已安装"
     
     ; 安装本地化文件目录
     File /r "artifacts\windows-${ARCH}\locales"
-    DetailPrint "✓ 本地化文件已安装"
+    ${Log} "✓ 本地化文件已安装"
 
     ; 先复制构建产物中的resources目录（如果存在）
     ${If} ${FileExists} "artifacts\windows-${ARCH}\resources"
         File /r "artifacts\windows-${ARCH}\resources"
-        DetailPrint "✓ 构建产物resources已安装"
+        ${Log} "✓ 构建产物resources已安装"
     ${EndIf}
 
     ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
     CreateDirectory "$INSTDIR\platforms"
     File /nonfatal /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
-    DetailPrint "✓ Qt5平台插件已安装"
+    ${Log} "✓ Qt5平台插件已安装"
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
-    DetailPrint "正在验证安装结果..."
+    ${Log} "正在验证安装结果..."
     
     ; 初始化验证错误变量
     StrCpy $VerificationErrors ""
     
     ; 检查主程序文件是否成功安装
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
-        DetailPrint "✓ 主程序安装成功"
+        ${Log} "✓ 主程序安装成功"
         ; 验证文件大小（应该大于1MB）
         ${GetSize} "$INSTDIR\DesktopTerminal-CEF.exe" "/S=0K" $R1 $R2 $R3
         ${If} $R1 > 1000  ; 大于1MB
-            DetailPrint "✓ 主程序文件大小正常 ($R1 KB)"
+            ${Log} "✓ 主程序文件大小正常 ($R1 KB)"
         ${Else}
-            DetailPrint "⚠ 主程序文件可能不完整 ($R1 KB)"
+            ${Log} "⚠ 主程序文件可能不完整 ($R1 KB)"
         ${EndIf}
     ${Else}
         MessageBox MB_ICONSTOP "❌ 主程序安装失败：$INSTDIR\DesktopTerminal-CEF.exe$\n$\n可能原因：$\n1. 磁盘空间不足$\n2. 目标目录无写权限$\n3. 杀毒软件拦截"
@@ -244,23 +276,23 @@ Section "主程序" SecMain
     
     ; 检查CEF核心库是否安装
     ${If} ${FileExists} "$INSTDIR\libcef.dll"
-        DetailPrint "✓ CEF核心库安装成功"
+        ${Log} "✓ CEF核心库安装成功"
     ${Else}
-        DetailPrint "⚠ CEF核心库未安装，程序可能无法运行"
+        ${Log} "⚠ CEF核心库未安装，程序可能无法运行"
     ${EndIf}
     
     ; CEF 75 单进程模式：验证架构特定的依赖文件
     ${If} "${ARCH}" == "x86"
         ${If} ${FileExists} "$INSTDIR\d3dcompiler_47.dll"
-            DetailPrint "✓ DirectX编译器库安装成功"
+            ${Log} "✓ DirectX编译器库安装成功"
         ${Else}
-            DetailPrint "⚠ DirectX编译器库缺失，可能影响渲染效果"
+            ${Log} "⚠ DirectX编译器库缺失，可能影响渲染效果"
         ${EndIf}
     ${Else}
         ${If} ${FileExists} "$INSTDIR\libcef.dll"
-            DetailPrint "✓ CEF核心库验证通过"
+            ${Log} "✓ CEF核心库验证通过"
         ${Else}
-            DetailPrint "❌ CEF核心库缺失"
+            ${Log} "❌ CEF核心库缺失"
             StrCpy $VerificationErrors "$VerificationErrors• CEF核心库 libcef.dll 缺失$\n"
         ${EndIf}
     ${EndIf}
@@ -270,39 +302,39 @@ Section "主程序" SecMain
         ${If} ${FileExists} "$INSTDIR\Qt5Gui.dll"
             ${If} ${FileExists} "$INSTDIR\Qt5Widgets.dll"
                 ${If} ${FileExists} "$INSTDIR\Qt5Network.dll"
-                    DetailPrint "✓ Qt5运行时库安装完整"
+                    ${Log} "✓ Qt5运行时库安装完整"
                 ${Else}
-                    DetailPrint "⚠ Qt5Network.dll缺失，网络功能将无法使用"
+                    ${Log} "⚠ Qt5Network.dll缺失，网络功能将无法使用"
                 ${EndIf}
             ${Else}
-                DetailPrint "⚠ Qt5Widgets.dll缺失"
+                ${Log} "⚠ Qt5Widgets.dll缺失"
             ${EndIf}
         ${Else}
-            DetailPrint "⚠ Qt5Gui.dll缺失"
+            ${Log} "⚠ Qt5Gui.dll缺失"
         ${EndIf}
     ${Else}
-        DetailPrint "⚠ Qt5Core.dll缺失，程序无法启动"
+        ${Log} "⚠ Qt5Core.dll缺失，程序无法启动"
     ${EndIf}
     
     ; 统计安装文件数量
     ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
-    DetailPrint "安装完成：$R2 个文件，总大小 $R1 KB"
+    ${Log} "安装完成：$R2 个文件，总大小 $R1 KB"
     
     ${If} $R2 < 3
-        DetailPrint "⚠ 安装文件数量偏少，请检查安装包完整性"
+        ${Log} "⚠ 安装文件数量偏少，请检查安装包完整性"
     ${ElseIf} $R1 < 500
-        DetailPrint "⚠ 安装大小偏小，可能文件缺失"
+        ${Log} "⚠ 安装大小偏小，可能文件缺失"
     ${Else}
-        DetailPrint "✓ 安装文件数量和大小正常"
+        ${Log} "✓ 安装文件数量和大小正常"
     ${EndIf}
 
     ; 资源目录
     CreateDirectory "$INSTDIR\resources"
-    DetailPrint "正在配置应用程序..."
+    ${Log} "正在配置应用程序..."
 
     ; 详见 docs/INSTALLER_NSIS_ENCODING.md
     ; 每次安装都用仓库模板覆盖，再由 PowerShell 补丁写入用户输入
-    DetailPrint "写入配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
+    ${Log} "写入配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
     SetOutPath "$INSTDIR\resources"
     File /oname=config.json "resources\config.json"
 
@@ -331,14 +363,14 @@ Section "主程序" SecMain
 
     ; 通过环境变量传递工作目录，脚本零参数调用，彻底避免参数解析问题
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_WORKDIR", w "$PLUGINSDIR")'
-    DetailPrint "Patching config.json..."
+    ${Log} "Patching config.json..."
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1"'
     Pop $R1
-    DetailPrint "PS exit: $R1"
+    ${Log} "PS exit: $R1"
 
     ${If} $R1 != 0
         ; VBScript 回退（不依赖 PowerShell，所有 Windows 内置）
-        DetailPrint "PS failed, VBScript fallback..."
+        ${Log} "PS failed, VBScript fallback..."
         FileOpen $0 "$PLUGINSDIR\patch.vbs" w
         FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
         FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-config-path.txt$\", 1, False, -1)$\r$\n"
@@ -367,13 +399,13 @@ Section "主程序" SecMain
 
         nsExec::ExecToLog 'cscript.exe //Nologo "$PLUGINSDIR\patch.vbs"'
         Pop $R1
-        DetailPrint "VBS exit: $R1"
+        ${Log} "VBS exit: $R1"
     ${EndIf}
 
     ${If} $R1 != 0
         MessageBox MB_ICONEXCLAMATION "配置文件写入失败$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
     ${Else}
-        DetailPrint "Config OK"
+        ${Log} "Config OK"
     ${EndIf}
     
     ; 复制资源文件到resources目录
@@ -382,7 +414,7 @@ Section "主程序" SecMain
     File /nonfatal "resources\logo.png"
     File /nonfatal "resources\app.manifest"
     File /nonfatal "resources\loading_animation.css"
-    DetailPrint "✓ 应用资源文件已安装"
+    ${Log} "✓ 应用资源文件已安装"
 
     ; 复制离线运行时安装包
     CreateDirectory "$INSTDIR\resources\dependencies"
@@ -390,7 +422,7 @@ Section "主程序" SecMain
     File /nonfatal "resources\dependencies\VC_redist.x86.exe"
     File /nonfatal "resources\dependencies\VC_redist.x64.exe"
     File /nonfatal "resources\dependencies\manifest.json"
-    DetailPrint "✓ 依赖安装包已复制"
+    ${Log} "✓ 依赖安装包已复制"
 
     ; 恢复输出路径到主目录
     SetOutPath "$INSTDIR"
@@ -426,73 +458,73 @@ Section "主程序" SecMain
     CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}（管理员模式）.lnk" "$INSTDIR\DesktopTerminal-CEF.exe" "" "$INSTDIR\resources\logo.ico" 0
     
     ; 提供权限说明信息
-    DetailPrint "已创建桌面和开始菜单快捷方式"
-    DetailPrint "注意：程序已配置为自动请求管理员权限"
+    ${Log} "已创建桌面和开始菜单快捷方式"
+    ${Log} "注意：程序已配置为自动请求管理员权限"
     
     ; 最终安装验证和诊断（适配CEF）
-    DetailPrint "正在进行最终安装验证..."
+    ${Log} "正在进行最终安装验证..."
     
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
-        DetailPrint "✓ 主程序文件验证通过"
+        ${Log} "✓ 主程序文件验证通过"
     ${Else}
-        DetailPrint "❌ 主程序文件缺失"
+        ${Log} "❌ 主程序文件缺失"
         StrCpy $VerificationErrors "$VerificationErrors• 主程序文件 DesktopTerminal-CEF.exe 缺失$\n"
     ${EndIf}
     
     ${If} ${FileExists} "$INSTDIR\resources\config.json"
-        DetailPrint "✓ 配置文件验证通过"
+        ${Log} "✓ 配置文件验证通过"
     ${Else}
-        DetailPrint "⚠ 配置文件缺失，将影响程序启动"
+        ${Log} "⚠ 配置文件缺失，将影响程序启动"
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
     ${EndIf}
     
     ; 验证关键CEF数据文件
     ${If} ${FileExists} "$INSTDIR\icudtl.dat"
-        DetailPrint "✓ CEF ICU数据文件验证通过"
+        ${Log} "✓ CEF ICU数据文件验证通过"
     ${Else}
-        DetailPrint "❌ CEF ICU数据文件缺失，程序无法启动"
+        ${Log} "❌ CEF ICU数据文件缺失，程序无法启动"
         StrCpy $VerificationErrors "$VerificationErrors• CEF ICU数据文件 icudtl.dat 缺失$\n"
     ${EndIf}
     
     ; 验证关键CEF子进程文件（架构特定处理）
     ${If} "${ARCH}" == "x86"
         ; 32位系统：单进程模式验证
-        DetailPrint "ℹ 32位系统验证：CEF单进程模式配置"
+        ${Log} "ℹ 32位系统验证：CEF单进程模式配置"
         ${If} ${FileExists} "$INSTDIR\d3dcompiler_47.dll"
-            DetailPrint "✓ DirectX编译器库验证通过"
+            ${Log} "✓ DirectX编译器库验证通过"
         ${Else}
-            DetailPrint "⚠ DirectX编译器库验证失败，可能影响渲染"
+            ${Log} "⚠ DirectX编译器库验证失败，可能影响渲染"
         ${EndIf}
     ${Else}
         ; 64位系统：CEF 75验证
-        DetailPrint "ℹ CEF 75配置：核心库验证"
+        ${Log} "ℹ CEF 75配置：核心库验证"
         ${If} ${FileExists} "$INSTDIR\libcef.dll"
-            DetailPrint "✓ CEF核心库验证通过"
+            ${Log} "✓ CEF核心库验证通过"
         ${Else}
-            DetailPrint "❌ CEF核心库验证失败"
+            ${Log} "❌ CEF核心库验证失败"
             StrCpy $VerificationErrors "$VerificationErrors• CEF核心库 libcef.dll 缺失$\n"
         ${EndIf}
     ${EndIf}
     
     ; 可选：检查crashpad处理程序（仅信息记录）
     ${If} ${FileExists} "$INSTDIR\crashpad_handler.exe"
-        DetailPrint "✓ 检测到crashpad崩溃处理程序"
+        ${Log} "✓ 检测到crashpad崩溃处理程序"
     ${Else}
-        DetailPrint "✓ 使用CEF内嵌崩溃处理（正常）"
+        ${Log} "✓ 使用CEF内嵌崩溃处理（正常）"
     ${EndIf}
     
     ; 统计安装文件数量进行验证
     ${GetSize} "$INSTDIR" "/S=0K" $R1 $R2 $R3
-    DetailPrint "安装统计：$R2 个文件，总大小 $R1 KB"
+    ${Log} "安装统计：$R2 个文件，总大小 $R1 KB"
     
     ${If} $R2 < 3
-        DetailPrint "❌ 安装文件数量异常偏少"
+        ${Log} "❌ 安装文件数量异常偏少"
         StrCpy $VerificationErrors "$VerificationErrors• 安装文件数量过少（仅 $R2 个文件）$\n"
     ${ElseIf} $R1 < 500
-        DetailPrint "❌ 安装文件总大小异常偏小"
+        ${Log} "❌ 安装文件总大小异常偏小"
         StrCpy $VerificationErrors "$VerificationErrors• 安装文件总大小异常（仅 $R1 KB）$\n"
     ${Else}
-        DetailPrint "✓ 文件数量和大小验证通过"
+        ${Log} "✓ 文件数量和大小验证通过"
     ${EndIf}
     
     ; 如果发现错误，显示详细诊断信息
@@ -500,14 +532,14 @@ Section "主程序" SecMain
         MessageBox MB_ICONSTOP "❌ 安装验证失败！$\n$\n发现的问题：$\n$VerificationErrors$\n可能原因：$\n1. 安装包文件不完整或损坏$\n2. 磁盘空间不足或写权限受限$\n3. 杀毒软件阻止了文件写入$\n4. 系统环境不兼容$\n$\n建议：$\n- 重新下载安装包$\n- 以管理员身份运行安装程序$\n- 临时关闭杀毒软件后重试"
         Abort
     ${Else}
-        DetailPrint "✅ 所有验证检查通过"
+        ${Log} "✅ 所有验证检查通过"
         
         ; 检查并自动安装VC++运行时（CEF需要）
-        DetailPrint "检查Visual C++ Redistributable运行时..."
+        ${Log} "检查Visual C++ Redistributable运行时..."
         ClearErrors
         ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
         ${If} ${Errors}
-            DetailPrint "未检测到Visual C++ Redistributable，正在自动安装..."
+            ${Log} "未检测到Visual C++ Redistributable，正在自动安装..."
             
             StrCpy $VCInstallerPath ""
             ${If} "${ARCH}" == "x64"
@@ -523,25 +555,25 @@ Section "主程序" SecMain
             ${EndIf}
             
             ${If} $VCInstallerPath != ""
-                DetailPrint "开始静默安装VC++ Redistributable..."
+                ${Log} "开始静默安装VC++ Redistributable..."
                 ExecWait '"$VCInstallerPath" /install /quiet /norestart' $R1
                 
                 ${If} $R1 == 0
-                    DetailPrint "✓ VC++ Redistributable安装成功"
+                    ${Log} "✓ VC++ Redistributable安装成功"
                     ClearErrors
                     ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
                     ${If} ${Errors}
-                        DetailPrint "⚠ 安装后仍无法检测到VC++运行时，可能需要重启系统"
+                        ${Log} "⚠ 安装后仍无法检测到VC++运行时，可能需要重启系统"
                     ${Else}
-                        DetailPrint "✓ VC++运行时安装验证成功，版本：$R0"
+                        ${Log} "✓ VC++运行时安装验证成功，版本：$R0"
                     ${EndIf}
                 ${ElseIf} $R1 == 1638
-                    DetailPrint "ℹ VC++ Redistributable已是最新版本"
+                    ${Log} "ℹ VC++ Redistributable已是最新版本"
                 ${ElseIf} $R1 == 3010
-                    DetailPrint "✓ VC++ Redistributable安装成功，但需要重启系统"
+                    ${Log} "✓ VC++ Redistributable安装成功，但需要重启系统"
                     MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。"
                 ${Else}
-                    DetailPrint "❌ VC++ Redistributable安装失败，返回码：$R1"
+                    ${Log} "❌ VC++ Redistributable安装失败，返回码：$R1"
                     MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" IDYES manual_vc_download IDNO skip_manual_vc_download
                     manual_vc_download:
                         ${If} "${ARCH}" == "x64"
@@ -552,7 +584,7 @@ Section "主程序" SecMain
                     skip_manual_vc_download:
                 ${EndIf}
             ${Else}
-                DetailPrint "❌ 未找到VC++ Redistributable安装包"
+                ${Log} "❌ 未找到VC++ Redistributable安装包"
                 MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且离线安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" IDYES fallback_vc_download IDNO skip_fallback_vc_download
                 fallback_vc_download:
                     ${If} "${ARCH}" == "x64"
@@ -563,11 +595,12 @@ Section "主程序" SecMain
                 skip_fallback_vc_download:
             ${EndIf}
         ${Else}
-            DetailPrint "✓ 检测到Visual C++ Redistributable，版本：$R0"
+            ${Log} "✓ 检测到Visual C++ Redistributable，版本：$R0"
         ${EndIf}
         
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致"
     ${EndIf}
+    !insertmacro LOG_CLOSE
 SectionEnd
 
 ; ─────────────────────────────────────────────
