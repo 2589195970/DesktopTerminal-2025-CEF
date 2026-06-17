@@ -341,6 +341,12 @@ QString ConfigManager::getDesktopAuthEndpoint() const
     return desktopAuth.value("authEndpoint").toString();
 }
 
+QString ConfigManager::getDesktopApiBaseUrl() const
+{
+    QJsonObject desktopAuth = config.value("desktopAuth").toObject();
+    return desktopAuth.value("apiBaseUrl").toString();
+}
+
 // 网络检查配置
 QString ConfigManager::getCheckUrl() const
 {

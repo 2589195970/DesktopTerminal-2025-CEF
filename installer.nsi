@@ -69,10 +69,12 @@ Var /GLOBAL VerificationErrors
 Var /GLOBAL VCInstallerPath
 Var /GLOBAL ConfigURL
 Var /GLOBAL ConfigPassword
+Var /GLOBAL ConfigApiBaseUrl
 Var /GLOBAL RequirePassword
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
+Var /GLOBAL ApiBaseUrlText
 Var /GLOBAL RequirePasswordCheckbox
 
 ; ─────────────────────────────────────────────
@@ -126,15 +128,20 @@ Function ConfigPage
 
     ${NSD_CreateLabel} 0 20u 100% 12u "考试系统URL:"
     Pop $0
-    ${NSD_CreateText} 0 32u 100% 12u "http://211.87.253.144/stu?Client='ExamTerminal'"
+    ${NSD_CreateText} 0 32u 100% 12u "https://ks.mypt.edu.cn/stu?Client='ExamTerminal'"
     Pop $URLText
 
     ${NSD_CreateLabel} 0 52u 100% 12u "退出密码:"
     Pop $0
-    ${NSD_CreatePassword} 0 64u 100% 12u "Jwc6913064@"
+    ${NSD_CreatePassword} 0 64u 100% 12u "12753"
     Pop $PasswordText
 
-    ${NSD_CreateCheckbox} 0 84u 100% 12u "敏感操作需要密码验证(F10退出等)"
+    ${NSD_CreateLabel} 0 84u 100% 12u "后端API地址(可选,留空则自动从前端Config.json发现):"
+    Pop $0
+    ${NSD_CreateText} 0 96u 100% 12u ""
+    Pop $ApiBaseUrlText
+
+    ${NSD_CreateCheckbox} 0 116u 100% 12u "敏感操作需要密码验证(F10退出等)"
     Pop $RequirePasswordCheckbox
     ${NSD_Check} $RequirePasswordCheckbox
 
@@ -144,6 +151,7 @@ FunctionEnd
 Function ConfigPageLeave
     ${NSD_GetText} $URLText $ConfigURL
     ${NSD_GetText} $PasswordText $ConfigPassword
+    ${NSD_GetText} $ApiBaseUrlText $ConfigApiBaseUrl
     ${NSD_GetState} $RequirePasswordCheckbox $RequirePassword
 FunctionEnd
 
@@ -288,30 +296,42 @@ Section "主程序" SecMain
     DetailPrint "正在配置应用程序..."
 
     ; 使用用户输入的配置生成config.json（覆盖artifacts中的旧配置）
-    DetailPrint "生成配置文件: URL=$ConfigURL"
+    DetailPrint "生成配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
     FileOpen $0 "$INSTDIR\resources\config.json" w
     ; 写入UTF-8 BOM
     FileWriteByte $0 0xEF
     FileWriteByte $0 0xBB
     FileWriteByte $0 0xBF
-    ; JSON内容
+    ; JSON内容（与 resources/config.json 保持一致，desktopAuth 密钥预置）
     FileWrite $0 '{$\r$\n'
     FileWrite $0 '  "url": "$ConfigURL",$\r$\n'
     FileWrite $0 '  "exitPassword": "$ConfigPassword",$\r$\n'
-    FileWrite $0 '  "appName": "ZDF-Exam-Desktop",$\r$\n'
+    FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
     FileWrite $0 '  "iconPath": "logo.ico",$\r$\n'
     FileWrite $0 '  "appVersion": "1.0.0",$\r$\n'
-    FileWrite $0 '  "configVersion": "installer-generated",$\r$\n'
-    FileWrite $0 '  "cefLogLevel": "WARNING",$\r$\n'
-    FileWrite $0 '  "strictSecurityMode": true,$\r$\n'
-    FileWrite $0 '  "keyboardFilterEnabled": true,$\r$\n'
-    FileWrite $0 '  "contextMenuEnabled": false,$\r$\n'
+    FileWrite $0 '  "configVersion": "20260617",$\r$\n'
+    FileWrite $0 '  "urlExitEnabled": true,$\r$\n'
+    FileWrite $0 '  "urlExitPattern": "/logout",$\r$\n'
+    FileWrite $0 '  "strictSecurityMode": false,$\r$\n'
     ; sensitiveOperationRequirePassword: 1=checked, 0=unchecked
     ${If} $RequirePassword == 1
-        FileWrite $0 '  "sensitiveOperationRequirePassword": true$\r$\n'
+        FileWrite $0 '  "sensitiveOperationRequirePassword": true,$\r$\n'
     ${Else}
-        FileWrite $0 '  "sensitiveOperationRequirePassword": false$\r$\n'
+        FileWrite $0 '  "sensitiveOperationRequirePassword": false,$\r$\n'
     ${EndIf}
+    FileWrite $0 '  "desktopAuth": {$\r$\n'
+    FileWrite $0 '    "clientId": "DesktopTerminal-CEF",$\r$\n'
+    FileWrite $0 '    "clientSecret": "DesktopAuthKey",$\r$\n'
+    FileWrite $0 '    "authEndpoint": "",$\r$\n'
+    FileWrite $0 '    "apiBaseUrl": "$ConfigApiBaseUrl"$\r$\n'
+    FileWrite $0 '  },$\r$\n'
+    FileWrite $0 '  "cefSettings": {$\r$\n'
+    FileWrite $0 '    "enableGPU": true,$\r$\n'
+    FileWrite $0 '    "enableWebSecurity": true,$\r$\n'
+    FileWrite $0 '    "enableJavaScript": true,$\r$\n'
+    FileWrite $0 '    "debugPort": 0,$\r$\n'
+    FileWrite $0 '    "multiThreadedMessageLoop": true$\r$\n'
+    FileWrite $0 '  }$\r$\n'
     FileWrite $0 '}$\r$\n'
     FileClose $0
     DetailPrint "✓ 配置文件已生成"
@@ -506,7 +526,7 @@ Section "主程序" SecMain
             DetailPrint "✓ 检测到Visual C++ Redistributable，版本：$R0"
         ${EndIf}
         
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n注意：首次运行前请修改配置文件中的URL和密码设置。"
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致"
     ${EndIf}
 SectionEnd
 

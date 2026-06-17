@@ -4,14 +4,15 @@
   "appName": "智多分机考桌面端-CEF",
   "iconPath": "logo.ico",
   "appVersion": "1.0.0",
-  "configVersion": "202511241437",
+  "configVersion": "20260617",
   "urlExitEnabled": true,
   "urlExitPattern": "/logout",
   "strictSecurityMode": false,
   "desktopAuth": {
     "clientId": "DesktopTerminal-CEF",
-    "clientSecret": "DesktopTerminal-CEF-Default-Secret-20260617",
-    "authEndpoint": ""
+    "clientSecret": "DesktopAuthKey",
+    "authEndpoint": "",
+    "apiBaseUrl": ""
   },
   "cefSettings": {
     "enableGPU": true,

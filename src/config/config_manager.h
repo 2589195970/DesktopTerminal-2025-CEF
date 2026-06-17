@@ -104,6 +104,7 @@ public:
     QString getDesktopClientId() const;
     QString getDesktopClientSecret() const;
     QString getDesktopAuthEndpoint() const;
+    QString getDesktopApiBaseUrl() const;
 
     // 直接访问配置对象（与原项目兼容）
     QJsonObject config;

@@ -21,12 +21,15 @@ public:
     QString buildRequestToken() const;
     bool isReady() const;
     QString allowedHost() const;
+    int allowedPort() const;
 
 private:
     explicit DesktopAuthManager(QObject *parent = nullptr);
 
     bool authenticate();
-    QString resolveAuthEndpoint() const;
+    QString resolveAuthEndpoint();
+    QString fetchApiBaseUrlFromFrontendConfig();
+    QString buildFrontendConfigUrl() const;
 
     ConfigManager *m_configManager;
     Logger *m_logger;
@@ -34,7 +37,8 @@ private:
     QString m_clientSecret;
     QString m_authEndpoint;
     QString m_allowedHost;
-    QString m_aesKey;
+    int m_allowedPort;
+    QString m_sessionToken;
     QDateTime m_expireAt;
     mutable QMutex m_mutex;
 };

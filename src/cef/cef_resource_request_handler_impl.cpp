@@ -20,8 +20,14 @@ cef_return_value_t CEFResourceRequestHandlerImpl::OnBeforeResourceLoad(
     }
 
     const QString requestUrl = QString::fromStdString(request->GetURL().ToString());
-    const QString requestHost = QUrl(requestUrl).host().toLower();
+    const QUrl parsedUrl(requestUrl);
+    const QString requestHost = parsedUrl.host().toLower();
+    const int requestPort = parsedUrl.port(-1);
+    const int allowedPort = DesktopAuthManager::instance().allowedPort();
     if (requestHost != allowedHost) {
+        return RV_CONTINUE;
+    }
+    if (allowedPort > 0 && requestPort > 0 && requestPort != allowedPort) {
         return RV_CONTINUE;
     }
 
