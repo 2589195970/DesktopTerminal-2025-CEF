@@ -36,10 +36,10 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup MSVC Environment
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: step-security/msvc-dev-cmd@v1.13.1
       with:
         arch: ${{ matrix.arch }}
 
@@ -47,11 +47,11 @@ jobs:
       shell: cmd
       run: |
         echo "检查Qt ${{ env.QT_VERSION }}可用架构..."
-        python -m pip install aqtinstall==3.1.*
+        python -m pip install aqtinstall==3.3.*
         python -m aqt list-qt windows desktop --arch ${{ env.QT_VERSION }} || echo "架构检查失败，继续尝试安装"
 
     - name: Install Qt ${{ env.QT_VERSION }}
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4.3.1
       timeout-minutes: 15
       with:
         version: ${{ env.QT_VERSION }}
@@ -61,7 +61,7 @@ jobs:
 
     - name: Restore CEF Cache ${{ matrix.arch }}
       id: cache-cef
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: third_party/cef
         key: cef-${{ matrix.arch }}-${{ matrix.cef_version }}-verified
@@ -290,7 +290,7 @@ jobs:
 
     - name: Save CEF Cache ${{ matrix.arch }}
       if: steps.cache-cef.outputs.cache-hit != 'true' && steps.final-verify-cef-cache.outputs.cef-valid == 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: third_party/cef
         key: cef-${{ matrix.arch }}-${{ matrix.cef_version }}-verified
@@ -1437,14 +1437,14 @@ jobs:
         )
 
     - name: Upload Windows ${{ matrix.arch }} Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: DesktopTerminal-CEF-windows-${{ matrix.arch }}
         path: artifacts/windows-${{ matrix.arch }}/
         retention-days: 30
 
     - name: Upload Windows Installer
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: DesktopTerminal-CEF-installer-${{ matrix.arch }}
         path: Output/*.exe
@@ -1458,7 +1458,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Install system dependencies
       run: |
@@ -1485,14 +1485,14 @@ jobs:
           libxi6
 
     - name: Install Qt ${{ env.QT_VERSION }}
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4.3.1
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
 
     - name: Restore CEF Cache Linux
       id: cache-cef-linux
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: third_party/cef
         key: cef-linux-x64-75.1.14-verified-v3
@@ -1548,7 +1548,7 @@ jobs:
 
     - name: Save CEF Cache Linux
       if: steps.cache-cef-linux.outputs.cache-hit != 'true' && (steps.verify-cef-cache-linux.outputs.cef-valid == 'true' || steps.download-cef-linux.outcome == 'success')
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: third_party/cef
         key: cef-linux-x64-75.1.14-verified-v3
@@ -1599,7 +1599,7 @@ jobs:
         EOF
 
     - name: Upload Linux Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: DesktopTerminal-CEF-linux-x64
         path: artifacts/linux-x64/
@@ -1613,17 +1613,17 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Install Qt ${{ env.QT_VERSION }}
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4.3.1
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
 
     - name: Restore CEF Cache macOS
       id: cache-cef-macos
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: third_party/cef
         key: cef-macos-x64-75.1.14
@@ -1660,7 +1660,7 @@ jobs:
 
     - name: Save CEF Cache macOS
       if: steps.cache-cef-macos.outputs.cache-hit != 'true' && (steps.verify-cef-cache-macos.outputs.cef-valid == 'true' || steps.download-cef-macos.outcome == 'success')
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: third_party/cef
         key: cef-macos-x64-75.1.14
@@ -1710,7 +1710,7 @@ jobs:
         EOF
 
     - name: Upload macOS Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: DesktopTerminal-CEF-macos-x64
         path: artifacts/macos-x64/
@@ -1723,7 +1723,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Verify Project Structure
       run: |
@@ -1787,7 +1787,7 @@ jobs:
         fi
 
     - name: Install Qt for CMake test
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4.3.1
       with:
         version: '5.15.2'
         cache: true
@@ -1808,7 +1808,7 @@ jobs:
         echo "[OK] CMake configuration successful"
 
     - name: Security Scan with Trivy
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -1824,7 +1824,7 @@ jobs:
     
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         pattern: DesktopTerminal-CEF-*
         merge-multiple: true
@@ -1857,7 +1857,7 @@ jobs:
         ls -la *.zip *.tar.gz
 
     - name: Upload release assets
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip
