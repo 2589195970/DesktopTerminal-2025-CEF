@@ -20,9 +20,11 @@ else()
     message(STATUS "32位架构检测")
 endif()
 
-# 全平台统一使用CEF 75以获得最大兼容性
-set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
-message(STATUS "使用CEF 75.1.14版本 - 全平台最大兼容性模式")
+# 全平台默认 CEF 75；macOS Apple Silicon 打包可通过 -DCEF_VERSION 覆盖为 118
+if(NOT CEF_VERSION)
+    set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
+endif()
+message(STATUS "使用CEF版本: ${CEF_VERSION}")
 
 # 为所有平台设置CEF 75兼容性优化
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -268,12 +270,15 @@ set(SOURCES
     src/core/system_checker.cpp
     src/cef/cef_client_impl.cpp
     src/cef/cef_app_impl.cpp
+    src/cef/cef_resource_request_handler_impl.cpp
     src/config/config_manager.cpp
     src/logging/logger.cpp
     src/security/security_controller.cpp
     src/security/keyboard_filter.cpp
     src/security/windows_key_blocker.cpp
+    src/security/desktop_crypto.cpp
     src/network/network_checker.cpp
+    src/network/desktop_auth_manager.cpp
     src/ui/loading_dialog.cpp
     src/ui/password_dialog.cpp
     resources/resources.qrc
@@ -288,12 +293,15 @@ set(HEADERS
     src/core/system_checker.h
     src/cef/cef_client_impl.h
     src/cef/cef_app_impl.h
+    src/cef/cef_resource_request_handler_impl.h
     src/config/config_manager.h
     src/logging/logger.h
     src/security/security_controller.h
     src/security/keyboard_filter.h
     src/security/windows_key_blocker.h
+    src/security/desktop_crypto.h
     src/network/network_checker.h
+    src/network/desktop_auth_manager.h
     src/ui/loading_dialog.h
     src/ui/password_dialog.h
 )

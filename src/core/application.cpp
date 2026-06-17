@@ -4,6 +4,7 @@
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../network/network_checker.h"
+#include "../network/desktop_auth_manager.h"
 
 #include <QDir>
 #include <QStandardPaths>
@@ -147,6 +148,14 @@ bool Application::initialize()
         m_logger->errorEvent("网络检查失败");
         emit initializationError("网络连接失败，请检查网络设置");
         QMessageBox::critical(nullptr, "网络错误", "无法连接到指定服务器，请检查您的网络连接。");
+        return false;
+    }
+
+    emit initializationProgress("正在进行桌面端身份认证...");
+    if (!DesktopAuthManager::instance().initialize(m_configManager, m_logger)) {
+        m_logger->errorEvent("桌面端身份认证失败");
+        emit initializationError("桌面端身份认证失败，请检查服务端配置");
+        QMessageBox::critical(nullptr, "认证错误", "无法完成桌面端身份认证，请联系管理员。");
         return false;
     }
 

@@ -8,6 +8,11 @@
   "urlExitEnabled": true,
   "urlExitPattern": "/logout",
   "strictSecurityMode": false,
+  "desktopAuth": {
+    "clientId": "DesktopTerminal-CEF",
+    "clientSecret": "DesktopTerminal-CEF-Default-Secret-20260617",
+    "authEndpoint": ""
+  },
   "cefSettings": {
     "enableGPU": true,
     "enableWebSecurity": true,

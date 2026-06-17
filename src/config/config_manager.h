@@ -100,6 +100,11 @@ public:
     bool isLogBufferingEnabled() const;
     int getLogFlushIntervalSeconds() const;
 
+    // 桌面端认证配置
+    QString getDesktopClientId() const;
+    QString getDesktopClientSecret() const;
+    QString getDesktopAuthEndpoint() const;
+
     // 直接访问配置对象（与原项目兼容）
     QJsonObject config;
 

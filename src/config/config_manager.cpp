@@ -323,6 +323,24 @@ int ConfigManager::getLogFlushIntervalSeconds() const
     return config.value("logFlushIntervalSeconds").toInt(5);
 }
 
+QString ConfigManager::getDesktopClientId() const
+{
+    QJsonObject desktopAuth = config.value("desktopAuth").toObject();
+    return desktopAuth.value("clientId").toString();
+}
+
+QString ConfigManager::getDesktopClientSecret() const
+{
+    QJsonObject desktopAuth = config.value("desktopAuth").toObject();
+    return desktopAuth.value("clientSecret").toString();
+}
+
+QString ConfigManager::getDesktopAuthEndpoint() const
+{
+    QJsonObject desktopAuth = config.value("desktopAuth").toObject();
+    return desktopAuth.value("authEndpoint").toString();
+}
+
 // 网络检查配置
 QString ConfigManager::getCheckUrl() const
 {

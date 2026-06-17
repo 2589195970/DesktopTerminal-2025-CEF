@@ -1,4 +1,5 @@
 #include "cef_client_impl.h"
+#include "cef_resource_request_handler_impl.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../core/application.h"
@@ -200,9 +201,14 @@ bool CEFClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFra
 
 CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation, bool is_download, const CefString& request_initiator, bool& disable_default_handling)
 {
-    // 在这里可以返回自定义的资源请求处理器
-    // 目前返回nullptr使用默认处理
-    return nullptr;
+    Q_UNUSED(browser)
+    Q_UNUSED(frame)
+    Q_UNUSED(request)
+    Q_UNUSED(is_navigation)
+    Q_UNUSED(is_download)
+    Q_UNUSED(request_initiator)
+    Q_UNUSED(disable_default_handling)
+    return new CEFResourceRequestHandlerImpl();
 }
 
 // ==================== CefKeyboardHandler接口实现（安全控制）====================

@@ -13,9 +13,17 @@ if(WIN32)
     endif()
 endif()
 
-# macOS平台检测
+# macOS平台检测（Windows/Linux 逻辑不变）
 if(APPLE)
-    set(CEF_PLATFORM_SUFFIX "macosx64")
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+        set(CEF_PLATFORM_SUFFIX "macosarm64")
+    elseif(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
+        set(CEF_PLATFORM_SUFFIX "macosx64")
+    elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(CEF_PLATFORM_SUFFIX "macosarm64")
+    else()
+        set(CEF_PLATFORM_SUFFIX "macosx64")
+    endif()
 endif()
 
 # Linux平台检测
