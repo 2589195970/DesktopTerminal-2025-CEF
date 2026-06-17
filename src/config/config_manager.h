@@ -120,6 +120,7 @@ private:
     ConfigManager& operator=(const ConfigManager&) = delete;
 
     void migrateConfig(const QString &targetPath);
+    void applyOverrideConfig(const QString &overridePath);
 
     QString actualConfigPath;
 };

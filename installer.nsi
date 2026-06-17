@@ -332,81 +332,27 @@ Section "主程序" SecMain
     CreateDirectory "$INSTDIR\resources"
     ${Log} "正在配置应用程序..."
 
-    ; 详见 docs/INSTALLER_NSIS_ENCODING.md
-    ; 每次安装都用仓库模板覆盖，再由 PowerShell 补丁写入用户输入
-    ${Log} "写入配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
+    ; 复制 config.json 模板（UTF-8，包含中文 appName，不做任何修改）
     SetOutPath "$INSTDIR\resources"
     File /oname=config.json "resources\config.json"
+    ${Log} "config.json template copied"
 
+    ; 用户输入写到 config.override.ini（纯 ASCII，NSIS FileWrite 无编码问题）
+    ; 程序启动时 ConfigManager 会读取此文件覆盖 config.json 中的对应字段
     ${If} $RequirePassword == 1
         StrCpy $R9 "true"
     ${Else}
         StrCpy $R9 "false"
     ${EndIf}
 
-    ; 用户输入写到临时参数文件（纯 ASCII 路径），避免命令行传参转义问题
-    InitPluginsDir
-    FileOpen $0 "$PLUGINSDIR\dtcef-install-params.txt" w
-    FileWrite $0 "$ConfigURL$\r$\n"
-    FileWrite $0 "$ConfigPassword$\r$\n"
-    FileWrite $0 "$ConfigApiBaseUrl$\r$\n"
-    FileWrite $0 "$R9$\r$\n"
+    FileOpen $0 "$INSTDIR\resources\config.override.ini" w
+    FileWrite $0 "[override]$\r$\n"
+    FileWrite $0 "url=$ConfigURL$\r$\n"
+    FileWrite $0 "exitPassword=$ConfigPassword$\r$\n"
+    FileWrite $0 "apiBaseUrl=$ConfigApiBaseUrl$\r$\n"
+    FileWrite $0 "sensitiveOperationRequirePassword=$R9$\r$\n"
     FileClose $0
-
-    ; 也把 config.json 的路径写到文件，避免中文目录在命令行中丢失
-    FileOpen $0 "$PLUGINSDIR\dtcef-config-path.txt" w
-    FileWrite $0 "$INSTDIR\resources\config.json"
-    FileClose $0
-
-    SetOutPath "$PLUGINSDIR"
-    File "scripts\patch-install-config.ps1"
-
-    ; 通过环境变量传递工作目录，脚本零参数调用，彻底避免参数解析问题
-    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_WORKDIR", w "$PLUGINSDIR")'
-    ${Log} "Patching config.json..."
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1"'
-    Pop $R1
-    ${Log} "PS exit: $R1"
-
-    ${If} $R1 != 0
-        ; VBScript 回退（不依赖 PowerShell，所有 Windows 内置）
-        ${Log} "PS failed, VBScript fallback..."
-        FileOpen $0 "$PLUGINSDIR\patch.vbs" w
-        FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
-        FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-config-path.txt$\", 1, False, -1)$\r$\n"
-        FileWrite $0 "cfgPath = Trim(f.ReadLine)$\r$\n"
-        FileWrite $0 "f.Close$\r$\n"
-        FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-install-params.txt$\", 1, False, -1)$\r$\n"
-        FileWrite $0 "newUrl = f.ReadLine$\r$\n"
-        FileWrite $0 "newPwd = f.ReadLine$\r$\n"
-        FileWrite $0 "f.Close$\r$\n"
-        FileWrite $0 "Set stream = CreateObject($\"ADODB.Stream$\")$\r$\n"
-        FileWrite $0 "stream.Type = 2$\r$\n"
-        FileWrite $0 "stream.Charset = $\"utf-8$\"$\r$\n"
-        FileWrite $0 "stream.Open$\r$\n"
-        FileWrite $0 "stream.LoadFromFile cfgPath$\r$\n"
-        FileWrite $0 "txt = stream.ReadText$\r$\n"
-        FileWrite $0 "stream.Close$\r$\n"
-        FileWrite $0 "txt = Replace(txt, $\"https://ks.mypt.edu.cn/stu?Client='ExamTerminal'$\", newUrl)$\r$\n"
-        FileWrite $0 "txt = Replace(txt, $\"12753$\", newPwd)$\r$\n"
-        FileWrite $0 "stream.Open$\r$\n"
-        FileWrite $0 "stream.Position = 0$\r$\n"
-        FileWrite $0 "stream.SetEOS$\r$\n"
-        FileWrite $0 "stream.WriteText txt$\r$\n"
-        FileWrite $0 "stream.SaveToFile cfgPath, 2$\r$\n"
-        FileWrite $0 "stream.Close$\r$\n"
-        FileClose $0
-
-        nsExec::ExecToLog 'cscript.exe //Nologo "$PLUGINSDIR\patch.vbs"'
-        Pop $R1
-        ${Log} "VBS exit: $R1"
-    ${EndIf}
-
-    ${If} $R1 != 0
-        MessageBox MB_ICONEXCLAMATION "配置文件写入失败$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
-    ${Else}
-        ${Log} "Config OK"
-    ${EndIf}
+    ${Log} "config.override.ini written: url=$ConfigURL, api=$ConfigApiBaseUrl"
     
     ; 复制资源文件到resources目录
     SetOutPath "$INSTDIR\resources"

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonParseError>
 #include <QInputDialog>
+#include <QSettings>
 #ifdef Q_OS_WIN
 #include <QTextCodec>
 #endif
@@ -83,6 +84,9 @@ bool ConfigManager::loadConfig(const QString &configPath)
     }
 
     config = doc.object();
+
+    applyOverrideConfig(exe + "/resources/config.override.ini");
+
     if (!validateConfig()) {
         QStringList missing;
         QStringList requiredFields = {"url", "exitPassword", "appName"};
@@ -150,6 +154,46 @@ void ConfigManager::migrateConfig(const QString &targetPath)
             return;
         }
     }
+}
+
+void ConfigManager::applyOverrideConfig(const QString &overridePath)
+{
+    QFileInfo fi(overridePath);
+    if (!fi.exists()) {
+        return;
+    }
+
+    QSettings ini(overridePath, QSettings::IniFormat);
+    ini.setIniCodec("UTF-8");
+    ini.beginGroup("override");
+
+    const QString url = ini.value("url").toString().trimmed();
+    if (!url.isEmpty()) {
+        config["url"] = url;
+        qInfo() << "config.override: url =" << url;
+    }
+
+    const QString exitPassword = ini.value("exitPassword").toString().trimmed();
+    if (!exitPassword.isEmpty()) {
+        config["exitPassword"] = exitPassword;
+        qInfo() << "config.override: exitPassword = ***";
+    }
+
+    const QString apiBaseUrl = ini.value("apiBaseUrl").toString().trimmed();
+    if (!apiBaseUrl.isEmpty()) {
+        QJsonObject desktopAuth = config.value("desktopAuth").toObject();
+        desktopAuth["apiBaseUrl"] = apiBaseUrl;
+        config["desktopAuth"] = desktopAuth;
+        qInfo() << "config.override: apiBaseUrl =" << apiBaseUrl;
+    }
+
+    const QString requirePwd = ini.value("sensitiveOperationRequirePassword").toString().trimmed().toLower();
+    if (!requirePwd.isEmpty()) {
+        config["sensitiveOperationRequirePassword"] = (requirePwd == "true" || requirePwd == "1");
+        qInfo() << "config.override: sensitiveOperationRequirePassword =" << requirePwd;
+    }
+
+    ini.endGroup();
 }
 
 bool ConfigManager::validateConfig() const
