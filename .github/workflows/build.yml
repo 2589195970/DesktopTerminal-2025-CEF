@@ -1178,9 +1178,13 @@ jobs:
             exit 1
         }
 
-        Write-Host "=== Deploying OpenSSL for Qt HTTPS ==="
+        Write-Host "=== Deploying OpenSSL for Qt HTTPS (best-effort) ==="
         $opensslArch = "${{ matrix.arch }}"
-        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch
+        try {
+            & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch
+        } catch {
+            Write-Host "[WARN] OpenSSL deploy script error (non-fatal): $_"
+        }
         
         # Copy project documentation with existence checks
         Write-Host "Copying project documentation..."
