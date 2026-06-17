@@ -329,25 +329,16 @@ Section "主程序" SecMain
     SetOutPath "$PLUGINSDIR"
     File "scripts\patch-install-config.ps1"
 
-    ; 方式1: ExecWait 调用 PowerShell 补丁脚本
-    DetailPrint "Patching config.json via PowerShell..."
-    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"' $R1
-    DetailPrint "PowerShell exit: $R1"
+    ; 通过环境变量传递工作目录，脚本零参数调用，彻底避免参数解析问题
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_WORKDIR", w "$PLUGINSDIR")'
+    DetailPrint "Patching config.json..."
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1"'
+    Pop $R1
+    DetailPrint "PS exit: $R1"
 
     ${If} $R1 != 0
-        ; 方式2: 通过 cmd /c 包裹调用
-        DetailPrint "Retrying via cmd /c..."
-        nsExec::ExecToLog 'cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"'
-        Pop $R1
-        DetailPrint "cmd+PS exit: $R1"
-    ${EndIf}
-
-    ${If} $R1 != 0
-        ; 方式3: 不依赖 PowerShell，用 NSIS 直接写纯 ASCII 替换
-        ; config.json 模板中默认 URL 和密码已知，直接按字节替换
-        DetailPrint "PowerShell failed, using NSIS native fallback..."
-
-        ; VBScript 做 UTF-8 文本替换（所有 Windows 内置，无需 PowerShell）
+        ; VBScript 回退（不依赖 PowerShell，所有 Windows 内置）
+        DetailPrint "PS failed, VBScript fallback..."
         FileOpen $0 "$PLUGINSDIR\patch.vbs" w
         FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
         FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-config-path.txt$\", 1, False, -1)$\r$\n"
@@ -376,13 +367,13 @@ Section "主程序" SecMain
 
         nsExec::ExecToLog 'cscript.exe //Nologo "$PLUGINSDIR\patch.vbs"'
         Pop $R1
-        DetailPrint "VBScript exit: $R1"
+        DetailPrint "VBS exit: $R1"
     ${EndIf}
 
     ${If} $R1 != 0
         MessageBox MB_ICONEXCLAMATION "配置文件写入失败$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
     ${Else}
-        DetailPrint "Config patch OK"
+        DetailPrint "Config OK"
     ${EndIf}
     
     ; 复制资源文件到resources目录

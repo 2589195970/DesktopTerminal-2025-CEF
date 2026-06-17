@@ -1,19 +1,21 @@
-# Patch config.json with user-supplied install values. Always outputs UTF-8 no BOM.
-# Called by installer with: -WorkDir "$PLUGINSDIR"
-# Reads: WorkDir\dtcef-config-path.txt  (single line: full path to config.json)
-#        WorkDir\dtcef-install-params.txt (4 lines: url, password, apiBaseUrl, requirePassword)
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$WorkDir
-)
+# Patch config.json during install. Reads work dir from env var DTCEF_WORKDIR.
+# DTCEF_WORKDIR must contain:
+#   dtcef-config-path.txt    (single line: full path to config.json)
+#   dtcef-install-params.txt (4 lines: url, password, apiBaseUrl, requirePassword)
 
 $ErrorActionPreference = "Stop"
+
+$WorkDir = $env:DTCEF_WORKDIR
+if (-not $WorkDir -or -not (Test-Path -LiteralPath $WorkDir)) {
+    Write-Error "DTCEF_WORKDIR not set or invalid: $WorkDir"
+    exit 1
+}
 
 $configPathFile = Join-Path $WorkDir "dtcef-config-path.txt"
 $paramsFile = Join-Path $WorkDir "dtcef-install-params.txt"
 
-$ConfigPath = (Get-Content -LiteralPath $configPathFile -Raw -ErrorAction Stop).Trim()
-$lines = @(Get-Content -LiteralPath $paramsFile -ErrorAction Stop)
+$ConfigPath = (Get-Content -LiteralPath $configPathFile -Raw).Trim()
+$lines = @(Get-Content -LiteralPath $paramsFile)
 
 if ($lines.Count -lt 4) {
     Write-Error "Invalid params file (expected 4 lines, got $($lines.Count))"
@@ -62,7 +64,7 @@ $out = $json | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($ConfigPath, $out, $utf8NoBom)
 
 $logPath = Join-Path ([System.IO.Path]::GetDirectoryName($ConfigPath)) "install-config-patch.log"
-$logLine = "{0} | url={1} apiBaseUrl={2} requirePassword={3}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Url, $ApiBaseUrl, $RequirePassword
+$logLine = "{0} | url={1} apiBaseUrl={2}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Url, $ApiBaseUrl
 Add-Content -LiteralPath $logPath -Value $logLine -Encoding UTF8
 
 $verify = [System.IO.File]::ReadAllText($ConfigPath, $utf8NoBom)
