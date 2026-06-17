@@ -1,4 +1,3 @@
-# Windows 构建/打包时复制 OpenSSL 运行时，供 Qt QNetworkAccessManager HTTPS 使用
 param(
     [Parameter(Mandatory = $true)]
     [string]$TargetDir,
@@ -32,15 +31,17 @@ $searchRoots += @(
 $sourceDir = $null
 foreach ($root in $searchRoots) {
     if (-not $root) { continue }
+    Write-Host "[INFO] Checking OpenSSL path: $root"
     $probe = Join-Path $root $dllNames[0]
     if (Test-Path -LiteralPath $probe) {
         $sourceDir = $root
+        Write-Host "[OK] Found OpenSSL at: $root"
         break
     }
 }
 
 if (-not $sourceDir) {
-    Write-Host "[INFO] 未找到预装 OpenSSL，尝试 aqt 安装 tools_openssl..."
+    Write-Host "[INFO] No pre-installed OpenSSL found, trying aqt install..."
     $aqtOutput = if ($env:Qt5_Dir) {
         (Resolve-Path (Join-Path $env:Qt5_Dir "..\..\")).Path
     } else {
@@ -50,7 +51,7 @@ if (-not $sourceDir) {
     python -m aqt install-tool windows desktop $toolName -O $aqtOutput
     $sourceDir = Join-Path $aqtOutput "Tools\OpenSSL\$opensslSubdir\bin"
     if (-not (Test-Path -LiteralPath (Join-Path $sourceDir $dllNames[0]))) {
-        Write-Error "OpenSSL 安装后仍未找到 DLL: $sourceDir"
+        Write-Error "OpenSSL DLL not found after install: $sourceDir"
     }
 }
 
@@ -61,11 +62,11 @@ if (-not (Test-Path -LiteralPath $TargetDir)) {
 foreach ($name in $dllNames) {
     $src = Join-Path $sourceDir $name
     if (-not (Test-Path -LiteralPath $src)) {
-        Write-Error "缺少 OpenSSL DLL: $src"
+        Write-Error "Missing OpenSSL DLL: $src"
     }
     Copy-Item -LiteralPath $src -Destination (Join-Path $TargetDir $name) -Force
     $size = (Get-Item -LiteralPath $src).Length
-    Write-Host "[OK] OpenSSL: $name -> $TargetDir ($([math]::Round($size/1KB, 1)) KB)"
+    Write-Host "[OK] $name -> $TargetDir ($([math]::Round($size/1KB, 1)) KB)"
 }
 
-Write-Host "[SUCCESS] OpenSSL 运行时已部署到 $TargetDir"
+Write-Host "[SUCCESS] OpenSSL deployed to $TargetDir"

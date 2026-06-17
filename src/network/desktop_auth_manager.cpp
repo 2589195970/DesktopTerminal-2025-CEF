@@ -171,7 +171,7 @@ bool DesktopAuthManager::initialize(ConfigManager *configManager, Logger *logger
 
     if (m_clientId.isEmpty() || m_clientSecret.isEmpty() || m_authEndpoint.isEmpty()) {
         if (m_logger) {
-            m_logger->appEvent("桌面端认证未配置，跳过启动认证");
+            m_logger->appEvent("认证: 未配置，跳过");
         }
         m_allowedHost = QUrl(configManager->getUrl()).host().toLower();
         m_allowedPort = QUrl(configManager->getUrl()).port(-1);
@@ -179,7 +179,7 @@ bool DesktopAuthManager::initialize(ConfigManager *configManager, Logger *logger
     }
 
     if (m_logger) {
-        m_logger->appEvent(QString("桌面端认证已配置，将在后台异步获取会话令牌 (endpoint=%1)").arg(m_authEndpoint));
+        m_logger->appEvent(QString("认证: 后台获取令牌 %1").arg(m_authEndpoint));
     }
     return true;
 }
@@ -196,7 +196,7 @@ void DesktopAuthManager::startAsyncAuth()
         QMetaObject::invokeMethod(this, [this, ok]() {
             if (ok) {
                 if (m_logger) {
-                    m_logger->appEvent("后台认证成功，会话令牌已就绪");
+                    m_logger->appEvent("认证: 令牌已就绪");
                 }
                 emit authCompleted(true);
             } else {
@@ -211,8 +211,7 @@ void DesktopAuthManager::scheduleRetry()
     m_retryCount++;
     if (m_retryCount > MAX_RETRY_COUNT) {
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端认证: 已达最大重试次数(%1)，放弃认证。程序可正常使用，但后端可能拒绝未认证请求")
-                                     .arg(MAX_RETRY_COUNT));
+            m_logger->errorEvent(QString("认证: %1次重试均失败，放弃").arg(MAX_RETRY_COUNT));
         }
         emit authCompleted(false);
         return;
@@ -220,8 +219,7 @@ void DesktopAuthManager::scheduleRetry()
 
     const int delaySec = BASE_RETRY_INTERVAL_SEC * m_retryCount;
     if (m_logger) {
-        m_logger->appEvent(QString("桌面端认证: 第%1/%2次重试，%3秒后执行")
-                               .arg(m_retryCount).arg(MAX_RETRY_COUNT).arg(delaySec));
+        m_logger->appEvent(QString("认证: 重试%1/%2, %3s后").arg(m_retryCount).arg(MAX_RETRY_COUNT).arg(delaySec));
     }
     m_retryTimer.start(delaySec * 1000);
 }
@@ -233,7 +231,7 @@ void DesktopAuthManager::onRetryTimeout()
         QMetaObject::invokeMethod(this, [this, ok]() {
             if (ok) {
                 if (m_logger) {
-                    m_logger->appEvent(QString("桌面端认证: 第%1次重试成功").arg(m_retryCount));
+                    m_logger->appEvent(QString("认证: 重试%1成功").arg(m_retryCount));
                 }
                 emit authCompleted(true);
             } else {
@@ -321,7 +319,7 @@ bool DesktopAuthManager::authenticate()
         const QString detail = QString("认证接口: %1\n网络层返回: 请求超时，15秒内未收到响应")
                                    .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+            m_logger->errorEvent(QString("认证失败: %1").arg(detail));
         }
         {
             QMutexLocker locker(&m_mutex);
@@ -335,7 +333,7 @@ bool DesktopAuthManager::authenticate()
     if (reply->error() != QNetworkReply::NoError) {
         const QString detail = simplifyNetworkError(reply);
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+            m_logger->errorEvent(QString("认证失败: %1").arg(detail));
         }
         {
             QMutexLocker locker(&m_mutex);
@@ -352,7 +350,7 @@ bool DesktopAuthManager::authenticate()
         const QString detail = QString("认证接口: %1\n服务端返回: 响应格式无效，无法解析为JSON")
                                    .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+            m_logger->errorEvent(QString("认证失败: %1").arg(detail));
         }
         {
             QMutexLocker locker(&m_mutex);
@@ -367,7 +365,7 @@ bool DesktopAuthManager::authenticate()
         const QString message = root.value("message").toString();
         const QString detail = simplifyLogicalError(authUrl.toString(), responseCode, message, root);
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+            m_logger->errorEvent(QString("认证失败: %1").arg(detail));
         }
         {
             QMutexLocker locker(&m_mutex);
@@ -383,7 +381,7 @@ bool DesktopAuthManager::authenticate()
         const QString detail = QString("认证接口: %1\n服务端返回: 未返回有效会话令牌或过期时间")
                                    .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+            m_logger->errorEvent(QString("认证失败: %1").arg(detail));
         }
         {
             QMutexLocker locker(&m_mutex);
@@ -397,7 +395,7 @@ bool DesktopAuthManager::authenticate()
     m_expireAt = QDateTime::currentDateTimeUtc().addSecs(expiresIn);
     m_lastError.clear();
     if (m_logger) {
-        m_logger->appEvent("桌面端启动认证成功");
+        m_logger->appEvent("认证: 成功");
     }
     return true;
 }
