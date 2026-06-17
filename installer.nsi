@@ -329,35 +329,16 @@ Section "主程序" SecMain
     SetOutPath "$PLUGINSDIR"
     File "scripts\patch-install-config.ps1"
 
-    ; 生成运行脚本到 PLUGINSDIR（纯 ASCII 路径），避免命令行引号和中文路径问题
-    ; 双引号字符串中 $PLUGINSDIR 会被 NSIS 展开为实际临时路径，$$ 输出字面 $
-    FileOpen $0 "$PLUGINSDIR\run-patch.ps1" w
-    FileWrite $0 "$$ErrorActionPreference = $\"Stop$\"$\r$\n"
-    FileWrite $0 "$$configPath = (Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-config-path.txt$\" -Raw).Trim()$\r$\n"
-    FileWrite $0 "$$paramsPath = $\"$PLUGINSDIR\dtcef-install-params.txt$\"$\r$\n"
-    FileWrite $0 "& $\"$PLUGINSDIR\patch-install-config.ps1$\" -ConfigPath $$configPath -ParamsPath $$paramsPath$\r$\n"
-    FileWrite $0 "exit $$LASTEXITCODE$\r$\n"
-    FileClose $0
-
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-patch.ps1"'
+    ; 直接调用脚本，只传 $PLUGINSDIR（纯 ASCII），脚本从文件读取所有输入
+    ; 不生成中间 PS1 避免 NSIS Unicode FileWrite 编码问题
+    ; 脚本内部写入后自验证：exit 0=OK, exit 1=参数错误, exit 2=验证失败
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"'
     Pop $R1
-    DetailPrint "PowerShell patch result: $R1"
-
-    ; 验证写入结果
-    FileOpen $0 "$PLUGINSDIR\run-verify.ps1" w
-    FileWrite $0 "$$configPath = (Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-config-path.txt$\" -Raw).Trim()$\r$\n"
-    FileWrite $0 "$$content = [System.IO.File]::ReadAllText($$configPath)$\r$\n"
-    FileWrite $0 "$$params = Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-install-params.txt$\"$\r$\n"
-    FileWrite $0 "$$expectedUrl = $$params[0]$\r$\n"
-    FileWrite $0 "if ($$content.Contains($$expectedUrl)) { Write-Host $\"VERIFY_OK$\"; exit 0 } else { Write-Host $\"VERIFY_FAIL$\"; exit 1 }$\r$\n"
-    FileClose $0
-
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-verify.ps1"'
-    Pop $R1
-    ${If} $R1 != 0
-        MessageBox MB_ICONEXCLAMATION "配置文件写入验证失败！$\n$\n用户输入的考试URL未正确写入。$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
+    DetailPrint "Config patch exit: $R1"
+    ${If} $R1 == 0
+        DetailPrint "Config patch OK"
     ${Else}
-        DetailPrint "✓ 配置文件已验证，URL正确写入"
+        MessageBox MB_ICONEXCLAMATION "配置文件写入失败(代码$R1)$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
     ${EndIf}
     
     ; 复制资源文件到resources目录
