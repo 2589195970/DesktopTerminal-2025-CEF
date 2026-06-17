@@ -184,6 +184,7 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Gui.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Network.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\Qt5Concurrent.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libssl-1_1-x64.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libcrypto-1_1-x64.dll"
     File /nonfatal "artifacts\windows-${ARCH}\libssl-1_1.dll"

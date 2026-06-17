@@ -1111,7 +1111,8 @@ jobs:
                 "Qt5Core.dll",
                 "Qt5Gui.dll", 
                 "Qt5Widgets.dll",
-                "Qt5Network.dll"
+                "Qt5Network.dll",
+                "Qt5Concurrent.dll"
             )
             
             Write-Host "Copying Qt5 runtime DLLs..."

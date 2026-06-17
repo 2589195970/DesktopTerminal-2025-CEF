@@ -11,11 +11,10 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QNetworkProxy>
 #include <QTimer>
 #include <QUrl>
 #include <QSslSocket>
-#include <QVariant>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace {
 
@@ -31,14 +30,14 @@ QString buildReplyDebugContext(QNetworkReply *reply)
         parts << QString("HTTP %1").arg(httpStatus);
     }
 
-    const QVariant requestIdHeader = reply->rawHeader("requestId");
-    if (requestIdHeader.isValid()) {
-        parts << QString("requestId=%1").arg(QString::fromUtf8(requestIdHeader.toByteArray()));
+    const QByteArray requestIdHeader = reply->rawHeader("requestId");
+    if (!requestIdHeader.isEmpty()) {
+        parts << QString("requestId=%1").arg(QString::fromUtf8(requestIdHeader));
     }
 
-    const QVariant traceIdHeader = reply->rawHeader("traceId");
-    if (traceIdHeader.isValid()) {
-        parts << QString("traceId=%1").arg(QString::fromUtf8(traceIdHeader.toByteArray()));
+    const QByteArray traceIdHeader = reply->rawHeader("traceId");
+    if (!traceIdHeader.isEmpty()) {
+        parts << QString("traceId=%1").arg(QString::fromUtf8(traceIdHeader));
     }
 
     return parts.join(" | ");
@@ -140,7 +139,10 @@ DesktopAuthManager::DesktopAuthManager(QObject *parent)
     , m_configManager(nullptr)
     , m_logger(nullptr)
     , m_allowedPort(-1)
+    , m_retryCount(0)
 {
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, &DesktopAuthManager::onRetryTimeout);
 }
 
 DesktopAuthManager& DesktopAuthManager::instance()
@@ -176,7 +178,69 @@ bool DesktopAuthManager::initialize(ConfigManager *configManager, Logger *logger
         return true;
     }
 
-    return authenticate();
+    if (m_logger) {
+        m_logger->appEvent(QString("桌面端认证已配置，将在后台异步获取会话令牌 (endpoint=%1)").arg(m_authEndpoint));
+    }
+    return true;
+}
+
+void DesktopAuthManager::startAsyncAuth()
+{
+    if (m_clientId.isEmpty() || m_clientSecret.isEmpty() || m_authEndpoint.isEmpty()) {
+        return;
+    }
+
+    m_retryCount = 0;
+    QtConcurrent::run([this]() {
+        bool ok = authenticate();
+        QMetaObject::invokeMethod(this, [this, ok]() {
+            if (ok) {
+                if (m_logger) {
+                    m_logger->appEvent("后台认证成功，会话令牌已就绪");
+                }
+                emit authCompleted(true);
+            } else {
+                scheduleRetry();
+            }
+        }, Qt::QueuedConnection);
+    });
+}
+
+void DesktopAuthManager::scheduleRetry()
+{
+    m_retryCount++;
+    if (m_retryCount > MAX_RETRY_COUNT) {
+        if (m_logger) {
+            m_logger->errorEvent(QString("桌面端认证: 已达最大重试次数(%1)，放弃认证。程序可正常使用，但后端可能拒绝未认证请求")
+                                     .arg(MAX_RETRY_COUNT));
+        }
+        emit authCompleted(false);
+        return;
+    }
+
+    const int delaySec = BASE_RETRY_INTERVAL_SEC * m_retryCount;
+    if (m_logger) {
+        m_logger->appEvent(QString("桌面端认证: 第%1/%2次重试，%3秒后执行")
+                               .arg(m_retryCount).arg(MAX_RETRY_COUNT).arg(delaySec));
+    }
+    m_retryTimer.start(delaySec * 1000);
+}
+
+void DesktopAuthManager::onRetryTimeout()
+{
+    QtConcurrent::run([this]() {
+        bool ok = authenticate();
+        QMetaObject::invokeMethod(this, [this, ok]() {
+            if (ok) {
+                if (m_logger) {
+                    m_logger->appEvent(QString("桌面端认证: 第%1次重试成功").arg(m_retryCount));
+                }
+                emit authCompleted(true);
+            } else {
+                scheduleRetry();
+            }
+        }, Qt::QueuedConnection);
+    });
 }
 
 bool DesktopAuthManager::refreshIfNeeded()

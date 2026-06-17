@@ -52,7 +52,7 @@ include(DeployCEF)
 include(ForceCEFDeploy)
 
 # 查找Qt5
-find_package(Qt5 COMPONENTS Core Widgets Network REQUIRED)
+find_package(Qt5 COMPONENTS Core Widgets Network Concurrent REQUIRED)
 
 # 设置Qt5的MOC、UIC、RCC
 set(CMAKE_AUTOMOC ON)
@@ -489,6 +489,7 @@ target_link_libraries(${PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
     Qt5::Network
+    Qt5::Concurrent
     qhotkey
 )
 

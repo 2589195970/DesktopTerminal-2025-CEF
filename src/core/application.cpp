@@ -64,11 +64,7 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     m_lockFile->setStaleLockTime(0);
 
     if (!m_lockFile->tryLock(100)) {
-        QMessageBox::warning(
-            nullptr,
-            "程序已运行",
-            "应用程序已经在运行中，不允许重复启动。"
-        );
+        Logger::instance().showMessage(nullptr, "程序已运行", "应用程序已经在运行中，不允许重复启动。");
         QTimer::singleShot(0, this, &QApplication::quit);
         return;
     }
@@ -125,7 +121,7 @@ bool Application::initialize()
     if (!checkSystemRequirements()) {
         m_logger->errorEvent("系统要求检查失败");
         emit initializationError("系统兼容性检查失败\n" + getCompatibilityReport());
-        QMessageBox::critical(nullptr, "系统要求不满足", 
+        m_logger->showCriticalError(nullptr, "系统要求不满足",
             getCompatibilityReport() + "\n\n应用程序将退出。");
         return false;
     }
@@ -147,17 +143,13 @@ bool Application::initialize()
     if (!checkNetworkConnection()) {
         m_logger->errorEvent("网络检查失败");
         emit initializationError("网络连接失败，请检查网络设置");
-        QMessageBox::critical(nullptr, "网络错误", "无法连接到指定服务器，请检查您的网络连接。");
+        m_logger->showCriticalError(nullptr, "网络错误", "无法连接到指定服务器，请检查您的网络连接。");
         return false;
     }
 
-    emit initializationProgress("正在进行桌面端身份认证...");
-    if (!DesktopAuthManager::instance().initialize(m_configManager, m_logger)) {
-        m_logger->errorEvent("桌面端身份认证失败");
-        emit initializationError("桌面端身份认证失败，请检查服务端配置");
-        QMessageBox::critical(nullptr, "认证错误", "无法完成桌面端身份认证，请联系管理员。");
-        return false;
-    }
+    emit initializationProgress("正在初始化桌面端认证...");
+    DesktopAuthManager::instance().initialize(m_configManager, m_logger);
+    DesktopAuthManager::instance().startAsyncAuth();
 
     // 6. 初始化CEF
     emit initializationProgress("正在加载CEF浏览器引擎...");
@@ -462,8 +454,8 @@ bool Application::initializeConfiguration()
             
             if (m_configManager->createDefaultConfig(defaultPath) && 
                 m_configManager->loadConfig(defaultPath)) {
-                
-                QMessageBox::information(nullptr, "配置文件", 
+
+                m_logger->showMessage(nullptr, "配置文件",
                     QString("已生成默认配置文件：\n%1\n请修改后重新启动。").arg(defaultPath));
                 return false;
             } else {
