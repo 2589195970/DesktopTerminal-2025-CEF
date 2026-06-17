@@ -1,4 +1,4 @@
-# 安装时按用户输入更新 config.json，始终输出 UTF-8（无 BOM）
+# Patch config.json with user-supplied values during install. Always outputs UTF-8 no BOM.
 param(
     [Parameter(Mandatory = $true)]
     [string]$ConfigPath,
@@ -26,7 +26,7 @@ function Write-InstallLog {
 if ($ParamsPath -ne "" -and (Test-Path -LiteralPath $ParamsPath)) {
     $lines = Get-Content -LiteralPath $ParamsPath -Encoding UTF8
     if ($lines.Count -lt 4) {
-        Write-Error "安装参数文件格式无效: $ParamsPath"
+        Write-Error "Invalid params file: $ParamsPath (expected 4 lines, got $($lines.Count))"
         exit 1
     }
     $Url = $lines[0]
@@ -36,12 +36,12 @@ if ($ParamsPath -ne "" -and (Test-Path -LiteralPath $ParamsPath)) {
 }
 
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
-    Write-Error "配置文件不存在: $ConfigPath"
+    Write-Error "Config file not found: $ConfigPath"
     exit 1
 }
 
 if ([string]::IsNullOrWhiteSpace($Url)) {
-    Write-Error "考试系统 URL 不能为空"
+    Write-Error "URL is empty"
     exit 1
 }
 
@@ -72,5 +72,5 @@ $json | Add-Member -NotePropertyName sensitiveOperationRequirePassword -Value $R
 $out = $json | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($ConfigPath, $out, $utf8NoBom)
 
-Write-InstallLog "config.json 已更新 url=$Url apiBaseUrl=$ApiBaseUrl requirePassword=$RequirePassword"
+Write-InstallLog "config.json updated url=$Url apiBaseUrl=$ApiBaseUrl requirePassword=$RequirePassword"
 exit 0

@@ -330,25 +330,26 @@ Section "主程序" SecMain
     File "scripts\patch-install-config.ps1"
 
     ; 生成运行脚本到 PLUGINSDIR（纯 ASCII 路径），避免命令行引号和中文路径问题
+    ; 双引号字符串中 $PLUGINSDIR 会被 NSIS 展开为实际临时路径，$$ 输出字面 $
     FileOpen $0 "$PLUGINSDIR\run-patch.ps1" w
-    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
-    FileWrite $0 '$$configPath = (Get-Content -LiteralPath "$PLUGINSDIR\dtcef-config-path.txt" -Raw).Trim()$\r$\n'
-    FileWrite $0 '$$paramsPath = "$PLUGINSDIR\dtcef-install-params.txt"$\r$\n'
-    FileWrite $0 '& "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath $$configPath -ParamsPath $$paramsPath$\r$\n'
-    FileWrite $0 'exit $$LASTEXITCODE$\r$\n'
+    FileWrite $0 "$$ErrorActionPreference = $\"Stop$\"$\r$\n"
+    FileWrite $0 "$$configPath = (Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-config-path.txt$\" -Raw).Trim()$\r$\n"
+    FileWrite $0 "$$paramsPath = $\"$PLUGINSDIR\dtcef-install-params.txt$\"$\r$\n"
+    FileWrite $0 "& $\"$PLUGINSDIR\patch-install-config.ps1$\" -ConfigPath $$configPath -ParamsPath $$paramsPath$\r$\n"
+    FileWrite $0 "exit $$LASTEXITCODE$\r$\n"
     FileClose $0
 
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-patch.ps1"'
     Pop $R1
-    DetailPrint "PowerShell补丁返回: $R1"
+    DetailPrint "PowerShell patch result: $R1"
 
     ; 验证写入结果
     FileOpen $0 "$PLUGINSDIR\run-verify.ps1" w
-    FileWrite $0 '$$configPath = (Get-Content -LiteralPath "$PLUGINSDIR\dtcef-config-path.txt" -Raw).Trim()$\r$\n'
-    FileWrite $0 '$$content = [System.IO.File]::ReadAllText($$configPath)$\r$\n'
-    FileWrite $0 '$$params = Get-Content -LiteralPath "$PLUGINSDIR\dtcef-install-params.txt"$\r$\n'
-    FileWrite $0 '$$expectedUrl = $$params[0]$\r$\n'
-    FileWrite $0 'if ($$content.Contains($$expectedUrl)) { Write-Host "VERIFY_OK"; exit 0 } else { Write-Host "VERIFY_FAIL: expected $$expectedUrl"; exit 1 }$\r$\n'
+    FileWrite $0 "$$configPath = (Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-config-path.txt$\" -Raw).Trim()$\r$\n"
+    FileWrite $0 "$$content = [System.IO.File]::ReadAllText($$configPath)$\r$\n"
+    FileWrite $0 "$$params = Get-Content -LiteralPath $\"$PLUGINSDIR\dtcef-install-params.txt$\"$\r$\n"
+    FileWrite $0 "$$expectedUrl = $$params[0]$\r$\n"
+    FileWrite $0 "if ($$content.Contains($$expectedUrl)) { Write-Host $\"VERIFY_OK$\"; exit 0 } else { Write-Host $\"VERIFY_FAIL$\"; exit 1 }$\r$\n"
     FileClose $0
 
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-verify.ps1"'

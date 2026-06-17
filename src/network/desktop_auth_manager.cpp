@@ -245,14 +245,22 @@ bool DesktopAuthManager::refreshIfNeeded()
 {
     QMutexLocker locker(&m_mutex);
     if (m_sessionToken.isEmpty()) {
-        locker.unlock();
-        return authenticate();
+        return false;
     }
     if (QDateTime::currentDateTimeUtc().secsTo(m_expireAt) > 300) {
         return true;
     }
+    const bool timerActive = m_retryTimer.isActive();
     locker.unlock();
-    return authenticate();
+    if (!timerActive) {
+        QMetaObject::invokeMethod(this, [this]() {
+            if (!isReady()) {
+                m_retryCount = 0;
+                scheduleRetry();
+            }
+        }, Qt::QueuedConnection);
+    }
+    return !m_sessionToken.isEmpty();
 }
 
 QString DesktopAuthManager::buildRequestToken() const
