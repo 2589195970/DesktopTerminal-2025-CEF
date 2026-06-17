@@ -11,8 +11,129 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QNetworkProxy>
 #include <QTimer>
 #include <QUrl>
+#include <QSslSocket>
+#include <QVariant>
+
+namespace {
+
+QString buildReplyDebugContext(QNetworkReply *reply)
+{
+    if (!reply) {
+        return QString();
+    }
+
+    QStringList parts;
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (httpStatus > 0) {
+        parts << QString("HTTP %1").arg(httpStatus);
+    }
+
+    const QVariant requestIdHeader = reply->rawHeader("requestId");
+    if (requestIdHeader.isValid()) {
+        parts << QString("requestId=%1").arg(QString::fromUtf8(requestIdHeader.toByteArray()));
+    }
+
+    const QVariant traceIdHeader = reply->rawHeader("traceId");
+    if (traceIdHeader.isValid()) {
+        parts << QString("traceId=%1").arg(QString::fromUtf8(traceIdHeader.toByteArray()));
+    }
+
+    return parts.join(" | ");
+}
+
+QString extractServerErrorMessage(const QByteArray &body)
+{
+    if (body.isEmpty()) {
+        return QString();
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        QString plainText = QString::fromUtf8(body).trimmed();
+        if (plainText.length() > 500) {
+            plainText = plainText.left(500) + "...";
+        }
+        return plainText;
+    }
+
+    const QJsonObject root = doc.object();
+    QStringList parts;
+    const int code = root.value("code").toInt(-1);
+    if (code >= 0) {
+        parts << QString("code=%1").arg(code);
+    }
+
+    const QString message = root.value("message").toString().trimmed();
+    if (!message.isEmpty()) {
+        parts << message;
+    }
+
+    const QString error = root.value("error").toString().trimmed();
+    if (!error.isEmpty() && error != message) {
+        parts << error;
+    }
+
+    return parts.join(" | ");
+}
+
+QString simplifyNetworkError(QNetworkReply *reply)
+{
+    if (!reply) {
+        return QStringLiteral("未知网络错误");
+    }
+
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QString errorText = reply->errorString().trimmed();
+    const QString serverMessage = extractServerErrorMessage(reply->readAll());
+    const QString debugContext = buildReplyDebugContext(reply);
+
+    QStringList lines;
+    lines << QString("认证接口: %1").arg(reply->url().toString());
+
+    if (httpStatus > 0) {
+        lines << QString("HTTP状态: %1").arg(httpStatus);
+    }
+
+    if (!serverMessage.isEmpty()) {
+        lines << QString("服务端返回: %1").arg(serverMessage);
+    } else if (!errorText.isEmpty()) {
+        lines << QString("网络层返回: %1").arg(errorText);
+    } else {
+        lines << QStringLiteral("网络层返回: 未知错误");
+    }
+
+    if (!debugContext.isEmpty()) {
+        lines << QString("调试信息: %1").arg(debugContext);
+    }
+
+    return lines.join("\n");
+}
+
+QString simplifyLogicalError(const QString &endpoint, int responseCode, const QString &message, const QJsonObject &root)
+{
+    QStringList lines;
+    lines << QString("认证接口: %1").arg(endpoint);
+    lines << QString("返回码: %1").arg(responseCode);
+    lines << QString("服务端返回: %1").arg(message.isEmpty() ? QStringLiteral("未知错误") : message);
+
+    const QString traceId = root.value("traceId").toString().trimmed();
+    if (!traceId.isEmpty()) {
+        lines << QString("traceId: %1").arg(traceId);
+    }
+
+    const QString requestId = root.value("requestId").toString().trimmed();
+    if (!requestId.isEmpty()) {
+        lines << QString("requestId: %1").arg(requestId);
+    }
+
+    return lines.join("\n");
+}
+
+}
 
 DesktopAuthManager::DesktopAuthManager(QObject *parent)
     : QObject(parent)
@@ -32,6 +153,16 @@ bool DesktopAuthManager::initialize(ConfigManager *configManager, Logger *logger
 {
     m_configManager = configManager;
     m_logger = logger;
+
+    if (!QSslSocket::supportsSsl()) {
+        if (m_logger) {
+            m_logger->errorEvent(QString("TLS 不可用: %1").arg(QSslSocket::sslLibraryBuildVersionString()));
+            m_logger->errorEvent("Qt 网络 HTTPS 需要 OpenSSL 运行时(libssl/libcrypto)，请确认与程序同目录已部署");
+        }
+    } else if (m_logger) {
+        m_logger->appEvent(QString("TLS 已就绪: %1").arg(QSslSocket::sslLibraryVersionString()));
+    }
+
     m_clientId = configManager->getDesktopClientId();
     m_clientSecret = configManager->getDesktopClientSecret();
     m_authEndpoint = resolveAuthEndpoint();
@@ -84,8 +215,19 @@ int DesktopAuthManager::allowedPort() const
     return m_allowedPort;
 }
 
+QString DesktopAuthManager::lastError() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_lastError;
+}
+
 bool DesktopAuthManager::authenticate()
 {
+    {
+        QMutexLocker locker(&m_mutex);
+        m_lastError.clear();
+    }
+
     const qint64 timestamp = QDateTime::currentMSecsSinceEpoch();
     const QString appVersion = QCoreApplication::applicationVersion();
     const QString payload = m_clientId + "|" + appVersion + "|" + QString::number(timestamp);
@@ -111,19 +253,46 @@ bool DesktopAuthManager::authenticate()
     timer.start(15000);
     loop.exec();
 
-    if (!reply->isFinished() || reply->error() != QNetworkReply::NoError) {
+    if (!reply->isFinished()) {
+        const QString detail = QString("认证接口: %1\n网络层返回: 请求超时，15秒内未收到响应")
+                                   .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败: %1").arg(reply->errorString()));
+            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+        }
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastError = detail;
+        }
+        reply->abort();
+        reply->deleteLater();
+        return false;
+    }
+
+    if (reply->error() != QNetworkReply::NoError) {
+        const QString detail = simplifyNetworkError(reply);
+        if (m_logger) {
+            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+        }
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastError = detail;
         }
         reply->deleteLater();
         return false;
     }
 
-    const QJsonDocument responseDoc = QJsonDocument::fromJson(reply->readAll());
+    const QByteArray responseBody = reply->readAll();
+    const QJsonDocument responseDoc = QJsonDocument::fromJson(responseBody);
     reply->deleteLater();
     if (!responseDoc.isObject()) {
+        const QString detail = QString("认证接口: %1\n服务端返回: 响应格式无效，无法解析为JSON")
+                                   .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent("桌面端启动认证失败: 响应格式无效");
+            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+        }
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastError = detail;
         }
         return false;
     }
@@ -132,10 +301,13 @@ bool DesktopAuthManager::authenticate()
     const int responseCode = root.value("code").toInt(-1);
     if (responseCode != 10200) {
         const QString message = root.value("message").toString();
+        const QString detail = simplifyLogicalError(authUrl.toString(), responseCode, message, root);
         if (m_logger) {
-            m_logger->errorEvent(QString("桌面端启动认证失败: code=%1, %2")
-                                     .arg(responseCode)
-                                     .arg(message.isEmpty() ? QStringLiteral("未知错误") : message));
+            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+        }
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastError = detail;
         }
         return false;
     }
@@ -144,8 +316,14 @@ bool DesktopAuthManager::authenticate()
     const QString sessionToken = result.value("aesKey").toString();
     const qint64 expiresIn = result.value("expiresIn").toVariant().toLongLong();
     if (sessionToken.isEmpty() || expiresIn <= 0) {
+        const QString detail = QString("认证接口: %1\n服务端返回: 未返回有效会话令牌或过期时间")
+                                   .arg(authUrl.toString());
         if (m_logger) {
-            m_logger->errorEvent("桌面端启动认证失败: 未返回有效会话令牌");
+            m_logger->errorEvent(QString("桌面端启动认证失败\n%1").arg(detail));
+        }
+        {
+            QMutexLocker locker(&m_mutex);
+            m_lastError = detail;
         }
         return false;
     }
@@ -153,6 +331,7 @@ bool DesktopAuthManager::authenticate()
     QMutexLocker locker(&m_mutex);
     m_sessionToken = sessionToken;
     m_expireAt = QDateTime::currentDateTimeUtc().addSecs(expiresIn);
+    m_lastError.clear();
     if (m_logger) {
         m_logger->appEvent("桌面端启动认证成功");
     }
@@ -277,6 +456,9 @@ QString DesktopAuthManager::fetchApiBaseUrlFromFrontendConfig()
     if (!reply->isFinished() || reply->error() != QNetworkReply::NoError) {
         if (m_logger) {
             m_logger->appEvent(QString("获取前端Config.json失败: %1").arg(reply->errorString()));
+            if (!QSslSocket::supportsSsl()) {
+                m_logger->appEvent("提示: 可在 config.json 的 desktopAuth.apiBaseUrl 中直接配置后端 API 基地址");
+            }
         }
         reply->deleteLater();
         return QString();

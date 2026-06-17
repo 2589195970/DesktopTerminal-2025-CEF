@@ -43,6 +43,7 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 1. **模板落盘**：使用仓库内已验证的 UTF-8 文件（如 `resources/config.json`），或通过构建产物 `artifacts\...\resources\config.json` 复制，保证全文 UTF-8。
 2. **字段补丁**：仅对用户可改字段（`url`、`exitPassword`、`apiBaseUrl` 等）调用 PowerShell 脚本更新：
    - 脚本：`scripts/patch-install-config.ps1`
+   - 安装器将用户输入写入 `$PLUGINSDIR\dtcef-install-params.txt`（逐行纯文本，避免命令行转义问题），再调用补丁脚本。
    - 安装器中的调用见 `installer.nsi` 中「更新配置文件」段落。
 3. **输出编码**：补丁脚本使用 `UTF8Encoding(false)` 写出，**无 BOM**（与仓库模板一致）；程序侧已支持跳过 BOM 读取。
 4. **程序侧兜底**：`ConfigManager::loadConfig` 在 Windows 上若 UTF-8 解析失败，会尝试 GB18030 解码（兼容历史错误安装包生成的文件）。
@@ -73,3 +74,19 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 ### 类似风险场景
 
 任何通过 NSIS `FileWrite` 生成的含非 ASCII 文本（日志模板、多语言字符串文件、带中文路径的配置等）都可能出现相同问题。统一原则：**二进制/模板文件用 `File` 复制，文本用 UTF-8 源文件 + 外部脚本补丁，勿在 NSIS 内拼接多语言文本。**
+
+## 关联问题：Qt HTTPS 与 TLS initialization failed（2026-06-17）
+
+### 现象
+
+日志中出现 `获取前端Config.json失败: TLS initialization failed`，网络检测用 HTTP 可能成功，但桌面端认证 HTTPS 失败。
+
+### 原因
+
+`QNetworkAccessManager` 在 Windows 上需要 OpenSSL 运行时（libssl/libcrypto DLL）与主程序同目录；仅部署 Qt5Network.dll 不够。CEF 自带 SSL，与 Qt 网络栈无关。
+
+### 修复
+
+- CI：`scripts/deploy-openssl-windows.ps1` 复制 OpenSSL DLL 到产物。
+- 安装包：`installer.nsi` 安装上述 DLL。
+- 参数传递：用户输入写入 `dtcef-install-params.txt` 再调用补丁脚本，避免命令行转义导致 URL 未写入；失败时 MessageBox 提示。日志：`resources/install-config-patch.log`。

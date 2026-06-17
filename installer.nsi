@@ -184,6 +184,10 @@ Section "主程序" SecMain
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Gui.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Widgets.dll"
     File /nonfatal "artifacts\windows-${ARCH}\Qt5Network.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libssl-1_1-x64.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libcrypto-1_1-x64.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libssl-1_1.dll"
+    File /nonfatal "artifacts\windows-${ARCH}\libcrypto-1_1.dll"
     DetailPrint "✓ Qt5运行时库已安装"
     
     ; 安装CEF数据文件（根据实际构建输出调整）
@@ -295,12 +299,11 @@ Section "主程序" SecMain
     CreateDirectory "$INSTDIR\resources"
     DetailPrint "正在配置应用程序..."
 
-    ; 使用 UTF-8 模板 + PowerShell 补丁，避免 NSIS FileWrite 将中文写成 GBK
     ; 详见 docs/INSTALLER_NSIS_ENCODING.md
-    DetailPrint "更新配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
-    ${IfNot} ${FileExists} "$INSTDIR\resources\config.json"
-        File /oname=$INSTDIR\resources\config.json "resources\config.json"
-    ${EndIf}
+    ; 每次安装都用仓库模板覆盖，再由 PowerShell 补丁写入用户输入
+    DetailPrint "写入配置文件: URL=$ConfigURL, API=$ConfigApiBaseUrl"
+    SetOutPath "$INSTDIR\resources"
+    File /oname=config.json "resources\config.json"
 
     ${If} $RequirePassword == 1
         StrCpy $R9 "true"
@@ -308,17 +311,51 @@ Section "主程序" SecMain
         StrCpy $R9 "false"
     ${EndIf}
 
-    CreateDirectory "$INSTDIR\scripts"
-    SetOutPath "$INSTDIR\scripts"
+    ; 用户输入写到临时参数文件（纯 ASCII 路径），避免命令行传参转义问题
+    InitPluginsDir
+    FileOpen $0 "$PLUGINSDIR\dtcef-install-params.txt" w
+    FileWrite $0 "$ConfigURL$\r$\n"
+    FileWrite $0 "$ConfigPassword$\r$\n"
+    FileWrite $0 "$ConfigApiBaseUrl$\r$\n"
+    FileWrite $0 "$R9$\r$\n"
+    FileClose $0
+
+    ; 也把 config.json 的路径写到文件，避免中文目录在命令行中丢失
+    FileOpen $0 "$PLUGINSDIR\dtcef-config-path.txt" w
+    FileWrite $0 "$INSTDIR\resources\config.json"
+    FileClose $0
+
+    SetOutPath "$PLUGINSDIR"
     File "scripts\patch-install-config.ps1"
 
-    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\scripts\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -Url "$ConfigURL" -ExitPassword "$ConfigPassword" -ApiBaseUrl "$ConfigApiBaseUrl" -RequirePassword $R9' $R1
-    ${If} $R1 == 0
-        DetailPrint "✓ 配置文件已更新"
-        Delete "$INSTDIR\scripts\patch-install-config.ps1"
-        RMDir "$INSTDIR\scripts"
+    ; 生成运行脚本到 PLUGINSDIR（纯 ASCII 路径），避免命令行引号和中文路径问题
+    FileOpen $0 "$PLUGINSDIR\run-patch.ps1" w
+    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
+    FileWrite $0 '$$configPath = (Get-Content -LiteralPath "$PLUGINSDIR\dtcef-config-path.txt" -Raw).Trim()$\r$\n'
+    FileWrite $0 '$$paramsPath = "$PLUGINSDIR\dtcef-install-params.txt"$\r$\n'
+    FileWrite $0 '& "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath $$configPath -ParamsPath $$paramsPath$\r$\n'
+    FileWrite $0 'exit $$LASTEXITCODE$\r$\n'
+    FileClose $0
+
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-patch.ps1"'
+    Pop $R1
+    DetailPrint "PowerShell补丁返回: $R1"
+
+    ; 验证写入结果
+    FileOpen $0 "$PLUGINSDIR\run-verify.ps1" w
+    FileWrite $0 '$$configPath = (Get-Content -LiteralPath "$PLUGINSDIR\dtcef-config-path.txt" -Raw).Trim()$\r$\n'
+    FileWrite $0 '$$content = [System.IO.File]::ReadAllText($$configPath)$\r$\n'
+    FileWrite $0 '$$params = Get-Content -LiteralPath "$PLUGINSDIR\dtcef-install-params.txt"$\r$\n'
+    FileWrite $0 '$$expectedUrl = $$params[0]$\r$\n'
+    FileWrite $0 'if ($$content.Contains($$expectedUrl)) { Write-Host "VERIFY_OK"; exit 0 } else { Write-Host "VERIFY_FAIL: expected $$expectedUrl"; exit 1 }$\r$\n'
+    FileClose $0
+
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\run-verify.ps1"'
+    Pop $R1
+    ${If} $R1 != 0
+        MessageBox MB_ICONEXCLAMATION "配置文件写入验证失败！$\n$\n用户输入的考试URL未正确写入。$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
     ${Else}
-        DetailPrint "警告: 配置文件更新失败(代码 $R1)，请检查 resources\config.json 编码"
+        DetailPrint "✓ 配置文件已验证，URL正确写入"
     ${EndIf}
     
     ; 复制资源文件到resources目录

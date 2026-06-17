@@ -1175,6 +1175,10 @@ jobs:
             Write-Host "Available Qt5_Dir environment: $env:Qt5_Dir"
             exit 1
         }
+
+        Write-Host "=== Deploying OpenSSL for Qt HTTPS ==="
+        $opensslArch = "${{ matrix.arch }}"
+        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch
         
         # Copy project documentation with existence checks
         Write-Host "Copying project documentation..."

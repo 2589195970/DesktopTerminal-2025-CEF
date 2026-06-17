@@ -22,6 +22,7 @@ public:
     bool isReady() const;
     QString allowedHost() const;
     int allowedPort() const;
+    QString lastError() const;
 
 private:
     explicit DesktopAuthManager(QObject *parent = nullptr);
@@ -40,6 +41,7 @@ private:
     int m_allowedPort;
     QString m_sessionToken;
     QDateTime m_expireAt;
+    QString m_lastError;
     mutable QMutex m_mutex;
 };
 
