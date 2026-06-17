@@ -329,16 +329,60 @@ Section "主程序" SecMain
     SetOutPath "$PLUGINSDIR"
     File "scripts\patch-install-config.ps1"
 
-    ; 直接调用脚本，只传 $PLUGINSDIR（纯 ASCII），脚本从文件读取所有输入
-    ; 不生成中间 PS1 避免 NSIS Unicode FileWrite 编码问题
-    ; 脚本内部写入后自验证：exit 0=OK, exit 1=参数错误, exit 2=验证失败
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"'
-    Pop $R1
-    DetailPrint "Config patch exit: $R1"
-    ${If} $R1 == 0
-        DetailPrint "Config patch OK"
+    ; 方式1: ExecWait 调用 PowerShell 补丁脚本
+    DetailPrint "Patching config.json via PowerShell..."
+    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"' $R1
+    DetailPrint "PowerShell exit: $R1"
+
+    ${If} $R1 != 0
+        ; 方式2: 通过 cmd /c 包裹调用
+        DetailPrint "Retrying via cmd /c..."
+        nsExec::ExecToLog 'cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -WorkDir "$PLUGINSDIR"'
+        Pop $R1
+        DetailPrint "cmd+PS exit: $R1"
+    ${EndIf}
+
+    ${If} $R1 != 0
+        ; 方式3: 不依赖 PowerShell，用 NSIS 直接写纯 ASCII 替换
+        ; config.json 模板中默认 URL 和密码已知，直接按字节替换
+        DetailPrint "PowerShell failed, using NSIS native fallback..."
+
+        ; VBScript 做 UTF-8 文本替换（所有 Windows 内置，无需 PowerShell）
+        FileOpen $0 "$PLUGINSDIR\patch.vbs" w
+        FileWrite $0 "Set fso = CreateObject($\"Scripting.FileSystemObject$\")$\r$\n"
+        FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-config-path.txt$\", 1, False, -1)$\r$\n"
+        FileWrite $0 "cfgPath = Trim(f.ReadLine)$\r$\n"
+        FileWrite $0 "f.Close$\r$\n"
+        FileWrite $0 "Set f = fso.OpenTextFile($\"$PLUGINSDIR\dtcef-install-params.txt$\", 1, False, -1)$\r$\n"
+        FileWrite $0 "newUrl = f.ReadLine$\r$\n"
+        FileWrite $0 "newPwd = f.ReadLine$\r$\n"
+        FileWrite $0 "f.Close$\r$\n"
+        FileWrite $0 "Set stream = CreateObject($\"ADODB.Stream$\")$\r$\n"
+        FileWrite $0 "stream.Type = 2$\r$\n"
+        FileWrite $0 "stream.Charset = $\"utf-8$\"$\r$\n"
+        FileWrite $0 "stream.Open$\r$\n"
+        FileWrite $0 "stream.LoadFromFile cfgPath$\r$\n"
+        FileWrite $0 "txt = stream.ReadText$\r$\n"
+        FileWrite $0 "stream.Close$\r$\n"
+        FileWrite $0 "txt = Replace(txt, $\"https://ks.mypt.edu.cn/stu?Client='ExamTerminal'$\", newUrl)$\r$\n"
+        FileWrite $0 "txt = Replace(txt, $\"12753$\", newPwd)$\r$\n"
+        FileWrite $0 "stream.Open$\r$\n"
+        FileWrite $0 "stream.Position = 0$\r$\n"
+        FileWrite $0 "stream.SetEOS$\r$\n"
+        FileWrite $0 "stream.WriteText txt$\r$\n"
+        FileWrite $0 "stream.SaveToFile cfgPath, 2$\r$\n"
+        FileWrite $0 "stream.Close$\r$\n"
+        FileClose $0
+
+        nsExec::ExecToLog 'cscript.exe //Nologo "$PLUGINSDIR\patch.vbs"'
+        Pop $R1
+        DetailPrint "VBScript exit: $R1"
+    ${EndIf}
+
+    ${If} $R1 != 0
+        MessageBox MB_ICONEXCLAMATION "配置文件写入失败$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
     ${Else}
-        MessageBox MB_ICONEXCLAMATION "配置文件写入失败(代码$R1)$\n$\n请安装后手动编辑:$\n$INSTDIR\resources\config.json$\n$\n将 url 字段改为:$\n$ConfigURL"
+        DetailPrint "Config patch OK"
     ${EndIf}
     
     ; 复制资源文件到resources目录
