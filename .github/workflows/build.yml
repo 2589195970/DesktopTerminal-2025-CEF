@@ -1159,15 +1159,49 @@ jobs:
             }
             
             # Copy Qt5 platforms plugin (required for Qt GUI applications)
-            $qtPlatformsPath = "$env:Qt5_Dir\plugins\platforms"
-            if (Test-Path $qtPlatformsPath) {
-                Write-Host "Copying Qt5 platforms plugin..."
+            # Qt5_Dir points to lib/cmake/Qt5, need to go up 3 levels to Qt root
+            $qtPlatformsPath = $null
+            $platformCandidates = @()
+            if ($env:Qt5_Dir) {
+                $platformCandidates += "$env:Qt5_Dir\..\..\..\..\plugins\platforms"
+                $platformCandidates += "$env:Qt5_Dir\..\..\..\plugins\platforms"
+                $platformCandidates += "$env:Qt5_Dir\..\..\plugins\platforms"
+                $platformCandidates += "$env:Qt5_Dir\..\plugins\platforms"
+                $platformCandidates += "$env:Qt5_Dir\plugins\platforms"
+            }
+            $platformCandidates += @(
+                "D:\a\DesktopTerminal-2025-CEF\Qt\5.15.2\msvc2019_64\plugins\platforms",
+                "D:\a\DesktopTerminal-2025-CEF\Qt\5.15.2\msvc2019\plugins\platforms",
+                "C:\Qt\5.15.2\msvc2019_64\plugins\platforms",
+                "C:\Qt\5.15.2\msvc2019\plugins\platforms"
+            )
+            foreach ($candidate in $platformCandidates) {
+                $resolved = $null
+                try { $resolved = (Resolve-Path $candidate -ErrorAction SilentlyContinue).Path } catch {}
+                if ($resolved -and (Test-Path (Join-Path $resolved "qwindows.dll"))) {
+                    $qtPlatformsPath = $resolved
+                    break
+                }
+            }
+            if (-not $qtPlatformsPath) {
+                Write-Host "Searching for qwindows.dll on disk..."
+                $hit = Get-ChildItem -Path "D:\a\" -Recurse -Filter "qwindows.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($hit) {
+                    $qtPlatformsPath = $hit.DirectoryName
+                }
+            }
+            if ($qtPlatformsPath) {
+                Write-Host "Copying Qt5 platforms plugin from: $qtPlatformsPath"
                 New-Item -ItemType Directory -Force -Path "$artifactPath\platforms"
                 Copy-Item "$qtPlatformsPath\qwindows.dll" "$artifactPath\platforms\" -Force
                 $platformsSize = (Get-Item "$qtPlatformsPath\qwindows.dll").Length
                 Write-Host "  Copied qwindows.dll : $([math]::Round($platformsSize/1MB, 2)) MB"
             } else {
-                Write-Host "WARNING: Qt5 platforms plugin not found: $qtPlatformsPath"
+                Write-Host "ERROR: Qt5 platforms plugin (qwindows.dll) not found in any candidate path!"
+                Write-Host "Qt5_Dir was: $env:Qt5_Dir"
+                Write-Host "Candidate paths checked:"
+                $platformCandidates | ForEach-Object { Write-Host "  - $_" }
+                exit 1
             }
             
             # Verify Qt5 deployment

@@ -249,9 +249,10 @@ Section "主程序" SecMain
     ${EndIf}
 
     ; 安装Qt5平台插件（创建platforms目录并复制qwindows.dll）
+    ; 此文件是Qt GUI应用启动的硬性依赖，缺失则程序无法运行
     CreateDirectory "$INSTDIR\platforms"
-    File /nonfatal /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
-    ${Log} "✓ Qt5平台插件已安装"
+    File /oname=platforms\qwindows.dll "artifacts\windows-${ARCH}\platforms\qwindows.dll"
+    ${Log} "platforms\qwindows.dll installed"
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     ${Log} "正在验证安装结果..."
@@ -302,18 +303,26 @@ Section "主程序" SecMain
         ${If} ${FileExists} "$INSTDIR\Qt5Gui.dll"
             ${If} ${FileExists} "$INSTDIR\Qt5Widgets.dll"
                 ${If} ${FileExists} "$INSTDIR\Qt5Network.dll"
-                    ${Log} "✓ Qt5运行时库安装完整"
+                    ${Log} "Qt5 runtime DLLs verified"
                 ${Else}
-                    ${Log} "⚠ Qt5Network.dll缺失，网络功能将无法使用"
+                    ${Log} "WARNING: Qt5Network.dll missing"
                 ${EndIf}
             ${Else}
-                ${Log} "⚠ Qt5Widgets.dll缺失"
+                ${Log} "WARNING: Qt5Widgets.dll missing"
             ${EndIf}
         ${Else}
-            ${Log} "⚠ Qt5Gui.dll缺失"
+            ${Log} "WARNING: Qt5Gui.dll missing"
         ${EndIf}
     ${Else}
-        ${Log} "⚠ Qt5Core.dll缺失，程序无法启动"
+        ${Log} "WARNING: Qt5Core.dll missing"
+    ${EndIf}
+    
+    ; 检查Qt5平台插件（缺失会导致"no Qt platform plugin"致命错误）
+    ${If} ${FileExists} "$INSTDIR\platforms\qwindows.dll"
+        ${Log} "platforms\qwindows.dll verified"
+    ${Else}
+        ${Log} "CRITICAL: platforms\qwindows.dll missing - app will not start"
+        StrCpy $VerificationErrors "$VerificationErrors platforms\qwindows.dll missing$\n"
     ${EndIf}
     
     ; 统计安装文件数量
