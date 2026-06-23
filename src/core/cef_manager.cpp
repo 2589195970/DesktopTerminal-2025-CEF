@@ -496,20 +496,17 @@ bool CEFManager::initializeCEFContext()
 
 void CEFManager::buildCEFSettings(CefSettings& settings)
 {
-    // 基础设置
-    // 注意：CEF 75不支持single_process字段，改为使用命令行参数
     settings.no_sandbox = true;
     settings.multi_threaded_message_loop = false;
     settings.log_severity = LOGSEVERITY_WARNING;
-    
-    // 启用远程调试功能以支持F12开发者工具（修复F12无效问题）
-    // 动态分配端口以避免冲突
+
+    // 持久化session cookie和用户偏好，重启后保留登录状态
+    settings.persist_session_cookies = true;
+    settings.persist_user_preferences = true;
+
     int debugPort = findAvailablePort(9222);
     settings.remote_debugging_port = debugPort;
     m_logger->appEvent(QString("CEF远程调试端口已启用: %1 - F12开发者工具现在应该可以工作").arg(debugPort));
-
-    // CEF 75版本兼容性设置
-    // windowless_rendering_enabled 在CEF 75中可能不存在
 }
 
 void CEFManager::applyMemoryOptimizations(CefSettings& settings)

@@ -8,6 +8,7 @@
 #include <QNetworkInterface>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QDateTime>
 
 class Logger;
 class ConfigManager;
@@ -167,6 +168,12 @@ private:
     QString getSystemDescription();
     bool installVCRuntimePackage();
 
+    // 缓存机制：避免每次启动重复做相同的系统检测
+    bool loadCachedCheckResults();
+    void saveCacheCheckResults();
+    QString getCacheFilePath() const;
+    static const int CACHE_VALIDITY_HOURS = 24;
+
 private:
     Logger* m_logger;
     ConfigManager* m_configManager;
@@ -177,6 +184,7 @@ private:
     int m_currentCheck;
     int m_totalChecks;
     bool m_checkInProgress;
+    bool m_usedCache;
 };
 
 Q_DECLARE_METATYPE(SystemChecker::CheckResult)

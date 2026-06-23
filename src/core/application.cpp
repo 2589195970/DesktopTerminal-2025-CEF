@@ -7,6 +7,8 @@
 #include "../network/desktop_auth_manager.h"
 
 #include <QDir>
+#include <QFileInfo>
+#include <QDateTime>
 #include <QStandardPaths>
 #include <QMessageBox>
 #include <QSysInfo>
@@ -500,10 +502,23 @@ bool Application::checkNetworkConnection()
 {
     m_networkChecker = new NetworkChecker(this);
 
-    // 从配置中获取检测URL
     QString checkUrl = m_configManager->getCheckUrl();
     QStringList backupUrls = m_configManager->getBackupCheckUrls();
     int timeout = m_configManager->getNetworkCheckTimeout();
+
+    // 如果系统检测使用了缓存（24h内通过过），说明网络近期正常
+    // 使用更短的超时做快速验证即可，节省2-3秒
+    QString cachePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                        + "/system_check_cache.json";
+    QFileInfo cacheInfo(cachePath);
+    if (cacheInfo.exists()) {
+        qint64 ageSeconds = cacheInfo.lastModified().secsTo(QDateTime::currentDateTime());
+        if (ageSeconds >= 0 && ageSeconds < 24 * 3600) {
+            timeout = qMin(timeout, 2000);
+            m_logger->appEvent(QString("网络检测使用快速模式（缓存%1秒前有效），超时=%2ms")
+                .arg(ageSeconds).arg(timeout));
+        }
+    }
 
     m_networkChecker->setCheckUrls(backupUrls);
 
@@ -511,7 +526,7 @@ bool Application::checkNetworkConnection()
     connect(m_networkChecker, &NetworkChecker::checkCompleted, &loop, &QEventLoop::quit);
 
     m_networkChecker->startCheck(checkUrl, timeout);
-    loop.exec(); // 等待网络检测完成
+    loop.exec();
 
     NetworkChecker::NetworkStatus status = m_networkChecker->getNetworkStatus();
     

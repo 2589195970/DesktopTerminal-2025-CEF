@@ -23,6 +23,9 @@
 #include <QLibrary>
 #include <QProcess>
 #include <QSysInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -38,6 +41,7 @@ SystemChecker::SystemChecker(QObject *parent)
     , m_currentCheck(0)
     , m_totalChecks(6)
     , m_checkInProgress(false)
+    , m_usedCache(false)
 {
     // 注册自定义类型用于信号槽
     qRegisterMetaType<SystemChecker::CheckResult>("SystemChecker::CheckResult");
@@ -67,10 +71,29 @@ void SystemChecker::startSystemCheck()
     m_checkInProgress = true;
     m_currentCheck = 0;
     m_results.clear();
+    m_usedCache = false;
+
+    // 尝试加载缓存的检测结果（24小时内有效）
+    if (loadCachedCheckResults()) {
+        m_usedCache = true;
+        m_logger->appEvent("=== 使用缓存的系统检测结果（加速启动） ===");
+
+        // 仍然逐项发出信号以驱动LoadingDialog进度条
+        for (int i = 0; i < m_results.size(); ++i) {
+            m_currentCheck = i + 1;
+            emit checkProgress(m_currentCheck, m_totalChecks, m_results[i].title);
+            emit checkItemCompleted(m_results[i]);
+        }
+
+        bool success = !hasFatalErrors();
+        m_checkInProgress = false;
+        m_logger->appEvent(QString("缓存检测结果: %1").arg(success ? "成功" : "失败"));
+        emit checkCompleted(success, m_results);
+        return;
+    }
 
     m_logger->appEvent("=== 开始全面系统检测 ===");
 
-    // 按顺序执行各项检测
     QStringList checkNames = {
         "系统兼容性检测",
         "网络连接检测", 
@@ -97,19 +120,22 @@ void SystemChecker::startSystemCheck()
         m_results.append(result);
         emit checkItemCompleted(result);
         
-        // 如果遇到致命错误，停止后续检测
         if (result.level == LEVEL_FATAL) {
             m_logger->errorEvent(QString("检测到致命错误: %1").arg(result.message));
             break;
         }
         
-        // 给UI一些时间更新
         QThread::msleep(100);
     }
 
     bool success = !hasFatalErrors();
     m_checkInProgress = false;
     
+    // 检测成功则缓存结果，下次启动可直接复用
+    if (success) {
+        saveCacheCheckResults();
+    }
+
     m_logger->appEvent(QString("系统检测完成，结果: %1").arg(success ? "成功" : "失败"));
     emit checkCompleted(success, m_results);
 }
@@ -663,4 +689,92 @@ void SystemChecker::retryCheck(CheckType type)
 void SystemChecker::onNetworkCheckTimeout()
 {
     m_logger->appEvent("网络检测超时");
+}
+
+QString SystemChecker::getCacheFilePath() const
+{
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(appDataPath);
+    if (!dir.exists()) {
+        dir.mkpath(".");
+    }
+    return dir.filePath("system_check_cache.json");
+}
+
+bool SystemChecker::loadCachedCheckResults()
+{
+    QString cachePath = getCacheFilePath();
+    QFile file(cachePath);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    if (doc.isNull() || !doc.isObject()) {
+        return false;
+    }
+
+    QJsonObject root = doc.object();
+
+    // 检查缓存时间戳是否在有效期内
+    QString timestampStr = root.value("timestamp").toString();
+    QDateTime cacheTime = QDateTime::fromString(timestampStr, Qt::ISODate);
+    if (!cacheTime.isValid() || cacheTime.secsTo(QDateTime::currentDateTime()) > CACHE_VALIDITY_HOURS * 3600) {
+        m_logger->appEvent("系统检测缓存已过期，将重新检测");
+        return false;
+    }
+
+    // 验证应用版本一致（防止升级后使用旧缓存）
+    QString cachedVersion = root.value("appVersion").toString();
+    if (cachedVersion != QCoreApplication::applicationVersion()) {
+        m_logger->appEvent("应用版本变更，系统检测缓存失效");
+        return false;
+    }
+
+    // 还原缓存的检测结果
+    QJsonArray resultsArray = root.value("results").toArray();
+    m_results.clear();
+    for (const QJsonValue& val : resultsArray) {
+        QJsonObject obj = val.toObject();
+        CheckResult result;
+        result.type = static_cast<CheckType>(obj.value("type").toInt());
+        result.level = static_cast<CheckLevel>(obj.value("level").toInt());
+        result.title = obj.value("title").toString();
+        result.message = obj.value("message").toString();
+        result.canRetry = obj.value("canRetry").toBool();
+        result.autoFixable = obj.value("autoFixable").toBool();
+        m_results.append(result);
+    }
+
+    m_logger->appEvent(QString("加载缓存检测结果成功，缓存时间: %1").arg(timestampStr));
+    return !m_results.isEmpty();
+}
+
+void SystemChecker::saveCacheCheckResults()
+{
+    QJsonObject root;
+    root["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    root["appVersion"] = QCoreApplication::applicationVersion();
+
+    QJsonArray resultsArray;
+    for (const CheckResult& result : m_results) {
+        QJsonObject obj;
+        obj["type"] = static_cast<int>(result.type);
+        obj["level"] = static_cast<int>(result.level);
+        obj["title"] = result.title;
+        obj["message"] = result.message;
+        obj["canRetry"] = result.canRetry;
+        obj["autoFixable"] = result.autoFixable;
+        resultsArray.append(obj);
+    }
+    root["results"] = resultsArray;
+
+    QString cachePath = getCacheFilePath();
+    QFile file(cachePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
+        file.close();
+        m_logger->appEvent(QString("系统检测结果已缓存: %1").arg(cachePath));
+    }
 }
