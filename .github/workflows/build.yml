@@ -64,7 +64,6 @@ jobs:
       run: |
         $ErrorActionPreference = 'Stop'
         $arch = '${{ matrix.arch }}'
-        $opensslVersion = '1.1.1.2100'
         $chocoArgs = @(
           'install',
           'openssl.light',
@@ -73,14 +72,13 @@ jobs:
           '--timeout',
           '180'
         )
-        $chocoArgsWithVersion = $chocoArgs + "--version=$opensslVersion"
         if ($arch -eq 'x86') {
-          $chocoArgsWithVersion += '--forcex86'
+          $chocoArgs += '--forcex86'
         }
-        Write-Host "Installing openssl.light $opensslVersion for $arch"
-        & choco @chocoArgsWithVersion
+        Write-Host "Installing openssl.light for $arch"
+        & choco @chocoArgs
         if ($LASTEXITCODE -ne 0) {
-          throw "Failed to install OpenSSL runtime $opensslVersion"
+          throw "Failed to install OpenSSL runtime"
         }
 
         $requiredPairs = @()
