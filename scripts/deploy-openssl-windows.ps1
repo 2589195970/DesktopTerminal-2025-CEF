@@ -7,6 +7,8 @@ param(
     [ValidateSet("x64", "x86")]
     [string]$Arch,
 
+    [string]$SourceDir,
+
     [switch]$Required
 )
 
@@ -29,28 +31,118 @@ $candidateNames = $candidateNames | Select-Object -Unique
 $expectedMachine = if ($Arch -eq "x86") { 0x014c } else { 0x8664 }
 
 $searchPaths = @()
-if ($env:Qt5_Dir) {
-    $qtRoot = (Resolve-Path (Join-Path $env:Qt5_Dir "..\..\") -ErrorAction SilentlyContinue).Path
-    if ($qtRoot) {
-        $searchPaths += (Join-Path $qtRoot "Tools\OpenSSL\$opensslSubdir\bin")
-        $searchPaths += (Join-Path $qtRoot "Tools\OpenSSL\$opensslSubdir")
-        $searchPaths += (Join-Path $qtRoot "Tools\OpenSSL\Win_x64\bin")
-        $searchPaths += (Join-Path $qtRoot "Tools\OpenSSL\Win_x64")
-        $searchPaths += (Join-Path $qtRoot "bin")
+$hasExplicitSource = (-not [string]::IsNullOrWhiteSpace($SourceDir)) -or (-not [string]::IsNullOrWhiteSpace($env:OPENSSL_RUNTIME_DIR))
+function Add-SearchPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+
+    $resolved = $null
+    try {
+        $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction SilentlyContinue).Path
+    } catch {
+        $resolved = $null
+    }
+
+    if ($resolved) {
+        $script:searchPaths += $resolved
+    } else {
+        $script:searchPaths += $Path
     }
 }
-$searchPaths += @(
-    "C:\Program Files\OpenSSL\bin",
-    "C:\Program Files\OpenSSL-Win64\bin",
-    "C:\Program Files\OpenSSL-Win32\bin",
-    "${env:ProgramFiles(x86)}\OpenSSL-Win32\bin",
-    "${env:ProgramFiles(x86)}\OpenSSL-Win64\bin",
-    "C:\OpenSSL-Win64\bin",
-    "C:\OpenSSL-Win32\bin",
-    "C:\Qt\Tools\OpenSSL\$opensslSubdir\bin",
-    "C:\Qt\Tools\OpenSSL\$opensslSubdir",
-    "C:\Qt\Tools\OpenSSL\Win_x64\bin"
-)
+
+function Add-OpenSslTreePaths {
+    param([string]$Root)
+
+    if ([string]::IsNullOrWhiteSpace($Root)) { return }
+
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\$opensslSubdir\bin")
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\$opensslSubdir")
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\Win_x64\bin")
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\Win_x64")
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\Win_x86\bin")
+    Add-SearchPath (Join-Path $Root "Tools\OpenSSL\Win_x86")
+    Add-SearchPath (Join-Path $Root "bin")
+}
+
+if ($env:Qt5_Dir) {
+    $qtRootCandidates = @(
+        $env:Qt5_Dir,
+        (Join-Path $env:Qt5_Dir ".."),
+        (Join-Path $env:Qt5_Dir "..\.."),
+        (Join-Path $env:Qt5_Dir "..\..\.."),
+        (Join-Path $env:Qt5_Dir "..\..\..\..")
+    )
+    foreach ($candidate in $qtRootCandidates) {
+        $resolved = $null
+        try {
+            $resolved = (Resolve-Path -LiteralPath $candidate -ErrorAction SilentlyContinue).Path
+        } catch {
+            $resolved = $null
+        }
+        if ($resolved) {
+            Add-OpenSslTreePaths -Root $resolved
+        }
+    }
+}
+
+Add-SearchPath $SourceDir
+Add-SearchPath $env:OPENSSL_RUNTIME_DIR
+
+if (-not $hasExplicitSource) {
+    Add-SearchPath $TargetDir
+    if ($env:OPENSSL_ROOT_DIR) {
+        Add-SearchPath $env:OPENSSL_ROOT_DIR
+        Add-SearchPath (Join-Path $env:OPENSSL_ROOT_DIR "bin")
+    }
+    if ($env:OPENSSL_DIR) {
+        Add-SearchPath $env:OPENSSL_DIR
+        Add-SearchPath (Join-Path $env:OPENSSL_DIR "bin")
+    }
+
+    $knownRoots = @(
+        "C:\Program Files\OpenSSL",
+        "C:\Program Files\OpenSSL-Win64",
+        "C:\Program Files\OpenSSL-Win32",
+        "${env:ProgramFiles(x86)}\OpenSSL-Win32",
+        "${env:ProgramFiles(x86)}\OpenSSL-Win64",
+        "C:\OpenSSL-Win64",
+        "C:\OpenSSL-Win32",
+        "C:\Qt",
+        "D:\a\DesktopTerminal-2025-CEF\Qt",
+        "C:\Qt\Tools\OpenSSL\$opensslSubdir",
+        "D:\a\DesktopTerminal-2025-CEF\Qt\Tools\OpenSSL\$opensslSubdir",
+        "C:\ProgramData\chocolatey\lib\openssl.light",
+        "C:\ProgramData\chocolatey\lib\openssl",
+        "C:\ProgramData\chocolatey\bin"
+    )
+
+    if ($env:ChocolateyInstall) {
+        $knownRoots += @(
+            (Join-Path $env:ChocolateyInstall "bin"),
+            (Join-Path $env:ChocolateyInstall "lib\openssl.light"),
+            (Join-Path $env:ChocolateyInstall "lib\openssl")
+        )
+    }
+
+    foreach ($root in $knownRoots) {
+        Add-SearchPath $root
+        Add-SearchPath (Join-Path $root "bin")
+        Add-SearchPath (Join-Path $root "tools")
+        Add-SearchPath (Join-Path $root "tools\bin")
+        Add-SearchPath (Join-Path $root "tools\OpenSSL-Win64\bin")
+        Add-SearchPath (Join-Path $root "tools\OpenSSL-Win32\bin")
+        Add-SearchPath (Join-Path $root "OpenSSL-Win64\bin")
+        Add-SearchPath (Join-Path $root "OpenSSL-Win32\bin")
+    }
+
+    if ($env:Path) {
+        foreach ($pathEntry in ($env:Path -split ";")) {
+            Add-SearchPath $pathEntry
+        }
+    }
+}
+
 $searchPaths = $searchPaths | Where-Object { $_ } | Select-Object -Unique
 
 function Get-DllMachine {
@@ -130,44 +222,18 @@ function Select-OpenSslSource {
     return $false
 }
 
-function Search-DiskForOpenSsl {
-    Write-Host "[INFO] Searching entire disk for OpenSSL 1.1 DLLs..."
-
-    $seenDirs = @()
-    foreach ($name in $candidateNames) {
-        $hits = Get-ChildItem -Path "C:\" -Recurse -Filter $name -ErrorAction SilentlyContinue
-        foreach ($hit in $hits) {
-            if (-not $hit -or -not $hit.DirectoryName) { continue }
-            if ($seenDirs -contains $hit.DirectoryName) { continue }
-            $seenDirs += $hit.DirectoryName
-
-            foreach ($pair in $requiredPairs) {
-                if (Test-CompletePair -Dir $hit.DirectoryName -Pair $pair) {
-                    $script:sourceDir = $hit.DirectoryName
-                    $script:selectedPair = $pair
-                    Write-Host "[OK] Found via disk scan: $script:sourceDir"
-                    Write-Host "[OK] Selected DLL pair: $($pair -join ', ')"
-                    return $true
-                }
-            }
-        }
-    }
-
-    return $false
-}
-
 $sourceDir = $null
 $selectedPair = $null
 Select-OpenSslSource -Paths $searchPaths | Out-Null
 
 if (-not $sourceDir) {
-    Search-DiskForOpenSsl | Out-Null
-}
-
-if (-not $sourceDir) {
     Write-Host "[WARN] Complete OpenSSL 1.1 runtime pair not found for $Arch."
     Write-Host "[WARN] Qt HTTPS (QNetworkAccessManager) will not work."
     Write-Host "[WARN] CEF browser HTTPS is unaffected. Desktop auth retries in background."
+    Write-Host "[INFO] Direct search paths checked:"
+    foreach ($p in $searchPaths) {
+        Write-Host "[INFO]   $p"
+    }
     if ($Required) {
         exit 1
     }
