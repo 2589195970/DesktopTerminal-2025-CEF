@@ -717,15 +717,7 @@ bool SystemChecker::loadCachedCheckResults()
 
     QJsonObject root = doc.object();
 
-    // 检查缓存时间戳是否在有效期内
-    QString timestampStr = root.value("timestamp").toString();
-    QDateTime cacheTime = QDateTime::fromString(timestampStr, Qt::ISODate);
-    if (!cacheTime.isValid() || cacheTime.secsTo(QDateTime::currentDateTime()) > CACHE_VALIDITY_HOURS * 3600) {
-        m_logger->appEvent("系统检测缓存已过期，将重新检测");
-        return false;
-    }
-
-    // 验证应用版本一致（防止升级后使用旧缓存）
+    // 仅在应用版本变更时失效（卸载重装会清除缓存文件，升级会改变版本号）
     QString cachedVersion = root.value("appVersion").toString();
     if (cachedVersion != QCoreApplication::applicationVersion()) {
         m_logger->appEvent("应用版本变更，系统检测缓存失效");
@@ -747,7 +739,7 @@ bool SystemChecker::loadCachedCheckResults()
         m_results.append(result);
     }
 
-    m_logger->appEvent(QString("加载缓存检测结果成功，缓存时间: %1").arg(timestampStr));
+    m_logger->appEvent("加载缓存检测结果成功，跳过系统检测");
     return !m_results.isEmpty();
 }
 

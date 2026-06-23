@@ -506,18 +506,12 @@ bool Application::checkNetworkConnection()
     QStringList backupUrls = m_configManager->getBackupCheckUrls();
     int timeout = m_configManager->getNetworkCheckTimeout();
 
-    // 如果系统检测使用了缓存（24h内通过过），说明网络近期正常
-    // 使用更短的超时做快速验证即可，节省2-3秒
+    // 系统检测缓存存在说明此前启动时网络正常，用更短超时快速验证
     QString cachePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                         + "/system_check_cache.json";
-    QFileInfo cacheInfo(cachePath);
-    if (cacheInfo.exists()) {
-        qint64 ageSeconds = cacheInfo.lastModified().secsTo(QDateTime::currentDateTime());
-        if (ageSeconds >= 0 && ageSeconds < 24 * 3600) {
-            timeout = qMin(timeout, 2000);
-            m_logger->appEvent(QString("网络检测使用快速模式（缓存%1秒前有效），超时=%2ms")
-                .arg(ageSeconds).arg(timeout));
-        }
+    if (QFileInfo::exists(cachePath)) {
+        timeout = qMin(timeout, 2000);
+        m_logger->appEvent(QString("网络检测快速模式，超时=%1ms").arg(timeout));
     }
 
     m_networkChecker->setCheckUrls(backupUrls);

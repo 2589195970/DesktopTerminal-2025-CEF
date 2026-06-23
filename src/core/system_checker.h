@@ -168,11 +168,10 @@ private:
     QString getSystemDescription();
     bool installVCRuntimePackage();
 
-    // 缓存机制：避免每次启动重复做相同的系统检测
+    // 缓存机制：系统检测首次通过后永久缓存，仅版本变更时失效
     bool loadCachedCheckResults();
     void saveCacheCheckResults();
     QString getCacheFilePath() const;
-    static const int CACHE_VALIDITY_HOURS = 24;
 
 private:
     Logger* m_logger;
