@@ -17,7 +17,7 @@
 #endif
 
 #if CEF_VERSION_MAJOR >= 109
-#define CEF_BIND_TASK base::BindOnce
+#define CEF_BIND_TASK base::BindRepeating
 #else
 #define CEF_BIND_TASK base::Bind
 #endif
