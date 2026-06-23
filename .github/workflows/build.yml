@@ -2,7 +2,7 @@ name: Build DesktopTerminal-CEF
 
 on:
   push:
-    branches: [ master, main, develop ]
+    branches: [ master, main, develop, feature/cef109-x86-test ]
   pull_request:
     branches: [ master, main ]
   release:
@@ -23,9 +23,9 @@ jobs:
         include:
           - arch: x86
             platform: Win32
-            cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
+            cef_version: "109.1.18+gf1c41e4+chromium-109.0.5414.120"
             qt_arch: win32_msvc2019
-            name: "Windows 32-bit (CEF 75 - Maximum Compatibility)"
+            name: "Windows 32-bit (CEF 109 - x86 test)"
           - arch: x64
             platform: x64
             cef_version: "75.1.14+gc81164e+chromium-75.0.3770.100"
@@ -145,9 +145,9 @@ jobs:
           rmdir /s /q "third_party\cef"
         )
         if "${{ matrix.arch }}"=="x86" (
-          scripts\download-cef.bat "/platform=windows32" "/force"
+          scripts\download-cef.bat "/platform=windows32" "/version=${{ matrix.cef_version }}" "/force"
         ) else (
-          scripts\download-cef.bat "/platform=windows64" "/force"
+          scripts\download-cef.bat "/platform=windows64" "/version=${{ matrix.cef_version }}" "/force"
         )
         
         echo "=== 详细验证下载结果 ==="

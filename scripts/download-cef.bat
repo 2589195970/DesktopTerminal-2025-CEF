@@ -54,16 +54,16 @@ if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 call :log_info "检测到平台: Windows %ARCH_TYPE% -> %PLATFORM%"
 goto :eof
 
-REM 全平台统一使用CEF 75以获得最大兼容性
+REM 默认使用CEF 75以获得最大兼容性，允许命令行指定其他CEF版本
 :select_cef_version
-set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"
+if "!CEF_VERSION!"=="" set "CEF_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"
 
 if "%PLATFORM%"=="windows32" (
     set "CEF_PLATFORM=windows32"
-    call :log_info "选择CEF 75.1.14版本 - Windows 32位最大兼容性"
+    call :log_info "选择CEF版本 !CEF_VERSION! - Windows 32位"
 ) else (
     set "CEF_PLATFORM=windows64" 
-    call :log_info "选择CEF 75.1.14版本 - Windows 64位最大兼容性"
+    call :log_info "选择CEF版本 !CEF_VERSION! - Windows 64位"
 )
 
 set "CEF_BINARY_NAME=cef_binary_!CEF_VERSION!_!CEF_PLATFORM!"
@@ -100,46 +100,55 @@ REM 创建临时目录
 set "TEMP_DIR=%TEMP%\cef_download_%RANDOM%"
 mkdir "%TEMP_DIR%"
 
-REM 优先从GitHub Release下载
-set "GITHUB_RELEASE_URL=https://github.com/%GITHUB_REPO%/releases/download/cef-75.1.14/cef-75.1.14-%CEF_PLATFORM%.tar.bz2"
-call :log_info "尝试从GitHub Release下载..."
+set "DOWNLOAD_READY=false"
+set "CEF75_VERSION=75.1.14+gc81164e+chromium-75.0.3770.100"
 
-powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%GITHUB_RELEASE_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UseBasicParsing -TimeoutSec 300; exit 0 } catch { exit 1 } }" >nul 2>&1
+REM CEF75有项目Release镜像，其他版本直接使用Spotify CDN
+if "!CEF_VERSION!"=="!CEF75_VERSION!" (
+    set "GITHUB_RELEASE_URL=https://github.com/%GITHUB_REPO%/releases/download/cef-75.1.14/cef-75.1.14-!CEF_PLATFORM!.tar.bz2"
+    call :log_info "尝试从GitHub Release下载..."
 
-if !errorlevel! equ 0 (
-    call :log_success "GitHub Release下载成功！"
-    goto :verify_download
+    powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '!GITHUB_RELEASE_URL!' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UseBasicParsing -TimeoutSec 300; exit 0 } catch { exit 1 } }" >nul 2>&1
+
+    if !errorlevel! equ 0 (
+        call :log_success "GitHub Release下载成功！"
+        set "DOWNLOAD_READY=true"
+    )
+) else (
+    call :log_info "非CEF75版本，跳过项目GitHub Release镜像"
 )
 
 REM 回退到Spotify CDN
-call :log_warning "GitHub Release下载失败，回退到Spotify CDN..."
-call :log_info "下载 %CEF_ARCHIVE_NAME%..."
+if "!DOWNLOAD_READY!"=="false" (
+    call :log_warning "使用Spotify CDN下载..."
+    call :log_info "下载 %CEF_ARCHIVE_NAME%..."
 
-powershell -Command "exit" >nul 2>&1
-if !errorlevel! equ 0 (
-    set "DOWNLOAD_SUCCESS=false"
-    for /l %%i in (1,1,3) do (
-        if "!DOWNLOAD_SUCCESS!"=="false" (
-            call :log_info "尝试下载 (%%i/3)..."
-            powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UserAgent 'Mozilla/5.0' -TimeoutSec 300 -UseBasicParsing; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 } }"
-            if !errorlevel! equ 0 (
-                set "DOWNLOAD_SUCCESS=true"
-                call :log_success "下载成功！"
-            ) else (
-                call :log_warning "下载失败，等待5秒后重试..."
-                ping -n 6 127.0.0.1 >nul
+    powershell -Command "exit" >nul 2>&1
+    if !errorlevel! equ 0 (
+        set "DOWNLOAD_SUCCESS=false"
+        for /l %%i in (1,1,3) do (
+            if "!DOWNLOAD_SUCCESS!"=="false" (
+                call :log_info "尝试下载 (%%i/3)..."
+                powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UserAgent 'Mozilla/5.0' -TimeoutSec 300 -UseBasicParsing; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 } }"
+                if !errorlevel! equ 0 (
+                    set "DOWNLOAD_SUCCESS=true"
+                    call :log_success "下载成功！"
+                ) else (
+                    call :log_warning "下载失败，等待5秒后重试..."
+                    ping -n 6 127.0.0.1 >nul
+                )
             )
         )
-    )
-    if "!DOWNLOAD_SUCCESS!"=="false" (
-        call :log_error "所有下载源均失败"
+        if "!DOWNLOAD_SUCCESS!"=="false" (
+            call :log_error "所有下载源均失败"
+            rmdir /s /q "%TEMP_DIR%"
+            exit /b 1
+        )
+    ) else (
+        call :log_error "需要PowerShell支持"
         rmdir /s /q "%TEMP_DIR%"
         exit /b 1
     )
-) else (
-    call :log_error "需要PowerShell支持"
-    rmdir /s /q "%TEMP_DIR%"
-    exit /b 1
 )
 
 :verify_download
@@ -478,6 +487,7 @@ echo 选项:
 echo   /f, /force     强制重新下载，即使CEF已存在
 echo   /h, /help      显示此帮助信息
 echo   /platform=PLATFORM  指定平台 (windows32, windows64)
+echo   /version=VERSION    指定CEF版本
 echo.
 echo 示例:
 echo   %~nx0                # 自动检测平台并下载对应版本
@@ -489,6 +499,7 @@ REM 主函数
 :main
 set "FORCE_DOWNLOAD=false"
 set "CUSTOM_PLATFORM="
+set "CUSTOM_VERSION="
 
 REM 解析命令行参数
 :parse_args
@@ -499,6 +510,8 @@ if /i "%~1"=="/h" goto :show_help_and_exit
 if /i "%~1"=="/help" goto :show_help_and_exit
 if "%~1"=="/platform=windows32" set "CUSTOM_PLATFORM=windows32" & shift & goto :parse_args
 if "%~1"=="/platform=windows64" set "CUSTOM_PLATFORM=windows64" & shift & goto :parse_args
+set "ARG=%~1"
+if /i "!ARG:~0,9!"=="/version=" set "CUSTOM_VERSION=!ARG:~9!" & shift & goto :parse_args
 call :log_error "未知参数: %~1"
 goto :show_help_and_exit
 
@@ -517,7 +530,12 @@ if not "%CUSTOM_PLATFORM%"=="" (
     call :detect_platform
 )
 
-REM 选择CEF版本
+if not "%CUSTOM_VERSION%"=="" (
+    set "CEF_VERSION=%CUSTOM_VERSION%"
+    call :log_info "使用指定版本: !CEF_VERSION!"
+)
+
+REM 选择CEF版本和平台后缀
 call :select_cef_version
 
 REM 构建下载URL

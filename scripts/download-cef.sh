@@ -77,27 +77,28 @@ detect_platform() {
     log_info "检测到平台: $OS ($MACHINE_TYPE) -> $PLATFORM"
 }
 
-# 全平台统一使用CEF 75以获得最大兼容性
+# 默认使用CEF 75以获得最大兼容性，允许命令行指定其他CEF版本
 select_cef_version() {
-    # 统一CEF版本
-    CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
+    if [[ -z "$CEF_VERSION" ]]; then
+        CEF_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
+    fi
     
     case $PLATFORM in
         "windows32")
             CEF_PLATFORM="windows32"
-            log_info "选择CEF 75.1.14版本 - Windows 32位最大兼容性"
+            log_info "选择CEF版本 $CEF_VERSION - Windows 32位"
             ;;
         "windows64")
             CEF_PLATFORM="windows64"
-            log_info "选择CEF 75.1.14版本 - Windows 64位最大兼容性"
+            log_info "选择CEF版本 $CEF_VERSION - Windows 64位"
             ;;
         "macosx64")
             CEF_PLATFORM="macosx64"
-            log_info "选择CEF 75.1.14版本 - macOS 64位最大兼容性"
+            log_info "选择CEF版本 $CEF_VERSION - macOS 64位"
             ;;
         "linux64")
             CEF_PLATFORM="linux64"
-            log_info "选择CEF 75.1.14版本 - Linux 64位最大兼容性"
+            log_info "选择CEF版本 $CEF_VERSION - Linux 64位"
             ;;
         *)
             log_error "不支持的平台: $PLATFORM"
@@ -149,34 +150,43 @@ download_cef() {
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf $TEMP_DIR" EXIT
 
-    # 优先从GitHub Release下载
-    GITHUB_RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/cef-75.1.14/cef-75.1.14-${CEF_PLATFORM}.tar.bz2"
-    log_info "尝试从GitHub Release下载..."
+    local DOWNLOAD_READY=false
+    local CEF75_VERSION="75.1.14+gc81164e+chromium-75.0.3770.100"
 
-    if command -v curl >/dev/null 2>&1; then
-        if curl -L -f "$GITHUB_RELEASE_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME" 2>/dev/null; then
-            log_success "GitHub Release下载成功"
-            return 0
+    # CEF75有项目Release镜像，其他版本直接使用Spotify CDN
+    if [[ "$CEF_VERSION" == "$CEF75_VERSION" ]]; then
+        GITHUB_RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/cef-75.1.14/cef-75.1.14-${CEF_PLATFORM}.tar.bz2"
+        log_info "尝试从GitHub Release下载..."
+
+        if command -v curl >/dev/null 2>&1; then
+            if curl -L -f "$GITHUB_RELEASE_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME" 2>/dev/null; then
+                log_success "GitHub Release下载成功"
+                DOWNLOAD_READY=true
+            fi
         fi
+    else
+        log_info "非CEF75版本，跳过项目GitHub Release镜像"
     fi
 
     # 回退到Spotify CDN
-    log_warning "GitHub Release下载失败，回退到Spotify CDN..."
-    log_info "下载 $CEF_ARCHIVE_NAME..."
+    if [[ "$DOWNLOAD_READY" != "true" ]]; then
+        log_warning "使用Spotify CDN下载..."
+        log_info "下载 $CEF_ARCHIVE_NAME..."
 
-    if command -v curl >/dev/null 2>&1; then
-        if ! curl -L "$DOWNLOAD_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
-            log_error "curl下载失败"
+        if command -v curl >/dev/null 2>&1; then
+            if ! curl -L "$DOWNLOAD_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
+                log_error "curl下载失败"
+                return 1
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if ! wget "$DOWNLOAD_URL" -O "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
+                log_error "wget下载失败"
+                return 1
+            fi
+        else
+            log_error "未找到curl或wget"
             return 1
         fi
-    elif command -v wget >/dev/null 2>&1; then
-        if ! wget "$DOWNLOAD_URL" -O "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
-            log_error "wget下载失败"
-            return 1
-        fi
-    else
-        log_error "未找到curl或wget"
-        return 1
     fi
 
     log_success "下载完成"
@@ -348,13 +358,13 @@ main() {
         detect_platform
     fi
     
-    # 选择CEF版本
     if [[ -n "$CUSTOM_VERSION" ]]; then
         CEF_VERSION="$CUSTOM_VERSION"
         log_info "使用指定版本: $CEF_VERSION"
-    else
-        select_cef_version
     fi
+
+    # 选择CEF版本和平台后缀
+    select_cef_version
     
     # 构建下载URL
     build_download_url

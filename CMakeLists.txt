@@ -20,15 +20,17 @@ else()
     message(STATUS "32位架构检测")
 endif()
 
-# 全平台统一使用CEF 75以获得最大兼容性
-set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
-message(STATUS "使用CEF 75.1.14版本 - 全平台最大兼容性模式")
+# 默认使用CEF 75以获得最大兼容性；允许构建脚本通过-DCEF_VERSION覆盖。
+if(NOT DEFINED CEF_VERSION OR CEF_VERSION STREQUAL "")
+    set(CEF_VERSION "75.1.14+gc81164e+chromium-75.0.3770.100")
+endif()
+message(STATUS "使用CEF版本: ${CEF_VERSION}")
 
-# 为所有平台设置CEF 75兼容性优化
+# 为默认CEF 75兼容性模式保留原有提示
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(STATUS "Windows 32位 - CEF 75原生支持")
+    message(STATUS "Windows 32位 - 使用配置的CEF版本")
 else()
-    message(STATUS "其他平台 - CEF 75统一兼容性模式")
+    message(STATUS "其他平台 - 使用配置的CEF版本")
 endif()
 
 # Windows平台特殊设置

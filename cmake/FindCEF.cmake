@@ -1,7 +1,7 @@
 # FindCEF.cmake - CEF库查找模块
-# 全平台统一使用CEF 75以获得最大兼容性
+# 默认使用CEF 75以获得最大兼容性，允许通过-DCEF_VERSION覆盖。
 
-# 统一CEF版本 - 所有平台使用CEF 75
+# 默认CEF版本
 set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")
 
 # 根据平台确定CEF平台后缀
@@ -24,7 +24,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 # 使用传入的版本或默认版本
-if(NOT CEF_VERSION)
+if(NOT DEFINED CEF_VERSION OR CEF_VERSION STREQUAL "")
     set(CEF_VERSION ${CEF_VERSION_DEFAULT})
 endif()
 
