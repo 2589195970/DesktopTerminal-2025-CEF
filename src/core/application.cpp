@@ -7,8 +7,6 @@
 #include "../network/desktop_auth_manager.h"
 
 #include <QDir>
-#include <QFileInfo>
-#include <QDateTime>
 #include <QStandardPaths>
 #include <QMessageBox>
 #include <QSysInfo>
@@ -502,19 +500,15 @@ bool Application::checkNetworkConnection()
 {
     m_networkChecker = new NetworkChecker(this);
 
-    QString checkUrl = m_configManager->getCheckUrl();
-    QStringList backupUrls = m_configManager->getBackupCheckUrls();
-    int timeout = m_configManager->getNetworkCheckTimeout();
+    const QString checkUrl = m_configManager->getCheckUrl();
+    const int timeout = m_configManager->getNetworkCheckTimeout();
 
-    // 系统检测缓存存在说明此前启动时网络正常，用更短超时快速验证
-    QString cachePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-                        + "/system_check_cache.json";
-    if (QFileInfo::exists(cachePath)) {
-        timeout = qMin(timeout, 2000);
-        m_logger->appEvent(QString("网络检测快速模式，超时=%1ms").arg(timeout));
+    if (checkUrl.isEmpty()) {
+        m_logger->errorEvent("网络检查失败：未配置考试服务器地址");
+        return false;
     }
 
-    m_networkChecker->setCheckUrls(backupUrls);
+    m_logger->appEvent(QString("检测考试服务器连通性: %1").arg(checkUrl));
 
     QEventLoop loop;
     connect(m_networkChecker, &NetworkChecker::checkCompleted, &loop, &QEventLoop::quit);
@@ -529,7 +523,7 @@ bool Application::checkNetworkConnection()
         return false;
     }
 
-    m_logger->appEvent("网络连接正常");
+    m_logger->appEvent(QString("考试服务器连接正常: %1").arg(checkUrl));
     return true;
 }
 

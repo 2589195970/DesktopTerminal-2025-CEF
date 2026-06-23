@@ -26,9 +26,6 @@ NetworkChecker::NetworkChecker(QObject *parent)
     m_timeoutTimer->setSingleShot(true);
     connect(m_timeoutTimer, &QTimer::timeout, this, &NetworkChecker::onCheckTimeout);
     
-    // 设置默认检测URL列表
-    m_checkUrls << "https://www.baidu.com";
-    
     detectNetworkConfiguration();
     
     Logger::instance().appEvent("NetworkChecker创建完成");
@@ -51,23 +48,24 @@ void NetworkChecker::startCheck(const QString& targetUrl, int timeoutMs)
     m_errorDetails.clear();
     m_currentUrlIndex = 0;
     
-    // 如果指定了目标URL，将其放在检测列表的首位
+    // 仅检测指定服务器，不探测备用/第三方地址
     if (!targetUrl.isEmpty()) {
         m_targetUrl = targetUrl;
-        QStringList urls = m_checkUrls;
-        urls.prepend(targetUrl);
-        m_checkUrls = urls;
+        m_checkUrls = QStringList{targetUrl};
     } else {
-        // 尝试从配置中获取目标URL
         ConfigManager& config = ConfigManager::instance();
         if (config.isLoaded()) {
-            m_targetUrl = config.getUrl();
+            m_targetUrl = config.getCheckUrl();
             if (!m_targetUrl.isEmpty()) {
-                QStringList urls = m_checkUrls;
-                urls.prepend(m_targetUrl);
-                m_checkUrls = urls;
+                m_checkUrls = QStringList{m_targetUrl};
             }
         }
+    }
+
+    if (m_checkUrls.isEmpty()) {
+        m_checking = false;
+        completeCheck(Disconnected, "未配置考试服务器地址");
+        return;
     }
     
     Logger::instance().appEvent(QString("开始网络检测，目标URL: %1").arg(m_targetUrl));

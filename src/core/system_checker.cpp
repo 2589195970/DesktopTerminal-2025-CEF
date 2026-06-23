@@ -26,6 +26,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QEventLoop>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -73,16 +74,48 @@ void SystemChecker::startSystemCheck()
     m_results.clear();
     m_usedCache = false;
 
-    // 尝试加载缓存的检测结果（24小时内有效）
+    // 尝试加载缓存的检测结果（网络检测每次启动都会重新执行）
     if (loadCachedCheckResults()) {
         m_usedCache = true;
-        m_logger->appEvent("=== 使用缓存的系统检测结果（加速启动） ===");
+        m_logger->appEvent("=== 使用缓存的系统检测结果（网络每次检测） ===");
 
-        // 仍然逐项发出信号以驱动LoadingDialog进度条
-        for (int i = 0; i < m_results.size(); ++i) {
+        QStringList checkNames = {
+            "系统兼容性检测",
+            "网络连接检测",
+            "运行库依赖检查",
+            "CEF依赖检查",
+            "配置权限验证",
+            "组件预加载"
+        };
+
+        QList<CheckResult> cachedResults = m_results;
+        m_results.clear();
+
+        for (int i = 0; i < checkNames.size(); ++i) {
             m_currentCheck = i + 1;
-            emit checkProgress(m_currentCheck, m_totalChecks, m_results[i].title);
-            emit checkItemCompleted(m_results[i]);
+            emit checkProgress(m_currentCheck, m_totalChecks, checkNames[i]);
+
+            CheckResult result;
+            if (i == 1) {
+                result = checkNetworkConnection();
+            } else {
+                const int cacheIndex = (i < 1) ? i : i - 1;
+                if (cacheIndex >= 0 && cacheIndex < cachedResults.size()) {
+                    result = cachedResults[cacheIndex];
+                } else {
+                    result.title = checkNames[i];
+                    result.level = LEVEL_OK;
+                    result.message = "检测项已跳过";
+                }
+            }
+
+            m_results.append(result);
+            emit checkItemCompleted(result);
+
+            if (result.level == LEVEL_FATAL) {
+                m_logger->errorEvent(QString("检测到致命错误: %1").arg(result.message));
+                break;
+            }
         }
 
         bool success = !hasFatalErrors();
@@ -227,97 +260,61 @@ SystemChecker::CheckResult SystemChecker::checkNetworkConnection()
     result.type = CHECK_NETWORK_CONNECTION;
     result.title = "网络连接检测";
     result.canRetry = true;
-    
-    QStringList issues;
-    CheckLevel maxLevel = LEVEL_OK;
 
-    // 检查网络接口
-    QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-    bool hasActiveInterface = false;
-    
-    for (const QNetworkInterface &interface : interfaces) {
-        if (interface.flags() & QNetworkInterface::IsUp && 
-            interface.flags() & QNetworkInterface::IsRunning &&
-            !(interface.flags() & QNetworkInterface::IsLoopBack)) {
-            hasActiveInterface = true;
-            break;
-        }
+    const QString serverUrl = m_configManager->getCheckUrl();
+    if (serverUrl.isEmpty()) {
+        result.level = LEVEL_FATAL;
+        result.message = "未配置考试服务器地址";
+        result.solution = "请在 config.json 中配置 url 或 checkUrl";
+        return result;
     }
 
-    if (!hasActiveInterface) {
-        issues << "未检测到活动的网络接口";
-        maxLevel = LEVEL_ERROR;
-        
-        // 如果没有活动接口，尝试检查更多信息
-        bool hasAnyInterface = false;
-        for (const QNetworkInterface &interface : interfaces) {
-            if (!(interface.flags() & QNetworkInterface::IsLoopBack)) {
-                hasAnyInterface = true;
-                m_logger->appEvent(QString("发现网络接口 %1，但未激活").arg(interface.name()));
-            }
-        }
-        
-        if (!hasAnyInterface) {
-            issues << "系统中没有发现任何网络适配器";
-            maxLevel = LEVEL_FATAL;
-            result.solution = "请检查：\n1. 网络适配器是否已启用\n2. 网络驱动程序是否正常\n3. 硬件连接是否正确";
-        }
+    m_logger->appEvent(QString("检测考试服务器连通性: %1").arg(serverUrl));
+
+    QNetworkRequest request(serverUrl);
+    request.setRawHeader("User-Agent", "DesktopTerminal-CEF/1.0");
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    const int timeoutMs = m_configManager->getNetworkCheckTimeout();
+    QNetworkReply* reply = m_networkManager->get(request);
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timer.start(timeoutMs);
+    loop.exec();
+
+    bool timedOut = !reply->isFinished();
+    if (timedOut) {
+        reply->abort();
     }
 
-    // 基于Qt 5的网络检测
-    if (!hasActiveInterface) {
-        // 未检测到活动的网络接口
-        issues << "未检测到活动的网络连接";
-        maxLevel = LEVEL_FATAL;
-        result.solution = "网络连接完全断开，请检查：\n1. 网络电缆连接\n2. WiFi开关状态\n3. 网络适配器状态\n4. 联系网络管理员";
+    if (timedOut) {
+        result.level = LEVEL_FATAL;
+        result.message = QString("连接考试服务器超时: %1").arg(serverUrl);
+        result.solution = "请检查网络连接、防火墙或代理设置";
+        result.details << QString("超时: %1ms").arg(timeoutMs);
+    } else if (reply->error() != QNetworkReply::NoError) {
+        result.level = LEVEL_FATAL;
+        result.message = QString("无法连接考试服务器: %1").arg(serverUrl);
+        result.solution = "请检查网络连接并重试";
+        result.details << reply->errorString();
     } else {
-        // 有活动接口，进一步检查网络连通性
-        // 检查是否只有本地连接
-        bool hasInternetCapability = false;
-        for (const QNetworkInterface &interface : interfaces) {
-            if (interface.flags() & QNetworkInterface::IsUp && 
-                interface.flags() & QNetworkInterface::IsRunning &&
-                !(interface.flags() & QNetworkInterface::IsLoopBack)) {
-                
-                // 检查是否有非本地IP地址
-                QList<QNetworkAddressEntry> entries = interface.addressEntries();
-                for (const QNetworkAddressEntry &entry : entries) {
-                    QHostAddress addr = entry.ip();
-                    if (!addr.isLoopback() && !addr.isLinkLocal()) {
-                        hasInternetCapability = true;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if (!hasInternetCapability) {
-            issues << "仅本地网络连接，无法访问互联网";
-            maxLevel = qMax(maxLevel, LEVEL_ERROR);
-            result.solution = "请检查：\n1. 路由器互联网连接\n2. DNS设置\n3. 代理服务器设置";
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (httpStatus >= 200 && httpStatus < 400) {
+            result.level = LEVEL_OK;
+            result.message = QString("考试服务器连接正常 (HTTP %1)").arg(httpStatus);
+        } else {
+            result.level = LEVEL_ERROR;
+            result.message = QString("考试服务器响应异常 (HTTP %1)").arg(httpStatus);
+            result.solution = "请联系考试技术支持确认服务器状态";
         }
     }
 
-    result.level = maxLevel;
-    result.details = issues;
-    
-    if (maxLevel == LEVEL_OK) {
-        result.message = "网络连接正常";
-    } else if (maxLevel == LEVEL_WARNING) {
-        result.message = "网络连接存在一些问题，但可以继续使用";
-        if (result.solution.isEmpty()) {
-            result.solution = "检查网络设置或切换到更稳定的网络连接";
-        }
-    } else if (maxLevel == LEVEL_ERROR) {
-        result.message = "网络连接存在严重问题";
-        if (result.solution.isEmpty()) {
-            result.solution = "请检查网络连接并重试";
-        }
-    } else if (maxLevel == LEVEL_FATAL) {
-        result.message = "网络连接完全断开，无法继续";
-        // solution已在上面设置
-    }
-
+    reply->deleteLater();
     return result;
 }
 
@@ -729,8 +726,12 @@ bool SystemChecker::loadCachedCheckResults()
     m_results.clear();
     for (const QJsonValue& val : resultsArray) {
         QJsonObject obj = val.toObject();
+        const CheckType type = static_cast<CheckType>(obj.value("type").toInt());
+        if (type == CHECK_NETWORK_CONNECTION) {
+            continue;
+        }
         CheckResult result;
-        result.type = static_cast<CheckType>(obj.value("type").toInt());
+        result.type = type;
         result.level = static_cast<CheckLevel>(obj.value("level").toInt());
         result.title = obj.value("title").toString();
         result.message = obj.value("message").toString();
@@ -739,7 +740,7 @@ bool SystemChecker::loadCachedCheckResults()
         m_results.append(result);
     }
 
-    m_logger->appEvent("加载缓存检测结果成功，跳过系统检测");
+    m_logger->appEvent("加载缓存检测结果成功（网络检测除外）");
     return !m_results.isEmpty();
 }
 
@@ -751,6 +752,9 @@ void SystemChecker::saveCacheCheckResults()
 
     QJsonArray resultsArray;
     for (const CheckResult& result : m_results) {
+        if (result.type == CHECK_NETWORK_CONNECTION) {
+            continue;
+        }
         QJsonObject obj;
         obj["type"] = static_cast<int>(result.type);
         obj["level"] = static_cast<int>(result.level);

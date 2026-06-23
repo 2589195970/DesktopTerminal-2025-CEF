@@ -408,7 +408,12 @@ QString ConfigManager::getDesktopApiBaseUrl() const
 // 网络检查配置
 QString ConfigManager::getCheckUrl() const
 {
-    return config.value("checkUrl").toString("http://www.baidu.com");
+    const QString explicitUrl = config.value("checkUrl").toString();
+    if (!explicitUrl.isEmpty()) {
+        return explicitUrl;
+    }
+    // 默认检测考试服务器，不探测第三方站点
+    return getUrl();
 }
 
 QStringList ConfigManager::getBackupCheckUrls() const
