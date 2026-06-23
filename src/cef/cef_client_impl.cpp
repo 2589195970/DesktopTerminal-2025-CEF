@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <QUrl>
+#include "include/base/cef_callback.h"
 #include "include/base/cef_bind.h"
 #include "include/cef_version.h"
 #include "include/wrapper/cef_closure_task.h"
