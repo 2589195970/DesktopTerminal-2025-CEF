@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QWidget>
 #include <QProcess>
+#include <QStandardPaths>
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <QTextCodec>
@@ -51,6 +52,7 @@ Logger::Logger()
     , m_logLevel(L_INFO)
     , m_flushTimer(nullptr)
     , m_performanceTimer(nullptr)
+    , m_logDirResolved(false)
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
@@ -84,12 +86,61 @@ LogLevel Logger::getLogLevel() const
 
 bool Logger::ensureLogDirectoryExists()
 {
-    QString logDir = QCoreApplication::applicationDirPath() + "/log";
-    QDir dir(logDir);
-    if (!dir.exists()) {
-        return dir.mkpath(".");
+    if (m_logDirResolved && !m_resolvedLogDir.isEmpty()) {
+        QDir dir(m_resolvedLogDir);
+        if (dir.exists()) {
+            return true;
+        }
+        // 之前解析的目录已失效，重新解析
+        m_logDirResolved = false;
     }
-    return true;
+
+    m_resolvedLogDir = resolveLogDirectory();
+    m_logDirResolved = !m_resolvedLogDir.isEmpty();
+    return m_logDirResolved;
+}
+
+QString Logger::resolveLogDirectory()
+{
+    // 候选路径按优先级尝试
+    QStringList candidates;
+
+    // 1. 应用目录/log（原始路径，用户可直观找到）
+    QString appDir = QCoreApplication::applicationDirPath();
+    if (!appDir.isEmpty()) {
+        candidates << (appDir + "/log");
+    }
+
+    // 2. AppDataLocation/log（权限友好，适合安装到 Program Files 的场景）
+    QString appDataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (!appDataDir.isEmpty()) {
+        candidates << (appDataDir + "/log");
+    }
+
+    // 3. 临时目录兜底（几乎总能写入）
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (!tempDir.isEmpty()) {
+        candidates << (tempDir + "/DesktopTerminal-CEF-log");
+    }
+
+    for (const QString &candidate : candidates) {
+        QDir dir(candidate);
+        if (dir.exists()) {
+            // 测试写入权限
+            QFile testFile(candidate + "/.write_test");
+            if (testFile.open(QIODevice::WriteOnly)) {
+                testFile.close();
+                testFile.remove();
+                return candidate;
+            }
+        } else {
+            if (dir.mkpath(".")) {
+                return candidate;
+            }
+        }
+    }
+
+    return QString();
 }
 
 void Logger::logEvent(const QString &category, const QString &message, const QString &filename, LogLevel level)
@@ -119,10 +170,12 @@ void Logger::flushLogBuffer(const QString &filename)
     }
 
     if (!ensureLogDirectoryExists()) {
+        // 日志目录无法创建/写入，丢弃缓冲区避免无限积压
+        m_logBuffer[filename].clear();
         return;
     }
 
-    QString logPath = QCoreApplication::applicationDirPath() + "/log/" + filename;
+    QString logPath = m_resolvedLogDir + "/" + filename;
     QFile file(logPath);
     
     if (file.open(QIODevice::Append | QIODevice::Text)) {
@@ -151,6 +204,34 @@ void Logger::flushAllLogBuffers()
     const QStringList keys = m_logBuffer.keys();
     for (const QString &key : keys) {
         flushLogBuffer(key);
+    }
+}
+
+void Logger::logEventImmediate(const QString &category, const QString &message,
+                                const QString &filename, LogLevel level)
+{
+    if (level < m_logLevel) {
+        return;
+    }
+
+    if (!ensureLogDirectoryExists()) {
+        return;
+    }
+
+    QString logPath = m_resolvedLogDir + "/" + filename;
+    QFile file(logPath);
+
+    if (file.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&file);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        out.setCodec("UTF-8");
+#else
+        out.setEncoding(QStringConverter::Utf8);
+#endif
+        out << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+            << " | " << category << " | " << message << "\n";
+        out.flush();
+        file.close();
     }
 }
 
@@ -191,12 +272,14 @@ void Logger::systemEvent(const QString &msg, LogLevel lv)
 
 void Logger::showMessage(QWidget *parent, const QString &title, const QString &message)
 {
-    QMessageBox::warning(parent, title, message);
+    QMessageBox *messageBox = createMessageBox(parent, QMessageBox::Warning, title, message);
+    messageBox->exec();
 }
 
 void Logger::showCriticalError(QWidget *parent, const QString &title, const QString &message)
 {
-    QMessageBox::critical(parent, title, message);
+    QMessageBox *messageBox = createMessageBox(parent, QMessageBox::Critical, title, message);
+    messageBox->exec();
     errorEvent(QString("%1: %2").arg(title).arg(message), L_ERROR);
 }
 
@@ -208,6 +291,23 @@ bool Logger::getPassword(QWidget *parent, const QString &title, const QString &l
         return true;
     }
     return false;
+}
+
+QMessageBox* Logger::createMessageBox(QWidget *parent, QMessageBox::Icon icon,
+                                      const QString &title, const QString &message)
+{
+    QMessageBox *messageBox = new QMessageBox(icon, title, message, QMessageBox::Ok, parent);
+    Qt::WindowFlags flags = messageBox->windowFlags();
+    flags |= Qt::WindowStaysOnTopHint;
+    if (!parent) {
+        flags |= Qt::Dialog;
+    }
+    messageBox->setWindowFlags(flags);
+    messageBox->setWindowModality(Qt::ApplicationModal);
+    messageBox->setAttribute(Qt::WA_DeleteOnClose, true);
+    messageBox->raise();
+    messageBox->activateWindow();
+    return messageBox;
 }
 
 void Logger::collectSystemInfo()

@@ -105,6 +105,12 @@ public:
     void notifyUrlExitTriggered(const QString& url);
 
     /**
+     * @brief 通知主框架页面加载完成（由CEFClient::OnLoadEnd调用）
+     * @param httpStatusCode HTTP状态码
+     */
+    void notifyMainFrameLoadEnd(int httpStatusCode);
+
+    /**
      * @brief 显示开发者工具
      * @param browserId 浏览器ID
      * @return 成功返回true
@@ -168,6 +174,12 @@ signals:
      * @param url 触发退出的URL
      */
     void urlExitTriggered(const QString& url);
+
+    /**
+     * @brief 主框架页面加载完成信号
+     * @param httpStatusCode HTTP状态码
+     */
+    void mainFrameLoadEnd(int httpStatusCode);
 
     /**
      * @brief 初始化进度更新信号

@@ -1,5 +1,6 @@
 #include "secure_browser.h"
 #include "cef_manager.h"
+#include "application.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 
@@ -46,6 +47,8 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     , m_viewportLocked(false)
     , m_lastAppliedZoomLevel(0.0)
     , m_cefMessageLoopLogCounter(0)
+    , m_initialLoadFinished(false)
+    , m_pageLoadTimeoutTimer(nullptr)
 {
     m_logger->appEvent("SecureBrowser创建开始");
     
@@ -65,10 +68,11 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     initializeCEF();
     initializeHotkeys();
     
-    // 连接CEFManager的URL退出信号
+    // 连接CEFManager信号
     if (m_cefManager) {
         connect(m_cefManager, &CEFManager::urlExitTriggered, this, &SecureBrowser::handleUrlExit);
-        m_logger->appEvent("URL退出信号已连接");
+        connect(m_cefManager, &CEFManager::mainFrameLoadEnd, this, &SecureBrowser::onMainFrameLoadEnd);
+        m_logger->appEvent("CEFManager信号已连接");
     }
     
     initializeMaintenanceTimer();
@@ -93,6 +97,12 @@ SecureBrowser::~SecureBrowser()
         m_cefMessageLoopTimer->stop();
         delete m_cefMessageLoopTimer;
         m_cefMessageLoopTimer = nullptr;
+    }
+
+    if (m_pageLoadTimeoutTimer) {
+        m_pageLoadTimeoutTimer->stop();
+        delete m_pageLoadTimeoutTimer;
+        m_pageLoadTimeoutTimer = nullptr;
     }
 
     // 销毁CEF浏览器
@@ -494,29 +504,60 @@ void SecureBrowser::onCEFMessageLoop()
 void SecureBrowser::onBrowserCreated()
 {
     m_cefBrowserCreated = true;
-    m_logger->appEvent("CEF浏览器创建完成");
-    m_logger->appEvent("CEF消息循环现在应该开始处理页面内容 - 白屏问题修复关键点");
+    m_logger->appEvent("CEF浏览器创建完成（等待OnLoadEnd回调确认页面实际加载完成）");
 
-    // 不在这里锁定视口，等待窗口真正全屏后再锁定
     resizeCEFBrowser();
-
-    // 重置计数器，开始新的日志周期
     m_cefMessageLoopLogCounter = 0;
     
-    // 如果有待加载的URL，现在加载它
     if (!m_currentUrl.isEmpty()) {
         emit pageLoadStarted();
         load(m_currentUrl);
     }
     
-    // 延时发出内容加载完成信号，给CEF一些时间完成初始页面加载
-    QTimer::singleShot(1000, this, [this]() {
-        m_logger->appEvent("发出内容加载完成信号");
-        // 兜底：防止首帧DPR不一致造成1帧错位（Qt 5.15 + PerMonitorV2 + Frameless已知现象）
-        resizeCEFBrowser();
-        emit contentLoadFinished();
-        emit pageLoadFinished();
-    });
+    // 启动超时兜底定时器：Win7 32位单进程+软件渲染可能需要较长时间
+    // 正常路径由 onMainFrameLoadEnd 触发，此定时器仅在OnLoadEnd未触发时兜底
+    if (!m_pageLoadTimeoutTimer) {
+        m_pageLoadTimeoutTimer = new QTimer(this);
+        m_pageLoadTimeoutTimer->setSingleShot(true);
+        connect(m_pageLoadTimeoutTimer, &QTimer::timeout, this, &SecureBrowser::onPageLoadTimeout);
+    }
+    int timeoutMs = Application::is32BitSystem() ? 60000 : 30000;
+    m_pageLoadTimeoutTimer->start(timeoutMs);
+    m_logger->appEvent(QString("页面加载超时兜底定时器已启动: %1ms").arg(timeoutMs));
+}
+
+void SecureBrowser::onMainFrameLoadEnd(int httpStatusCode)
+{
+    if (m_initialLoadFinished) {
+        return;
+    }
+    m_initialLoadFinished = true;
+
+    m_logger->appEvent(QString("收到CEF OnLoadEnd回调，HTTP状态码: %1").arg(httpStatusCode));
+
+    // 取消超时兜底定时器
+    if (m_pageLoadTimeoutTimer) {
+        m_pageLoadTimeoutTimer->stop();
+    }
+
+    // 防止首帧DPR不一致造成错位
+    resizeCEFBrowser();
+    emit contentLoadFinished();
+    emit pageLoadFinished();
+}
+
+void SecureBrowser::onPageLoadTimeout()
+{
+    if (m_initialLoadFinished) {
+        return;
+    }
+    m_initialLoadFinished = true;
+
+    m_logger->errorEvent("页面加载超时（OnLoadEnd未触发），兜底显示主窗口");
+
+    resizeCEFBrowser();
+    emit contentLoadFinished();
+    emit pageLoadFinished();
 }
 
 void SecureBrowser::initializeWindow()
@@ -1087,8 +1128,8 @@ double SecureBrowser::calculateZoomLevelForSize(const QSize& currentSize) const
 void SecureBrowser::handleBrowserError(const QString& error)
 {
     m_logger->errorEvent(QString("浏览器错误: %1").arg(error));
-    
-    QMessageBox::critical(this, "浏览器错误", 
+
+    m_logger->showCriticalError(this, "浏览器错误",
         QString("浏览器初始化失败：\n%1\n\n请检查CEF安装是否完整。").arg(error));
 }
 
@@ -1151,7 +1192,7 @@ void SecureBrowser::showSecurityViolationWarning(const QString& violation)
     m_logger->logEvent("安全警告", violation, "security.log", L_WARNING);
     
     if (m_strictSecurityMode) {
-        QMessageBox::warning(this, "安全警告", 
+        m_logger->showMessage(this, "安全警告",
             QString("检测到安全违规行为：\n%1").arg(violation));
     }
 }

@@ -7,6 +7,7 @@
 #include <QMap>
 #include <QList>
 #include <QTimer>
+#include <QMessageBox>
 
 class QWidget;
 
@@ -93,6 +94,12 @@ public:
      */
     void flushAllLogBuffers();
 
+    /**
+     * @brief 写入日志并立即刷盘（不经过缓冲区），用于关键初始化阶段
+     */
+    void logEventImmediate(const QString &category, const QString &message,
+                           const QString &filename = "app.log", LogLevel level = L_INFO);
+
     // 便捷的日志记录方法（与原项目完全相同）
     void appEvent(const QString &msg, LogLevel lv = L_INFO);
     void configEvent(const QString &msg, LogLevel lv = L_INFO);
@@ -147,6 +154,8 @@ private:
     ~Logger();
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
+    QMessageBox* createMessageBox(QWidget *parent, QMessageBox::Icon icon,
+                                  const QString &title, const QString &message);
 
 private slots:
     void onTimerTimeout();
@@ -162,12 +171,20 @@ private:
     PerformanceMetrics collectLinuxPerformanceMetrics();
 #endif
 
+    /**
+     * @brief 解析可写的日志目录（多路径回退）
+     * 尝试顺序: 应用目录/log -> AppDataLocation/log -> TempLocation/DesktopTerminal-CEF-log
+     */
+    QString resolveLogDirectory();
+
     static const int LOG_BUFFER_SIZE = 10;
     
     LogLevel m_logLevel;
     QMap<QString, QList<LogEntry>> m_logBuffer;
     QTimer* m_flushTimer;
     QTimer* m_performanceTimer;
+    QString m_resolvedLogDir;
+    bool m_logDirResolved;
 };
 
 #endif // LOGGER_H

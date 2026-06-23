@@ -192,16 +192,19 @@ int main(int argc, char *argv[])
 
     // 初始化日志系统
     Logger& logger = Logger::instance();
-    logger.appEvent("=== DesktopTerminal-CEF 启动 ===");
-    logger.appEvent(QString("Qt版本: %1").arg(QT_VERSION_STR));
-    logger.appEvent(QString("应用程序路径: %1").arg(application.applicationDirPath()));
+    // 关键启动日志立即刷盘，确保即使程序崩溃或提权退出也能留下记录
+    logger.logEventImmediate("应用程序", "=== DesktopTerminal-CEF 启动 ===");
+    logger.logEventImmediate("应用程序", QString("Qt版本: %1").arg(QT_VERSION_STR));
+    logger.logEventImmediate("应用程序", QString("应用程序路径: %1").arg(application.applicationDirPath()));
     
     // 记录系统信息
     logger.logSystemInfo();
+    logger.flushAllLogBuffers();
     
 #ifdef Q_OS_WIN
     // Windows平台：检查管理员权限（作为清单文件的备用方案）
     if (!requireAdminPrivilegesOrExit(argc, argv, logger)) {
+        logger.flushAllLogBuffers();
         return 0;
     }
 #endif
@@ -211,7 +214,7 @@ int main(int argc, char *argv[])
     if (!configManager.loadConfig()) {
         QString errorDetail = configManager.getLastError();
         logger.errorEvent(QString("配置文件加载失败: %1").arg(errorDetail));
-        QMessageBox::critical(nullptr, "配置错误",
+        logger.showCriticalError(nullptr, "配置错误",
             QString("配置加载失败，程序将退出。\n\n详细信息:\n%1").arg(errorDetail));
         return -1;
     }
@@ -348,6 +351,7 @@ int main(int argc, char *argv[])
     
     logger.appEvent(QString("应用程序退出，返回码: %1").arg(result));
     logger.appEvent("=== DesktopTerminal-CEF 关闭 ===");
+    logger.flushAllLogBuffers();
     
     return result;
 }

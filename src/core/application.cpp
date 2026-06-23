@@ -313,12 +313,20 @@ QString Application::getSystemDescription()
 bool Application::isWindows7SP1()
 {
 #ifdef Q_OS_WIN
-    QString version = QSysInfo::productVersion();
-    QVersionNumber winVersion = QVersionNumber::fromString(version);
+    // 必须用 kernelVersion() 而非 productVersion()
+    // productVersion() 在Win7返回 "7"（营销版本号），无法用于内核版本比较
+    // kernelVersion() 返回 "6.1.7601" 等准确的NT内核版本
+    QString kernelVer = QSysInfo::kernelVersion();
+    QVersionNumber winVersion = QVersionNumber::fromString(kernelVer);
     
-    // Windows 7 = 6.1
+    // Windows 7 内核版本 = 6.1
     if (winVersion.majorVersion() == 6 && winVersion.minorVersion() == 1) {
-        // 检查是否为SP1
+        // 检查是否为SP1（Build 7601）
+        if (winVersion.microVersion() >= 7601) {
+            return true;
+        }
+        
+        // 兜底：通过Win32 API确认SP版本
         OSVERSIONINFOEX osvi;
         ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
         osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
@@ -327,7 +335,7 @@ bool Application::isWindows7SP1()
             return osvi.wServicePackMajor >= 1;
         }
         
-        return true; // 假设是SP1
+        return true;
     }
 #endif
     return false;
@@ -566,24 +574,30 @@ void Application::detectSystemInfoStatic()
     }
 
     // 检测兼容性级别
+    // Windows 必须使用 kernelVersion()（返回 "6.1.7601" 等NT内核版本），
+    // productVersion() 返回营销版本号（"7"/"10"/"11"），无法可靠做数值比较
     QString product = QSysInfo::productType();
     QString version = QSysInfo::productVersion();
     
     if (s_platform == PlatformType::Windows) {
-        QVersionNumber winVersion = QVersionNumber::fromString(version);
+        QString kernelVer = QSysInfo::kernelVersion();
+        QVersionNumber winVersion = QVersionNumber::fromString(kernelVer);
         
         if (winVersion.majorVersion() < 6 || 
             (winVersion.majorVersion() == 6 && winVersion.minorVersion() < 1)) {
-            // Windows Vista或更早版本
+            // Vista 或更早 (NT 6.0-)
             s_compatibility = CompatibilityLevel::Unknown;
         } else if (winVersion.majorVersion() == 6 && winVersion.minorVersion() == 1) {
-            // Windows 7
+            // Windows 7 (NT 6.1)
             s_compatibility = CompatibilityLevel::LegacySystem;
-        } else if (winVersion.majorVersion() == 6 || winVersion.majorVersion() == 10) {
-            // Windows 8/8.1/10
+        } else if (winVersion.majorVersion() == 6 && winVersion.minorVersion() >= 2) {
+            // Windows 8/8.1 (NT 6.2/6.3)
+            s_compatibility = CompatibilityLevel::ModernSystem;
+        } else if (winVersion.majorVersion() == 10 && winVersion.microVersion() < 22000) {
+            // Windows 10 (NT 10.0, Build < 22000)
             s_compatibility = CompatibilityLevel::ModernSystem;
         } else {
-            // Windows 11+
+            // Windows 11+ (NT 10.0, Build >= 22000)
             s_compatibility = CompatibilityLevel::OptimalSystem;
         }
     } else if (s_platform == PlatformType::MacOS) {
@@ -668,10 +682,10 @@ void Application::logSystemInfo()
 #ifdef Q_OS_WIN
 bool Application::checkWindowsVersion()
 {
-    QString version = QSysInfo::productVersion();
-    QVersionNumber winVersion = QVersionNumber::fromString(version);
+    QString kernelVer = QSysInfo::kernelVersion();
+    QVersionNumber winVersion = QVersionNumber::fromString(kernelVer);
     
-    // 支持Windows 7 SP1及以上版本
+    // 支持Windows 7 SP1及以上版本 (NT 6.1+)
     if (winVersion.majorVersion() < 6 || 
         (winVersion.majorVersion() == 6 && winVersion.minorVersion() < 1)) {
         return false;

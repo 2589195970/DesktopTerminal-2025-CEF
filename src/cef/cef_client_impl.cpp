@@ -147,9 +147,13 @@ void CEFClient::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> fra
         QString url = QString::fromStdString(frame->GetURL().ToString());
         m_logger->appEvent(QString("页面加载完成: %1 (状态码: %2)").arg(url).arg(httpStatusCode));
         
-        // 在低内存模式下，加载完成后清理不必要的资源
+        // 通知CEFManager主框架加载完成，用于替代固定延时的白屏修复
+        if (m_cefManager) {
+            m_cefManager->notifyMainFrameLoadEnd(httpStatusCode);
+        }
+        
         if (m_lowMemoryMode) {
-            // 可以在这里添加内存清理逻辑
+            // 低内存模式下可在此清理资源
         }
     }
 }
@@ -567,7 +571,7 @@ void CEFClient::closeDevTools()
 void CEFClient::resizeBrowser(int width, int height)
 {
     if (!m_browser) {
-        m_logger->errorEvent("浏览器尺寸调整失败：浏览器实例未初始化");
+        // CreateBrowser是异步的，OnAfterCreated前m_browser为空属于正常时序
         return;
     }
 
@@ -585,7 +589,6 @@ void CEFClient::resizeBrowser(int width, int height)
 void CEFClient::setBrowserZoomLevel(double zoomLevel)
 {
     if (!m_browser) {
-        m_logger->errorEvent("浏览器缩放调整失败：浏览器实例未初始化");
         return;
     }
 

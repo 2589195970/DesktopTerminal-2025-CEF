@@ -123,6 +123,16 @@ private slots:
      */
     void onBrowserCreated();
 
+    /**
+     * @brief CEF主框架页面加载完成回调
+     */
+    void onMainFrameLoadEnd(int httpStatusCode);
+
+    /**
+     * @brief 页面加载超时兜底
+     */
+    void onPageLoadTimeout();
+
 private:
     // 初始化方法
     void initializeWindow();
@@ -213,6 +223,10 @@ private:
     
     // CEF消息循环日志计数器（避免日志过多）
     int m_cefMessageLoopLogCounter;
+
+    // 首次页面加载完成标记（避免OnLoadEnd重复触发信号）
+    bool m_initialLoadFinished;
+    QTimer* m_pageLoadTimeoutTimer;
 };
 
 #endif // SECURE_BROWSER_H

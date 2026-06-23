@@ -157,18 +157,24 @@ SystemChecker::CheckResult SystemChecker::checkSystemCompatibility()
     }
 
     // 检查OpenGL支持
+    // Win7 32位已配置为纯软件渲染（disable-gpu），OpenGL探测无实际意义且可能卡顿数秒
     bool openglSupported = false;
     QString openglVersion;
     
-    QOpenGLContext context;
-    QOffscreenSurface surface;
-    surface.create();
-    
-    if (context.create()) {
-        context.makeCurrent(&surface);
-        openglVersion = reinterpret_cast<const char*>(context.functions()->glGetString(GL_VERSION));
-        openglSupported = !openglVersion.isEmpty();
-        context.doneCurrent();
+    if (Application::is32BitSystem() && Application::isWindows7SP1()) {
+        m_logger->appEvent("Win7 32位系统跳过OpenGL探测（已使用软件渲染）");
+        openglSupported = true;
+    } else {
+        QOpenGLContext context;
+        QOffscreenSurface surface;
+        surface.create();
+        
+        if (context.create()) {
+            context.makeCurrent(&surface);
+            openglVersion = reinterpret_cast<const char*>(context.functions()->glGetString(GL_VERSION));
+            openglSupported = !openglVersion.isEmpty();
+            context.doneCurrent();
+        }
     }
 
     if (!openglSupported) {

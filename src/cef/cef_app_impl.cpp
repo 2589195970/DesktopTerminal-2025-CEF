@@ -379,19 +379,18 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
 
 void CEFApp::apply32BitOptimizations(CefRefPtr<CefCommandLine> command_line)
 {
-    // 32位系统特殊优化
     command_line->AppendSwitch("--single-process");
     command_line->AppendSwitch("--disable-gpu");
     command_line->AppendSwitch("--disable-gpu-compositing");
     command_line->AppendSwitch("--disable-gpu-rasterization");
-    command_line->AppendSwitch("--disable-software-rasterizer");
+    // 保留软件光栅化器：禁用GPU后必须依赖软件渲染，否则页面无法渲染导致白屏
     command_line->AppendSwitch("--disable-accelerated-2d-canvas");
     command_line->AppendSwitch("--disable-accelerated-jpeg-decoding");
     command_line->AppendSwitch("--disable-accelerated-mjpeg-decode");
     command_line->AppendSwitch("--disable-accelerated-video-decode");
     command_line->AppendSwitch("--max-old-space-size=128");
     
-    m_logger->appEvent("应用32位系统CEF优化参数");
+    m_logger->appEvent("应用32位系统CEF优化参数（保留软件渲染）");
 }
 
 void CEFApp::applyWindows7Flags(CefRefPtr<CefCommandLine> command_line)

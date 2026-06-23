@@ -376,7 +376,7 @@ QStringList CEFManager::buildCEFCommandLine()
         args << "--disable-gpu";
         args << "--disable-gpu-compositing";
         args << "--disable-gpu-rasterization";
-        args << "--disable-software-rasterizer";
+        // 保留软件光栅化器：禁用GPU后必须依赖软件渲染
         args << "--disable-extensions";
         args << "--disable-plugins";
         args << "--max-old-space-size=256";
@@ -589,7 +589,11 @@ void CEFManager::handleInitializationError(const QString& error)
     }
 
     m_logger->errorEvent(fullError);
-    QMessageBox::critical(nullptr, "CEF初始化失败", fullError);
+    if (m_logger) {
+        m_logger->showCriticalError(nullptr, "CEF初始化失败", fullError);
+    } else {
+        Logger::instance().showCriticalError(nullptr, "CEF初始化失败", fullError);
+    }
 }
 
 bool CEFManager::verifyCEFInstallation()
@@ -712,6 +716,12 @@ void CEFManager::notifyUrlExitTriggered(const QString& url)
 {
     m_logger->appEvent(QString("检测到URL退出触发器: %1").arg(url));
     emit urlExitTriggered(url);
+}
+
+void CEFManager::notifyMainFrameLoadEnd(int httpStatusCode)
+{
+    m_logger->appEvent(QString("主框架页面加载完成，HTTP状态码: %1").arg(httpStatusCode));
+    emit mainFrameLoadEnd(httpStatusCode);
 }
 
 bool CEFManager::showDevTools(int browserId)
