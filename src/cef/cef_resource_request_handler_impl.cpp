@@ -8,7 +8,11 @@ cef_return_value_t CEFResourceRequestHandlerImpl::OnBeforeResourceLoad(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
     CefRefPtr<CefRequest> request,
+#if CEF_VERSION_MAJOR >= 109
+    CefRefPtr<CefCallback> callback)
+#else
     CefRefPtr<CefRequestCallback> callback)
+#endif
 {
     Q_UNUSED(browser)
     Q_UNUSED(frame)

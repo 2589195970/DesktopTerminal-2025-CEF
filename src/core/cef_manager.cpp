@@ -13,6 +13,7 @@
 
 #include "cef_browser.h"
 #include "cef_command_line.h"
+#include "cef_version.h"
 #include "wrapper/cef_helpers.h"
 
 #ifdef Q_OS_WIN
@@ -191,14 +192,26 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
         HWND hwnd = static_cast<HWND>(parentWidget);
         RECT rect;
         GetClientRect(hwnd, &rect);
+#if CEF_VERSION_MAJOR >= 109
+        windowInfo.SetAsChild(hwnd, CefRect(0, 0, rect.right - rect.left, rect.bottom - rect.top));
+#else
         windowInfo.SetAsChild(hwnd, rect);
+#endif
 #elif defined(Q_OS_MAC)
         // macOS实现 - 使用QWidget获取实际尺寸
         QWidget* widget = static_cast<QWidget*>(parentWidget);
         if (widget) {
+#if CEF_VERSION_MAJOR >= 109
+            windowInfo.SetAsChild(parentWidget, CefRect(0, 0, widget->width(), widget->height()));
+#else
             windowInfo.SetAsChild(parentWidget, 0, 0, widget->width(), widget->height());
+#endif
         } else {
+#if CEF_VERSION_MAJOR >= 109
+            windowInfo.SetAsChild(parentWidget, CefRect(0, 0, 800, 600));
+#else
             windowInfo.SetAsChild(parentWidget, 0, 0, 800, 600);
+#endif
         }
 #else
         // Linux实现 - 使用QWidget获取实际尺寸
@@ -213,11 +226,15 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
 #endif
 
         // 配置浏览器设置
+#if CEF_VERSION_MAJOR < 109
         browserSettings.web_security = m_webSecurityEnabled ? STATE_ENABLED : STATE_DISABLED;
+#endif
         browserSettings.javascript = STATE_ENABLED;
         browserSettings.javascript_close_windows = STATE_DISABLED;
         browserSettings.javascript_access_clipboard = STATE_DISABLED;
+#if CEF_VERSION_MAJOR < 109
         browserSettings.plugins = STATE_DISABLED;
+#endif
 
         // 禁用图像加载缩放以避免网页变形
         browserSettings.image_loading = STATE_ENABLED;

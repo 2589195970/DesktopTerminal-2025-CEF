@@ -7,6 +7,7 @@
 #include "include/cef_render_process_handler.h"
 #include "include/cef_command_line.h"
 #include "include/cef_scheme.h"
+#include "include/cef_version.h"
 
 #include <QString>
 
@@ -36,10 +37,14 @@ public:
     // CefBrowserProcessHandler接口
     virtual void OnContextInitialized() override;
     virtual void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
+#if CEF_VERSION_MAJOR < 109
     virtual void OnRenderProcessThreadCreated(CefRefPtr<CefListValue> extra_info) override;
+#endif
 
     // CefRenderProcessHandler接口
+#if CEF_VERSION_MAJOR < 109
     virtual void OnRenderThreadCreated(CefRefPtr<CefListValue> extra_info) override;
+#endif
     virtual void OnWebKitInitialized() override;
     // 注意：CEF 75中某些RenderProcessHandler方法可能不存在，暂时移除
     // virtual void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info);

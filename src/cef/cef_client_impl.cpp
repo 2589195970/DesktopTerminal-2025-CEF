@@ -8,10 +8,17 @@
 #include <algorithm>
 #include <QUrl>
 #include "include/base/cef_bind.h"
+#include "include/cef_version.h"
 #include "include/wrapper/cef_closure_task.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#endif
+
+#if CEF_VERSION_MAJOR >= 109
+#define CEF_BIND_TASK base::BindOnce
+#else
+#define CEF_BIND_TASK base::Bind
 #endif
 
 CEFClient::CEFClient(CEFManager* cefManager)
@@ -515,7 +522,7 @@ void CEFClient::showDevTools()
 
     // 必须在CEF UI线程上执行ShowDevTools
     if (!CefCurrentlyOn(TID_UI)) {
-        CefPostTask(TID_UI, base::Bind(&CEFClient::showDevToolsOnUIThread, this));
+        CefPostTask(TID_UI, CEF_BIND_TASK(&CEFClient::showDevToolsOnUIThread, this));
         return;
     }
 
@@ -565,7 +572,7 @@ void CEFClient::closeDevTools()
 
     // 必须在CEF UI线程上执行CloseDevTools
     if (!CefCurrentlyOn(TID_UI)) {
-        CefPostTask(TID_UI, base::Bind(&CEFClient::closeDevToolsOnUIThread, this));
+        CefPostTask(TID_UI, CEF_BIND_TASK(&CEFClient::closeDevToolsOnUIThread, this));
         return;
     }
 
@@ -583,7 +590,7 @@ void CEFClient::resizeBrowser(int width, int height)
     height = std::max(height, 1);
 
     if (!CefCurrentlyOn(TID_UI)) {
-        CefPostTask(TID_UI, base::Bind(&CEFClient::resizeBrowserOnUIThread, this, width, height));
+        CefPostTask(TID_UI, CEF_BIND_TASK(&CEFClient::resizeBrowserOnUIThread, this, width, height));
         return;
     }
 
@@ -597,7 +604,7 @@ void CEFClient::setBrowserZoomLevel(double zoomLevel)
     }
 
     if (!CefCurrentlyOn(TID_UI)) {
-        CefPostTask(TID_UI, base::Bind(&CEFClient::setBrowserZoomLevelOnUIThread, this, zoomLevel));
+        CefPostTask(TID_UI, CEF_BIND_TASK(&CEFClient::setBrowserZoomLevelOnUIThread, this, zoomLevel));
         return;
     }
 

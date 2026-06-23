@@ -124,25 +124,33 @@ void CEFApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line)
     m_logger->appEvent("子进程启动配置完成");
 }
 
+#if CEF_VERSION_MAJOR < 109
 void CEFApp::OnRenderProcessThreadCreated(CefRefPtr<CefListValue> extra_info)
 {
+    Q_UNUSED(extra_info)
+
     m_renderProcessCount++;
     
     if (!m_reduceLogging) {
         m_logger->appEvent(QString("渲染进程线程创建，总数: %1").arg(m_renderProcessCount));
     }
 }
+#endif
 
 // ==================== CefRenderProcessHandler接口实现 ====================
 
+#if CEF_VERSION_MAJOR < 109
 void CEFApp::OnRenderThreadCreated(CefRefPtr<CefListValue> extra_info)
 {
+    Q_UNUSED(extra_info)
+
     CEF_REQUIRE_RENDERER_THREAD();
     
     if (!m_reduceLogging) {
         m_logger->appEvent("渲染线程创建");
     }
 }
+#endif
 
 void CEFApp::OnWebKitInitialized()
 {
