@@ -43,7 +43,8 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 1. **模板落盘**：使用仓库内已验证的 UTF-8 文件（如 `resources/config.json`），或通过构建产物 `artifacts\...\resources\config.json` 复制，保证全文 UTF-8。
 2. **字段补丁**：仅对用户可改字段（`url`、`exitPassword`、`apiBaseUrl` 等）调用 PowerShell 脚本更新：
    - 脚本：`scripts/patch-install-config.ps1`
-   - 安装器将用户输入写入 `$PLUGINSDIR\dtcef-install-params.txt`（逐行纯文本，避免命令行转义问题），再调用补丁脚本。
+   - 安装器通过进程环境变量把用户输入传给补丁脚本，避免命令行转义问题。
+   - 补丁脚本会直接更新 `resources\config.json`，并同步生成 `resources\config.override.ini` 作为运行时兜底覆盖文件。
    - 安装器中的调用见 `installer.nsi` 中「更新配置文件」段落。
 3. **输出编码**：补丁脚本使用 `UTF8Encoding(false)` 写出，**无 BOM**（与仓库模板一致）；程序侧已支持跳过 BOM 读取。
 4. **程序侧兜底**：`ConfigManager::loadConfig` 在 Windows 上若 UTF-8 解析失败，会尝试 GB18030 解码（兼容历史错误安装包生成的文件）。
@@ -89,4 +90,4 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 
 - CI：`scripts/deploy-openssl-windows.ps1` 复制 OpenSSL DLL 到产物。
 - 安装包：`installer.nsi` 安装上述 DLL。
-- 参数传递：用户输入写入 `dtcef-install-params.txt` 再调用补丁脚本，避免命令行转义导致 URL 未写入；失败时 MessageBox 提示。日志：`resources/install-config-patch.log`。
+- 参数传递：用户输入通过环境变量传入补丁脚本，避免命令行转义导致 URL 未写入；失败时 MessageBox 提示，并保留 `config.override.ini` 兜底。日志：`resources/install-config-patch.log`。

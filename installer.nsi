@@ -76,6 +76,7 @@ Var /GLOBAL URLText
 Var /GLOBAL PasswordText
 Var /GLOBAL ApiBaseUrlText
 Var /GLOBAL RequirePasswordCheckbox
+Var /GLOBAL ConfigPatchResult
 
 ; ─────────────────────────────────────────────
 ; 安装前检查
@@ -346,22 +347,48 @@ Section "主程序" SecMain
     File /oname=config.json "resources\config.json"
     ${Log} "config.json template copied"
 
-    ; 用户输入写到 config.override.ini（纯 ASCII，NSIS FileWrite 无编码问题）
-    ; 程序启动时 ConfigManager 会读取此文件覆盖 config.json 中的对应字段
+    ; 先用 PowerShell 直接补丁 config.json，保证安装后可见配置与运行配置一致。
+    ; 同时由脚本生成 config.override.ini，继续保留程序启动阶段的覆盖兜底逻辑。
     ${If} $RequirePassword == 1
         StrCpy $R9 "true"
     ${Else}
         StrCpy $R9 "false"
     ${EndIf}
 
-    FileOpen $0 "$INSTDIR\resources\config.override.ini" w
-    FileWrite $0 "[override]$\r$\n"
-    FileWrite $0 "url=$ConfigURL$\r$\n"
-    FileWrite $0 "exitPassword=$ConfigPassword$\r$\n"
-    FileWrite $0 "apiBaseUrl=$ConfigApiBaseUrl$\r$\n"
-    FileWrite $0 "sensitiveOperationRequirePassword=$R9$\r$\n"
-    FileClose $0
-    ${Log} "config.override.ini written: url=$ConfigURL, api=$ConfigApiBaseUrl"
+    InitPluginsDir
+    SetOutPath "$PLUGINSDIR"
+    File /oname=patch-install-config.ps1 "scripts\patch-install-config.ps1"
+    SetOutPath "$INSTDIR"
+
+    StrCpy $0 "$ConfigURL"
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_URL", w r0)i.r1'
+    StrCpy $0 "$ConfigPassword"
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PASSWORD", w r0)i.r1'
+    StrCpy $0 "$ConfigApiBaseUrl"
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_API_BASE_URL", w r0)i.r1'
+    StrCpy $0 "$R9"
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_REQUIRE_PASSWORD", w r0)i.r1'
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -OverridePath "$INSTDIR\resources\config.override.ini" -LogPath "$INSTDIR\resources\install-config-patch.log"'
+    Pop $ConfigPatchResult
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_URL", w "")i.r1'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PASSWORD", w "")i.r1'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_API_BASE_URL", w "")i.r1'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_REQUIRE_PASSWORD", w "")i.r1'
+
+    ${If} $ConfigPatchResult == 0
+        ${Log} "config.json patched and config.override.ini written"
+    ${Else}
+        ${Log} "WARNING: config.json patch failed, writing config.override.ini fallback"
+        FileOpen $0 "$INSTDIR\resources\config.override.ini" w
+        FileWrite $0 "[override]$\r$\n"
+        FileWrite $0 "url=$ConfigURL$\r$\n"
+        FileWrite $0 "exitPassword=$ConfigPassword$\r$\n"
+        FileWrite $0 "apiBaseUrl=$ConfigApiBaseUrl$\r$\n"
+        FileWrite $0 "sensitiveOperationRequirePassword=$R9$\r$\n"
+        FileClose $0
+        ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl"
+        MessageBox MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行，详情见 resources\install-config-patch.log。"
+    ${EndIf}
     
     ; 复制资源文件到resources目录
     SetOutPath "$INSTDIR\resources"
@@ -431,6 +458,12 @@ Section "主程序" SecMain
     ${Else}
         ${Log} "⚠ 配置文件缺失，将影响程序启动"
         StrCpy $VerificationErrors "$VerificationErrors• 配置文件 config.json 缺失$\n"
+    ${EndIf}
+
+    ${If} ${FileExists} "$INSTDIR\resources\config.override.ini"
+        ${Log} "config.override.ini verified"
+    ${Else}
+        ${Log} "WARNING: config.override.ini missing, app will use config.json only"
     ${EndIf}
     
     ; 验证关键CEF数据文件
