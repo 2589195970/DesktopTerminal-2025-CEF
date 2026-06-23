@@ -63,6 +63,7 @@ jobs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
+        $arch = '${{ matrix.arch }}'
         $opensslVersion = '1.1.1.2100'
         $chocoArgs = @(
           'install',
@@ -73,19 +74,62 @@ jobs:
           '180'
         )
         $chocoArgsWithVersion = $chocoArgs + "--version=$opensslVersion"
-        if ('${{ matrix.arch }}' -eq 'x86') {
-          $chocoArgs += '--forcex86'
+        if ($arch -eq 'x86') {
           $chocoArgsWithVersion += '--forcex86'
         }
-        Write-Host "Installing openssl.light $opensslVersion for ${{ matrix.arch }}"
+        Write-Host "Installing openssl.light $opensslVersion for $arch"
         & choco @chocoArgsWithVersion
         if ($LASTEXITCODE -ne 0) {
-          Write-Host "Pinned OpenSSL install failed, retrying with package default version"
-          & choco @chocoArgs
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to install OpenSSL runtime"
+          throw "Failed to install OpenSSL runtime $opensslVersion"
+        }
+
+        $requiredPairs = @()
+        if ($arch -eq 'x86') {
+          $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
+          $selectedDir = "${env:ProgramFiles(x86)}\OpenSSL-Win32\bin"
+        } else {
+          $requiredPairs += ,@('libssl-1_1-x64.dll', 'libcrypto-1_1-x64.dll')
+          $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
+          $selectedDir = "$env:ProgramFiles\OpenSSL-Win64\bin"
+        }
+
+        function Test-OpenSslPair {
+          param(
+            [Parameter(Mandatory = $true)][string]$Dir,
+            [Parameter(Mandatory = $true)][string[]]$Pair
+          )
+
+          foreach ($name in $Pair) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Dir $name) -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+          }
+          return $true
+        }
+
+        if ([string]::IsNullOrWhiteSpace($selectedDir) -or -not (Test-Path -LiteralPath $selectedDir -ErrorAction SilentlyContinue)) {
+          throw "Expected OpenSSL runtime directory does not exist: $selectedDir"
+        }
+        $selectedPair = $null
+        $selectedDir = (Resolve-Path -LiteralPath $selectedDir).Path
+        foreach ($pair in $requiredPairs) {
+          if (Test-OpenSslPair -Dir $selectedDir -Pair $pair) {
+            $selectedPair = $pair
+            break
           }
         }
+
+        if (-not $selectedPair) {
+          Write-Host "Expected OpenSSL runtime directory: $selectedDir"
+          Write-Host "Expected DLL pairs:"
+          foreach ($pair in $requiredPairs) {
+            Write-Host "  - $($pair -join ', ')"
+          }
+          throw "OpenSSL 1.1 runtime installation did not produce the expected DLL pair"
+        }
+        Write-Host "OpenSSL runtime directory: $selectedDir"
+        Write-Host "OpenSSL runtime pair: $($selectedPair -join ', ')"
+        "OPENSSL_RUNTIME_DIR=$selectedDir" >> $env:GITHUB_ENV
 
     - name: Restore CEF Cache ${{ matrix.arch }}
       id: cache-cef
@@ -1269,7 +1313,7 @@ jobs:
 
         Write-Host "=== Deploying OpenSSL for Qt HTTPS ==="
         $opensslArch = "${{ matrix.arch }}"
-        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch -Required
+        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch -SourceDir $env:OPENSSL_RUNTIME_DIR -Required
         if ($LASTEXITCODE -ne 0) {
             throw "OpenSSL runtime deployment failed. Qt HTTPS would be unavailable."
         }
