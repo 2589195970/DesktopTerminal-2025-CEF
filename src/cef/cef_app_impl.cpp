@@ -1,6 +1,7 @@
 #include "cef_app_impl.h"
 #include "../logging/logger.h"
 #include "../core/application.h"
+#include "../config/config_manager.h"
 
 #include "include/cef_browser.h"
 #include "include/cef_command_line.h"
@@ -60,7 +61,13 @@ void CEFApp::OnBeforeCommandLineProcessing(const CefString& process_type, CefRef
     // 应用兼容性标志
     applyCompatibilityFlags(command_line);
     
-    // 32位或Windows 7系统继续采用兼容模式
+    const bool isBrowserProcess = processTypeStr.empty();
+    const bool useSingleProcess = isBrowserProcess && shouldUseSingleProcessMode();
+    if (useSingleProcess) {
+        applySingleProcessFlag(command_line);
+    }
+
+    // 32位或Windows 7系统继续采用兼容优化参数
     if (Application::is32BitSystem() || Application::isWindows7SP1()) {
         apply32BitOptimizations(command_line);
     } else if (!m_reduceLogging) {
@@ -333,7 +340,7 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
     // 正确做法：让 deviceScaleFactor = DPR，CSS 视口 = 物理像素 / DPR
     // = 逻辑像素（2304x1228），与 Qt 锁定视口、showFullScreen 尺寸一致。
     double deviceScaleFactor = 1.0;
-    UINT monitorDpi = 96;
+    int monitorDpi = 96;
 #ifdef Q_OS_WIN
     // 优先用 shcore 的 GetDpiForMonitor 读主显示器实时 DPI
     typedef HRESULT (WINAPI *GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
@@ -348,7 +355,7 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
             HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
             UINT dpiX = 96, dpiY = 96;
             if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /*MDT_EFFECTIVE_DPI*/, &dpiX, &dpiY))) {
-                monitorDpi = dpiX;
+                monitorDpi = static_cast<int>(dpiX);
                 dpiResolved = true;
             }
         }
@@ -358,7 +365,7 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
         HDC hdc = GetDC(nullptr);
         if (hdc) {
             int px = GetDeviceCaps(hdc, LOGPIXELSX);
-            if (px > 0) monitorDpi = static_cast<UINT>(px);
+            if (px > 0) monitorDpi = px;
             ReleaseDC(nullptr, hdc);
         }
     }
@@ -381,9 +388,27 @@ void CEFApp::applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line)
         .arg(monitorDpi));
 }
 
+bool CEFApp::shouldUseSingleProcessMode() const
+{
+    const ConfigManager& configManager = ConfigManager::instance();
+    if (configManager.hasCEFSingleProcessMode()) {
+        return configManager.isCEFSingleProcessMode();
+    }
+
+    return Application::is32BitSystem() || Application::isWindows7SP1();
+}
+
+void CEFApp::applySingleProcessFlag(CefRefPtr<CefCommandLine> command_line)
+{
+    if (!command_line->HasSwitch("single-process")) {
+        command_line->AppendSwitch("--single-process");
+    }
+
+    m_logger->appEvent("应用CEF单进程模式参数");
+}
+
 void CEFApp::apply32BitOptimizations(CefRefPtr<CefCommandLine> command_line)
 {
-    command_line->AppendSwitch("--single-process");
     command_line->AppendSwitch("--disable-gpu");
     command_line->AppendSwitch("--disable-gpu-compositing");
     command_line->AppendSwitch("--disable-gpu-rasterization");

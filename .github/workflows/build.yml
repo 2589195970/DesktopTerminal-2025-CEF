@@ -59,6 +59,34 @@ jobs:
         cache: true
         cache-key-prefix: qt-5.15.2-${{ matrix.arch }}
 
+    - name: Install OpenSSL 1.1 Runtime
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $opensslVersion = '1.1.1.2100'
+        $chocoArgs = @(
+          'install',
+          'openssl.light',
+          '-y',
+          '--no-progress',
+          '--timeout',
+          '180'
+        )
+        $chocoArgsWithVersion = $chocoArgs + "--version=$opensslVersion"
+        if ('${{ matrix.arch }}' -eq 'x86') {
+          $chocoArgs += '--forcex86'
+          $chocoArgsWithVersion += '--forcex86'
+        }
+        Write-Host "Installing openssl.light $opensslVersion for ${{ matrix.arch }}"
+        & choco @chocoArgsWithVersion
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Pinned OpenSSL install failed, retrying with package default version"
+          & choco @chocoArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install OpenSSL runtime"
+          }
+        }
+
     - name: Restore CEF Cache ${{ matrix.arch }}
       id: cache-cef
       uses: actions/cache/restore@v5
@@ -1239,12 +1267,11 @@ jobs:
             Write-Host "Available Qt5_Dir environment: $env:Qt5_Dir"
         }
 
-        Write-Host "=== Deploying OpenSSL for Qt HTTPS (best-effort) ==="
+        Write-Host "=== Deploying OpenSSL for Qt HTTPS ==="
         $opensslArch = "${{ matrix.arch }}"
-        try {
-            & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch
-        } catch {
-            Write-Host "[WARN] OpenSSL deploy script error (non-fatal): $_"
+        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch -Required
+        if ($LASTEXITCODE -ne 0) {
+            throw "OpenSSL runtime deployment failed. Qt HTTPS would be unavailable."
         }
         
         # Copy project documentation with existence checks

@@ -39,6 +39,7 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     , m_errorDetailsText(nullptr)
     , m_detailsButton(nullptr)
     , m_autoFixButton(nullptr)
+    , m_continueButton(nullptr)
     , m_systemChecker(nullptr)
     , m_animationTimer(nullptr)
     , m_rotationAnimation(nullptr)
@@ -46,6 +47,7 @@ LoadingDialog::LoadingDialog(QWidget *parent)
     , m_isError(false)
     , m_systemCheckInProgress(false)
     , m_showingDetails(false)
+    , m_waitingForOptionalRuntimeFix(false)
     , m_progressValue(0)
     , m_progressMax(100)
 {
@@ -200,6 +202,14 @@ void LoadingDialog::setupUI()
     m_autoFixButton->setMinimumSize(120, 40);
     m_autoFixButton->setFont(buttonFont);
     buttonLayout->addWidget(m_autoFixButton);
+
+    m_continueButton = new QPushButton("跳过继续", m_contentCard);
+    m_continueButton->setObjectName("continueButton");
+    m_continueButton->setVisible(false);
+    m_continueButton->setMinimumSize(120, 40);
+    m_continueButton->setFont(buttonFont);
+    connect(m_continueButton, &QPushButton::clicked, this, &LoadingDialog::onContinueAfterOptionalFix);
+    buttonLayout->addWidget(m_continueButton);
 
     buttonLayout->addStretch();
     cardLayout->addLayout(buttonLayout);
@@ -460,11 +470,17 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
 {
     m_systemCheckInProgress = false;
     m_checkResults = results;
+    m_waitingForOptionalRuntimeFix = false;
     
     // 停止动画
     stopAnimation();
     
     if (success) {
+        if (hasOptionalRuntimeDependencyIssue(results)) {
+            showOptionalRuntimeFixPrompt(results);
+            return;
+        }
+
         // 所有检测通过，准备启动应用程序
         if (m_statusLabel) {
             m_statusLabel->setText("系统检测完成，正在启动应用程序...");
@@ -487,6 +503,7 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
         if (m_cancelButton) m_cancelButton->setVisible(false);
         if (m_detailsButton) m_detailsButton->setVisible(false);
         if (m_autoFixButton) m_autoFixButton->setVisible(false);
+        if (m_continueButton) m_continueButton->setVisible(false);
         
         Logger::instance().appEvent("系统检测成功完成，准备启动应用程序");
 
@@ -543,6 +560,7 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
         if (hasAutoFixable && m_autoFixButton) {
             m_autoFixButton->setVisible(true);
         }
+        if (m_continueButton) m_continueButton->setVisible(false);
         
         // 更新错误详情显示
         updateErrorDisplay();
@@ -568,6 +586,13 @@ void LoadingDialog::onAutoFixCompleted(int fixed)
     if (fixed > 0) {
         // 短暂延迟后重新检测
         QTimer::singleShot(1000, this, &LoadingDialog::onRetrySystemCheck);
+    } else if (m_waitingForOptionalRuntimeFix) {
+        if (m_statusLabel) {
+            m_statusLabel->setText("自动修复未完成，可查看详情后重试，或跳过继续启动");
+        }
+        if (m_continueButton) m_continueButton->setVisible(true);
+        if (m_autoFixButton) m_autoFixButton->setVisible(true);
+        if (m_detailsButton) m_detailsButton->setVisible(true);
     }
 }
 
@@ -580,6 +605,8 @@ void LoadingDialog::onRetrySystemCheck()
     // 重置界面状态
     m_isError = false;
     m_checkResults.clear();
+    m_waitingForOptionalRuntimeFix = false;
+    m_showingDetails = false;
     
     // 隐藏错误相关UI
     if (m_errorDetailsText) {
@@ -590,6 +617,8 @@ void LoadingDialog::onRetrySystemCheck()
     if (m_cancelButton) m_cancelButton->setVisible(false);
     if (m_detailsButton) m_detailsButton->setVisible(false);
     if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    if (m_continueButton) m_continueButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setText("显示详情");
     
     // 重置状态标签样式
     if (m_statusLabel) {
@@ -616,6 +645,40 @@ void LoadingDialog::onRetrySystemCheck()
     startSystemCheck();
     
     Logger::instance().appEvent("用户触发重试系统检测");
+}
+
+void LoadingDialog::onContinueAfterOptionalFix()
+{
+    if (!m_waitingForOptionalRuntimeFix) {
+        return;
+    }
+
+    m_waitingForOptionalRuntimeFix = false;
+    m_isError = false;
+
+    if (m_statusLabel) {
+        m_statusLabel->setText("已跳过运行库自动修复，正在启动应用程序...");
+        m_statusLabel->setProperty("error", false);
+        m_statusLabel->style()->polish(m_statusLabel);
+    }
+
+    if (m_subtitleLabel) {
+        m_subtitleLabel->setText("检测完成 · 准备启动");
+    }
+
+    if (m_summaryLabel) {
+        m_summaryLabel->setText("运行库问题已跳过，本次继续启动");
+    }
+
+    if (m_retryButton) m_retryButton->setVisible(false);
+    if (m_cancelButton) m_cancelButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setVisible(false);
+    if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    if (m_continueButton) m_continueButton->setVisible(false);
+    if (m_errorDetailsText) m_errorDetailsText->setVisible(false);
+
+    Logger::instance().appEvent("用户跳过运行库自动修复，继续启动应用程序");
+    emit systemCheckCompleted(true);
 }
 
 void LoadingDialog::onShowErrorDetails()
@@ -655,6 +718,8 @@ void LoadingDialog::startSystemCheck()
     m_systemCheckInProgress = true;
     m_isError = false;
     m_checkResults.clear();
+    m_waitingForOptionalRuntimeFix = false;
+    m_showingDetails = false;
     
     // 更新界面
     if (m_titleLabel) {
@@ -691,6 +756,8 @@ void LoadingDialog::startSystemCheck()
     if (m_cancelButton) m_cancelButton->setVisible(false);
     if (m_detailsButton) m_detailsButton->setVisible(false);
     if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    if (m_continueButton) m_continueButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setText("显示详情");
     
     // 启动动画
     startAnimation();
@@ -719,6 +786,11 @@ void LoadingDialog::startApplicationLoad()
     if (m_progressBar) m_progressBar->setVisible(false);
     if (m_progressLabel) m_progressLabel->setVisible(false);
     if (m_errorDetailsText) m_errorDetailsText->setVisible(false);
+    if (m_retryButton) m_retryButton->setVisible(false);
+    if (m_cancelButton) m_cancelButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setVisible(false);
+    if (m_autoFixButton) m_autoFixButton->setVisible(false);
+    if (m_continueButton) m_continueButton->setVisible(false);
     
     // 启动动画
     startAnimation();
@@ -727,6 +799,70 @@ void LoadingDialog::startApplicationLoad()
 }
 
 // 辅助方法实现
+
+bool LoadingDialog::hasOptionalRuntimeDependencyIssue(const QList<SystemChecker::CheckResult>& results) const
+{
+    bool hasRuntimeIssue = false;
+
+    for (const auto& result : results) {
+        if (result.level == SystemChecker::LEVEL_FATAL) {
+            return false;
+        }
+
+        if (result.type == SystemChecker::CHECK_RUNTIME_DEPENDENCIES
+            && result.level != SystemChecker::LEVEL_OK
+            && result.autoFixable) {
+            hasRuntimeIssue = true;
+        }
+    }
+
+    return hasRuntimeIssue;
+}
+
+void LoadingDialog::showOptionalRuntimeFixPrompt(const QList<SystemChecker::CheckResult>& results)
+{
+    m_waitingForOptionalRuntimeFix = true;
+    m_isError = false;
+    m_checkResults = results;
+    m_showingDetails = false;
+
+    if (m_titleLabel) {
+        m_titleLabel->setText("发现可修复问题");
+    }
+
+    if (m_statusLabel) {
+        m_statusLabel->setText("运行库依赖检查发现问题，建议先执行自动修复");
+        m_statusLabel->setProperty("error", false);
+        m_statusLabel->style()->polish(m_statusLabel);
+    }
+
+    if (m_subtitleLabel) {
+        m_subtitleLabel->setText("修复建议 · 可跳过继续");
+    }
+
+    if (m_summaryLabel) {
+        m_summaryLabel->setText("缺少 VC++ 运行库可能导致浏览器组件启动失败");
+    }
+
+    if (m_progressBar) {
+        m_progressBar->setValue(100);
+    }
+
+    if (m_progressLabel) {
+        m_progressLabel->setText("检测完成，等待用户选择");
+    }
+
+    if (m_retryButton) m_retryButton->setVisible(false);
+    if (m_cancelButton) m_cancelButton->setVisible(false);
+    if (m_detailsButton) m_detailsButton->setVisible(true);
+    if (m_autoFixButton) m_autoFixButton->setVisible(true);
+    if (m_continueButton) m_continueButton->setVisible(true);
+    if (m_detailsButton) m_detailsButton->setText("显示详情");
+    if (m_errorDetailsText) m_errorDetailsText->setVisible(false);
+
+    updateErrorDisplay();
+    Logger::instance().appEvent("运行库依赖检查存在可选修复项，等待用户选择自动修复或跳过继续");
+}
 
 void LoadingDialog::updateErrorDisplay()
 {

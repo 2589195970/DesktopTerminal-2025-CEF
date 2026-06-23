@@ -88,6 +88,8 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 
 ### 修复
 
-- CI：`scripts/deploy-openssl-windows.ps1` 复制 OpenSSL DLL 到产物。
-- 安装包：`installer.nsi` 安装上述 DLL。
+- CI：先安装 OpenSSL 1.1 runtime，再通过 `scripts/deploy-openssl-windows.ps1 -Required` 复制 OpenSSL DLL 到产物，缺失时阻断发布。
+- 本地构建：`scripts/build.bat` 在 Windows 构建后复制 OpenSSL DLL 到主程序目录，Release 构建缺失时失败。
+- 本地打包：`scripts/package.sh` 的 Windows 包会复制 `Qt5Network.dll`、`Qt5Concurrent.dll` 和 OpenSSL DLL。
+- 安装包：`installer.nsi` 安装并校验上述 DLL。
 - 参数传递：用户输入通过环境变量传入补丁脚本，避免命令行转义导致 URL 未写入；失败时 MessageBox 提示，并保留 `config.override.ini` 兜底。日志：`resources/install-config-patch.log`。

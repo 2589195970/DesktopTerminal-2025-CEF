@@ -193,6 +193,24 @@ void ConfigManager::applyOverrideConfig(const QString &overridePath)
         qInfo() << "config.override: sensitiveOperationRequirePassword =" << requirePwd;
     }
 
+    const QString cefProcessMode = ini.value("cefProcessMode").toString().trimmed().toLower();
+    if (!cefProcessMode.isEmpty()) {
+        config.remove("cefSingleProcessMode");
+        QJsonObject cefSettings = config.value("cefSettings").toObject();
+        if (cefProcessMode == "auto" || cefProcessMode == "default") {
+            cefSettings.remove("singleProcessMode");
+            cefSettings.remove("singleProcess");
+        } else if (cefProcessMode == "single" || cefProcessMode == "single-process" || cefProcessMode == "true" || cefProcessMode == "1") {
+            cefSettings["singleProcessMode"] = true;
+            cefSettings.remove("singleProcess");
+        } else if (cefProcessMode == "multi" || cefProcessMode == "multi-process" || cefProcessMode == "false" || cefProcessMode == "0") {
+            cefSettings["singleProcessMode"] = false;
+            cefSettings.remove("singleProcess");
+        }
+        config["cefSettings"] = cefSettings;
+        qInfo() << "config.override: cefProcessMode =" << cefProcessMode;
+    }
+
     ini.endGroup();
 }
 
@@ -276,8 +294,30 @@ QString ConfigManager::getCEFLogLevel() const
     return config.value("cefLogLevel").toString("WARNING");
 }
 
+bool ConfigManager::hasCEFSingleProcessMode() const
+{
+    if (config.contains("cefSingleProcessMode")) {
+        return true;
+    }
+
+    QJsonObject cefSettings = config.value("cefSettings").toObject();
+    return cefSettings.contains("singleProcessMode") || cefSettings.contains("singleProcess");
+}
+
 bool ConfigManager::isCEFSingleProcessMode() const
 {
+    if (config.contains("cefSingleProcessMode")) {
+        return config.value("cefSingleProcessMode").toBool(false);
+    }
+
+    QJsonObject cefSettings = config.value("cefSettings").toObject();
+    if (cefSettings.contains("singleProcessMode")) {
+        return cefSettings.value("singleProcessMode").toBool(false);
+    }
+    if (cefSettings.contains("singleProcess")) {
+        return cefSettings.value("singleProcess").toBool(false);
+    }
+
     return config.value("cefSingleProcessMode").toBool(false);
 }
 

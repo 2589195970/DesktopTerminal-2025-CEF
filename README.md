@@ -113,11 +113,12 @@ build\Release_x64\bin\DesktopTerminal-CEF.exe
     "keyboardFilterEnabled": true,
     "contextMenuEnabled": false,
     "cefLogLevel": "WARNING",
-    "cefSingleProcessMode": false,
     "autoArchDetection": true,
     "forceWindows7CompatMode": false
 }
 ```
+
+`cefSingleProcessMode` 为可选项：省略时自动选择（Win7/32位默认单进程，其他系统默认多进程）；设为 `true` 强制单进程；设为 `false` 强制多进程。也可写在 `cefSettings.singleProcessMode` 中。
 
 ## 开发指南
 

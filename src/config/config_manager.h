@@ -62,6 +62,7 @@ public:
 
     // CEF特定配置（新增）
     QString getCEFLogLevel() const;
+    bool hasCEFSingleProcessMode() const;
     bool isCEFSingleProcessMode() const;
     int getCEFCacheSizeMB() const;
     bool isCEFWebSecurityEnabled() const;

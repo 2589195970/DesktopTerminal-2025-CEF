@@ -111,6 +111,12 @@ public:
     void notifyMainFrameLoadEnd(int httpStatusCode);
 
     /**
+     * @brief 通知浏览器创建完成（由CEFClient::OnAfterCreated调用）
+     * @param browserId CEF浏览器ID
+     */
+    void notifyBrowserCreated(int browserId);
+
+    /**
      * @brief 显示开发者工具
      * @param browserId 浏览器ID
      * @return 成功返回true
@@ -180,6 +186,12 @@ signals:
      * @param httpStatusCode HTTP状态码
      */
     void mainFrameLoadEnd(int httpStatusCode);
+
+    /**
+     * @brief CEF浏览器创建完成信号
+     * @param browserId CEF浏览器ID
+     */
+    void browserCreated(int browserId);
 
     /**
      * @brief 初始化进度更新信号

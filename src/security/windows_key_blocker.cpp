@@ -335,4 +335,44 @@ LRESULT CALLBACK WindowsKeyBlocker::LowLevelKeyboardProc(
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
+#else
+
+WindowsKeyBlocker::WindowsKeyBlocker(QObject *parent)
+    : QObject(parent)
+{
+}
+
+WindowsKeyBlocker::~WindowsKeyBlocker()
+{
+}
+
+bool WindowsKeyBlocker::install()
+{
+    return true;
+}
+
+void WindowsKeyBlocker::uninstall()
+{
+}
+
+bool WindowsKeyBlocker::isInstalled() const
+{
+    return true;
+}
+
+bool WindowsKeyBlocker::isRecoveryPending() const
+{
+    return false;
+}
+
+bool WindowsKeyBlocker::hasFastRetryExhausted() const
+{
+    return false;
+}
+
+unsigned long WindowsKeyBlocker::lastErrorCode() const
+{
+    return 0;
+}
+
 #endif // Q_OS_WIN

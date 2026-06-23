@@ -226,6 +226,30 @@ if %errorlevel% neq 0 (
 
 echo [SUCCESS] 构建完成
 
+REM 部署Qt HTTPS所需的OpenSSL运行时
+set "RUNTIME_DIR=%BUILD_SUBDIR%\bin\%TARGET%"
+if not exist "%RUNTIME_DIR%\DesktopTerminal-CEF.exe" (
+    set "RUNTIME_DIR=%BUILD_SUBDIR%\bin"
+)
+
+if exist "%PROJECT_ROOT%\scripts\deploy-openssl-windows.ps1" (
+    echo [INFO] 部署OpenSSL运行时到: %RUNTIME_DIR%
+    if /I "%TARGET%"=="Release" (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\scripts\deploy-openssl-windows.ps1" -TargetDir "%RUNTIME_DIR%" -Arch "%ARCH%" -Required
+    ) else (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\scripts\deploy-openssl-windows.ps1" -TargetDir "%RUNTIME_DIR%" -Arch "%ARCH%"
+    )
+    if !errorlevel! neq 0 (
+        echo [ERROR] OpenSSL运行时部署失败
+        exit /b 1
+    )
+) else (
+    echo [WARNING] OpenSSL部署脚本不存在，Qt HTTPS可能不可用
+    if /I "%TARGET%"=="Release" (
+        exit /b 1
+    )
+)
+
 REM 安装
 if "%INSTALL%"=="true" (
     echo [INFO] 开始安装...

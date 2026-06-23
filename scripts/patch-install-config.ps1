@@ -213,6 +213,17 @@ function Set-DictionaryValue {
     }
 }
 
+function Remove-DictionaryValue {
+    param(
+        [System.Collections.IDictionary]$Dictionary,
+        [string]$Key
+    )
+
+    if ($Dictionary.Contains($Key)) {
+        $Dictionary.Remove($Key)
+    }
+}
+
 function Get-DesktopAuthDictionary {
     param([System.Collections.IDictionary]$Config)
 
@@ -225,12 +236,65 @@ function Get-DesktopAuthDictionary {
     return $desktopAuth
 }
 
+function Get-CefSettingsDictionary {
+    param([System.Collections.IDictionary]$Config)
+
+    if ($Config.Contains("cefSettings") -and $Config["cefSettings"] -is [System.Collections.IDictionary]) {
+        return $Config["cefSettings"]
+    }
+
+    $cefSettings = New-Object System.Collections.Hashtable
+    Set-DictionaryValue $Config "cefSettings" $cefSettings
+    return $cefSettings
+}
+
+function Normalize-CefProcessMode {
+    param([string]$Value)
+
+    if ($null -eq $Value -or $Value.Trim().Length -eq 0) {
+        return "auto"
+    }
+
+    $normalized = $Value.Trim().ToLowerInvariant()
+    if ($normalized -eq "single" -or $normalized -eq "single-process" -or $normalized -eq "true" -or $normalized -eq "1") {
+        return "single"
+    }
+    if ($normalized -eq "multi" -or $normalized -eq "multi-process" -or $normalized -eq "false" -or $normalized -eq "0") {
+        return "multi"
+    }
+    if ($normalized -eq "auto" -or $normalized -eq "default") {
+        return "auto"
+    }
+
+    throw "Invalid CEF process mode: $Value"
+}
+
+function Apply-CefProcessMode {
+    param(
+        [System.Collections.IDictionary]$Config,
+        [string]$ProcessMode
+    )
+
+    Remove-DictionaryValue $Config "cefSingleProcessMode"
+
+    $cefSettings = Get-CefSettingsDictionary $Config
+    if ($ProcessMode -eq "auto") {
+        Remove-DictionaryValue $cefSettings "singleProcessMode"
+        Remove-DictionaryValue $cefSettings "singleProcess"
+        return
+    }
+
+    Set-DictionaryValue $cefSettings "singleProcessMode" ($ProcessMode -eq "single")
+    Remove-DictionaryValue $cefSettings "singleProcess"
+}
+
 function Write-OverrideConfig {
     param(
         [string]$Url,
         [string]$ExitPassword,
         [string]$ApiBaseUrl,
-        [bool]$RequirePassword
+        [bool]$RequirePassword,
+        [string]$ProcessMode
     )
 
     $overrideDir = [System.IO.Path]::GetDirectoryName($OverridePath)
@@ -243,15 +307,18 @@ function Write-OverrideConfig {
         $requirePasswordText = "true"
     }
 
-    $lines = @(
-        "[override]",
-        "url=$Url",
-        "exitPassword=$ExitPassword",
-        "apiBaseUrl=$ApiBaseUrl",
-        "sensitiveOperationRequirePassword=$requirePasswordText"
-    )
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("[override]")
+    $lines.Add("url=$Url")
+    $lines.Add("exitPassword=$ExitPassword")
+    $lines.Add("apiBaseUrl=$ApiBaseUrl")
+    $lines.Add("sensitiveOperationRequirePassword=$requirePasswordText")
 
-    [System.IO.File]::WriteAllLines($OverridePath, [string[]]$lines, (Get-Utf8NoBomEncoding))
+    if ($ProcessMode -ne "auto") {
+        $lines.Add("cefProcessMode=$ProcessMode")
+    }
+
+    [System.IO.File]::WriteAllLines($OverridePath, [string[]]$lines.ToArray(), (Get-Utf8NoBomEncoding))
 }
 
 try {
@@ -261,6 +328,7 @@ try {
     $exitPassword = Get-RequiredEnv "DTCEF_CONFIG_PASSWORD" "Config password"
     $apiBaseUrl = Get-OptionalEnv "DTCEF_CONFIG_API_BASE_URL"
     $requirePassword = Convert-ToBooleanValue (Get-OptionalEnv "DTCEF_CONFIG_REQUIRE_PASSWORD")
+    $processMode = Normalize-CefProcessMode (Get-OptionalEnv "DTCEF_CONFIG_PROCESS_MODE")
 
     Add-Type -AssemblyName System.Web.Extensions
     $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
@@ -278,19 +346,29 @@ try {
 
     $desktopAuth = Get-DesktopAuthDictionary $config
     Set-DictionaryValue $desktopAuth "apiBaseUrl" $apiBaseUrl
+    Apply-CefProcessMode $config $processMode
 
     $patchedJson = Format-JsonText ($serializer.Serialize($config))
     Write-TextFileUtf8Safely $ConfigPath ($patchedJson + [Environment]::NewLine)
-    Write-OverrideConfig $url $exitPassword $apiBaseUrl $requirePassword
+    Write-OverrideConfig $url $exitPassword $apiBaseUrl $requirePassword $processMode
 
     $verifyText = Read-TextFileUtf8 $ConfigPath
     $verifyConfig = $serializer.DeserializeObject($verifyText)
     $verifyDesktopAuth = $verifyConfig["desktopAuth"]
+    $verifyCefSettings = $verifyConfig["cefSettings"]
     if ($verifyConfig["url"] -ne $url -or
         $verifyConfig["exitPassword"] -ne $exitPassword -or
         $verifyConfig["sensitiveOperationRequirePassword"] -ne $requirePassword -or
         $verifyDesktopAuth["apiBaseUrl"] -ne $apiBaseUrl) {
         throw "Config verification failed"
+    }
+    if ($processMode -eq "auto") {
+        if ($verifyConfig.Contains("cefSingleProcessMode") -or
+            ($verifyCefSettings -is [System.Collections.IDictionary] -and $verifyCefSettings.Contains("singleProcessMode"))) {
+            throw "CEF process mode verification failed"
+        }
+    } elseif ($verifyCefSettings["singleProcessMode"] -ne ($processMode -eq "single")) {
+        throw "CEF process mode verification failed"
     }
 
     if (-not [System.IO.File]::Exists($OverridePath)) {

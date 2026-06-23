@@ -72,6 +72,12 @@ signals:
      * @brief 页面加载开始信号
      */
     void pageLoadStarted();
+
+    /**
+     * @brief CEF浏览器创建完成信号
+     * CEF子窗口已创建，可以显示主窗口，但页面可能仍在加载
+     */
+    void browserReady();
     
     /**
      * @brief 页面加载完成信号
@@ -121,7 +127,7 @@ private slots:
     /**
      * @brief CEF浏览器创建完成回调
      */
-    void onBrowserCreated();
+    void onBrowserCreated(int browserId);
 
     /**
      * @brief CEF主框架页面加载完成回调

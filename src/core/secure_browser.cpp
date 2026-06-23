@@ -72,6 +72,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     if (m_cefManager) {
         connect(m_cefManager, &CEFManager::urlExitTriggered, this, &SecureBrowser::handleUrlExit);
         connect(m_cefManager, &CEFManager::mainFrameLoadEnd, this, &SecureBrowser::onMainFrameLoadEnd);
+        connect(m_cefManager, &CEFManager::browserCreated, this, &SecureBrowser::onBrowserCreated);
         m_logger->appEvent("CEFManager信号已连接");
     }
     
@@ -479,17 +480,17 @@ void SecureBrowser::onCEFMessageLoop()
         return;
     }
     
-    if (!m_cefBrowserCreated) {
-        if (m_cefMessageLoopLogCounter % 500 == 1) { // 每5秒记录一次状态
-            m_logger->appEvent("CEF消息循环等待: 浏览器尚未创建完成");
-        }
-        return;
-    }
-    
     // 调用CEF消息循环处理
     try {
         m_cefManager->doMessageLoopWork();
         
+        if (!m_cefBrowserCreated) {
+            if (m_cefMessageLoopLogCounter % 500 == 1) { // 每5秒记录一次状态
+                m_logger->appEvent("CEF消息循环运行中，等待浏览器创建完成");
+            }
+            return;
+        }
+
         // 定期记录成功状态（每30秒一次）
         if (m_cefMessageLoopLogCounter % 3000 == 1) {
             m_logger->appEvent("CEF消息循环正常运行 - 白屏问题应已解决");
@@ -501,18 +502,22 @@ void SecureBrowser::onCEFMessageLoop()
     }
 }
 
-void SecureBrowser::onBrowserCreated()
+void SecureBrowser::onBrowserCreated(int browserId)
 {
+    if (m_cefBrowserCreated) {
+        return;
+    }
+
     m_cefBrowserCreated = true;
-    m_logger->appEvent("CEF浏览器创建完成（等待OnLoadEnd回调确认页面实际加载完成）");
+    m_cefBrowserId = browserId;
+    m_logger->appEvent("CEF浏览器创建完成，页面继续加载");
 
     resizeCEFBrowser();
     m_cefMessageLoopLogCounter = 0;
-    
-    if (!m_currentUrl.isEmpty()) {
-        emit pageLoadStarted();
-        load(m_currentUrl);
-    }
+
+    emit browserReady();
+
+    emit pageLoadStarted();
     
     // 启动超时兜底定时器：Win7 32位单进程+软件渲染可能需要较长时间
     // 正常路径由 onMainFrameLoadEnd 触发，此定时器仅在OnLoadEnd未触发时兜底
@@ -979,8 +984,7 @@ void SecureBrowser::createCEFBrowser()
         m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
         
         if (m_cefBrowserId > 0) {
-            m_logger->appEvent(QString("CEF浏览器创建成功，ID: %1").arg(m_cefBrowserId));
-            onBrowserCreated();
+            m_logger->appEvent(QString("CEF浏览器创建请求已提交，临时ID: %1").arg(m_cefBrowserId));
         } else {
             handleBrowserError("CEF浏览器创建失败 - createBrowser返回0");
         }

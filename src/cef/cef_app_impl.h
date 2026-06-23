@@ -61,6 +61,8 @@ private:
     void applySecurityFlags(CefRefPtr<CefCommandLine> command_line);
     void applyPerformanceFlags(CefRefPtr<CefCommandLine> command_line);
     void applyCompatibilityFlags(CefRefPtr<CefCommandLine> command_line);
+    bool shouldUseSingleProcessMode() const;
+    void applySingleProcessFlag(CefRefPtr<CefCommandLine> command_line);
     void apply32BitOptimizations(CefRefPtr<CefCommandLine> command_line);
     void applyWindows7Flags(CefRefPtr<CefCommandLine> command_line);
 

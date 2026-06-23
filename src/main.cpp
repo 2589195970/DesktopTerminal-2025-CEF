@@ -5,6 +5,7 @@
 #include <QTextCodec>
 #include <QMetaObject>
 #include <QInputDialog>
+#include <QPointer>
 
 #include "core/application.h"
 #include "core/secure_browser.h"
@@ -226,6 +227,7 @@ int main(int argc, char *argv[])
 
     // 创建并显示加载对话框
     LoadingDialog* loadingDialog = new LoadingDialog();
+    QPointer<LoadingDialog> loadingDialogGuard(loadingDialog);
     loadingDialog->show();
     loadingDialog->raise();
     loadingDialog->activateWindow();
@@ -240,15 +242,19 @@ int main(int argc, char *argv[])
                      [&](bool checkSuccess) {
         if (checkSuccess) {
             logger.appEvent("系统检测通过，开始初始化应用程序");
+            if (!loadingDialogGuard) {
+                logger.errorEvent("加载对话框已销毁，无法继续启动流程");
+                return;
+            }
             
             // 连接初始化进度信号
             QObject::connect(&application, &Application::initializationProgress,
-                             loadingDialog, &LoadingDialog::setStatus);
+                             loadingDialogGuard.data(), &LoadingDialog::setStatus);
             QObject::connect(&application, &Application::initializationError,
-                             loadingDialog, &LoadingDialog::setError);
+                             loadingDialogGuard.data(), &LoadingDialog::setError);
             
             // 开始应用程序初始化
-            loadingDialog->startApplicationLoad();
+            loadingDialogGuard->startApplicationLoad();
             if (application.initialize()) {
                 applicationInitialized = true;
                 logger.appEvent("应用程序初始化成功，准备启动主窗口");
@@ -256,10 +262,10 @@ int main(int argc, char *argv[])
                 // 初始化成功后，触发主窗口启动
                 // 注意：不能直接调用 startMainWindow()，因为需要通过 readyToStartApplication 信号
                 // 来确保所有相关的信号连接都已建立
-                QMetaObject::invokeMethod(loadingDialog, "readyToStartApplication", Qt::QueuedConnection);
+                QMetaObject::invokeMethod(loadingDialogGuard.data(), "readyToStartApplication", Qt::QueuedConnection);
             } else {
                 logger.errorEvent("应用程序初始化失败");
-                loadingDialog->setError("应用程序初始化失败\n请查看日志文件");
+                loadingDialogGuard->setError("应用程序初始化失败\n请查看日志文件");
             }
         } else {
             logger.errorEvent("系统检测失败，阻止应用程序启动");
@@ -270,13 +276,16 @@ int main(int argc, char *argv[])
     // 处理重试和取消
     QObject::connect(loadingDialog, &LoadingDialog::retryClicked, [&]() {
         logger.appEvent("用户点击重试");
+        if (!loadingDialogGuard) {
+            return;
+        }
         if (!applicationInitialized) {
             // 如果应用程序还未初始化，重新进行系统检测
-            loadingDialog->startSystemCheck();
+            loadingDialogGuard->startSystemCheck();
         } else {
             // 如果应用程序已初始化，重新初始化应用程序
-            loadingDialog->startAnimation();
-            loadingDialog->setStatus("重新初始化...");
+            loadingDialogGuard->startAnimation();
+            loadingDialogGuard->setStatus("重新初始化...");
             application.initialize();
         }
     });
@@ -290,35 +299,36 @@ int main(int argc, char *argv[])
     // 将启动流程移到readyToStartApplication信号的处理中
     QObject::connect(loadingDialog, &LoadingDialog::readyToStartApplication,
                      [&]() {
-        // 启动主窗口
-        loadingDialog->setStatus("正在创建主窗口...");
-        if (!application.startMainWindow()) {
-            logger.errorEvent("主窗口启动失败");
-            loadingDialog->setError("主窗口启动失败\n请查看日志文件");
+        if (!loadingDialogGuard) {
+            logger.errorEvent("加载对话框已销毁，无法启动主窗口");
             return;
         }
 
-        // 获取主窗口并连接页面加载信号
+        // 启动主窗口
+        loadingDialogGuard->setStatus("正在创建主窗口...");
+        if (!application.startMainWindow()) {
+            logger.errorEvent("主窗口启动失败");
+            loadingDialogGuard->setError("主窗口启动失败\n请查看日志文件");
+            return;
+        }
+
+        // 获取主窗口并连接浏览器状态信号
         if (auto* mainWindow = application.getMainWindow()) {
-            // 连接页面加载信号
-            QObject::connect(mainWindow, &SecureBrowser::pageLoadStarted, [loadingDialog]() {
-                if (loadingDialog) {
-                    loadingDialog->setStatus("正在加载网页...");
+            QObject::connect(mainWindow, &SecureBrowser::browserReady, [loadingDialogGuard, mainWindow]() {
+                Logger::instance().appEvent("CEF浏览器创建完成，关闭加载对话框并显示主窗口");
+                if (loadingDialogGuard) {
+                    loadingDialogGuard->close();
+                    loadingDialogGuard->deleteLater();
                 }
-            });
-            
-            QObject::connect(mainWindow, &SecureBrowser::pageLoadFinished, [loadingDialog, mainWindow]() {
-                Logger::instance().appEvent("页面加载完成，关闭加载对话框");
-                if (loadingDialog) {
-                    loadingDialog->close();
-                    loadingDialog->deleteLater();
-                }
-                
-                // 显示主窗口
+
                 mainWindow->show();
                 mainWindow->raise();
                 mainWindow->activateWindow();
-                Logger::instance().appEvent("主窗口已显示");
+                Logger::instance().appEvent("主窗口已显示，网页继续加载");
+            });
+
+            QObject::connect(mainWindow, &SecureBrowser::pageLoadFinished, []() {
+                Logger::instance().appEvent("页面加载完成");
             });
             
             // 先显示主窗口以确保窗口句柄有效
@@ -327,11 +337,11 @@ int main(int argc, char *argv[])
             // 确保窗口完全显示和初始化
             QApplication::processEvents();
             
-            // 然后隐藏等待页面加载完成
+            // 然后短暂隐藏，等待CEF子窗口创建完成，而不是等待网页加载完成
             mainWindow->hide();
             
             // 初始化CEF浏览器（窗口句柄现在应该有效）
-            loadingDialog->setStatus("正在初始化浏览器...");
+            loadingDialogGuard->setStatus("正在初始化浏览器...");
             logger.appEvent("开始初始化CEF浏览器");
             mainWindow->initializeCEFBrowser();
         }
@@ -339,7 +349,7 @@ int main(int argc, char *argv[])
 
     // 所有信号连接完成后，开始系统检测
     logger.appEvent("开始系统检测流程");
-    loadingDialog->startSystemCheck();
+    loadingDialogGuard->startSystemCheck();
 
     logger.appEvent("应用程序启动完成，进入事件循环");
 

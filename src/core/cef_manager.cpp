@@ -326,6 +326,13 @@ bool CEFManager::setBrowserZoomLevel(int browserId, double zoomLevel)
 
 CEFManager::ProcessMode CEFManager::selectOptimalProcessMode()
 {
+    const ConfigManager& configManager = ConfigManager::instance();
+    if (configManager.hasCEFSingleProcessMode()) {
+        return configManager.isCEFSingleProcessMode()
+            ? ProcessMode::SingleProcess
+            : ProcessMode::MultiProcess;
+    }
+
     if (Application::is32BitSystem() || Application::isWindows7SP1()) {
         return ProcessMode::SingleProcess;
     }
@@ -356,6 +363,10 @@ CEFManager::MemoryProfile CEFManager::selectOptimalMemoryProfile()
 QStringList CEFManager::buildCEFCommandLine()
 {
     QStringList args;
+    const ConfigManager& configManager = ConfigManager::instance();
+    const bool useSingleProcess = configManager.hasCEFSingleProcessMode()
+        ? configManager.isCEFSingleProcessMode()
+        : (Application::is32BitSystem() || Application::isWindows7SP1());
 
     // 基础参数
     args << "--no-sandbox";
@@ -370,9 +381,12 @@ QStringList CEFManager::buildCEFCommandLine()
     // 否则 200% DPI 下 CSS 视口会变成物理像素尺寸，网页只画在左上 1/4 区域。
     args << "--disable-gpu-driver-bug-workarounds";
 
+    if (useSingleProcess) {
+        args << "--single-process";
+    }
+
     // 32位系统和Windows 7特殊参数（强制单进程）
     if (Application::is32BitSystem() || Application::isWindows7SP1()) {
-        args << "--single-process";
         args << "--disable-gpu";
         args << "--disable-gpu-compositing";
         args << "--disable-gpu-rasterization";
@@ -719,6 +733,12 @@ void CEFManager::notifyMainFrameLoadEnd(int httpStatusCode)
 {
     m_logger->appEvent(QString("主框架页面加载完成，HTTP状态码: %1").arg(httpStatusCode));
     emit mainFrameLoadEnd(httpStatusCode);
+}
+
+void CEFManager::notifyBrowserCreated(int browserId)
+{
+    m_logger->appEvent(QString("CEF浏览器创建完成通知，ID: %1").arg(browserId));
+    emit browserCreated(browserId);
 }
 
 bool CEFManager::showDevTools(int browserId)

@@ -164,7 +164,7 @@ copy_qt_libraries() {
     
     if [[ "$PLATFORM" == "windows" ]]; then
         # Windows Qt DLL
-        QT_DLLS=("Qt5Core.dll" "Qt5Gui.dll" "Qt5Widgets.dll")
+        QT_DLLS=("Qt5Core.dll" "Qt5Gui.dll" "Qt5Widgets.dll" "Qt5Network.dll" "Qt5Concurrent.dll")
         for dll in "${QT_DLLS[@]}"; do
             find /c/Qt* -name "$dll" -exec cp {} "$PACKAGE_PATH/bin/" \; 2>/dev/null || true
         done
@@ -196,6 +196,34 @@ copy_qt_libraries() {
     fi
     
     log_success "Qt库复制完成"
+}
+
+# 复制Windows Qt HTTPS所需的OpenSSL运行时
+copy_windows_openssl() {
+    if [[ "$PLATFORM" != "windows" ]]; then
+        return
+    fi
+
+    log_info "复制OpenSSL运行时..."
+
+    if command -v powershell.exe >/dev/null 2>&1; then
+        powershell.exe -NoProfile -ExecutionPolicy Bypass \
+            -File "$PROJECT_ROOT/scripts/deploy-openssl-windows.ps1" \
+            -TargetDir "$PACKAGE_PATH/bin" \
+            -Arch "$ARCH" \
+            -Required
+    elif command -v powershell >/dev/null 2>&1; then
+        powershell -NoProfile -ExecutionPolicy Bypass \
+            -File "$PROJECT_ROOT/scripts/deploy-openssl-windows.ps1" \
+            -TargetDir "$PACKAGE_PATH/bin" \
+            -Arch "$ARCH" \
+            -Required
+    else
+        log_error "未找到PowerShell，无法部署OpenSSL运行时"
+        exit 1
+    fi
+
+    log_success "OpenSSL运行时复制完成"
 }
 
 # 复制配置文件
@@ -433,6 +461,7 @@ main() {
     copy_application
     copy_cef_files
     copy_qt_libraries
+    copy_windows_openssl
     copy_config_files
     copy_documentation
     create_launcher

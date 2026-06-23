@@ -108,6 +108,10 @@ void CEFClient::OnAfterCreated(CefRefPtr<CefBrowser> browser)
     m_browserCount++;
     
     m_logger->appEvent(QString("浏览器创建完成，ID: %1").arg(browser->GetIdentifier()));
+
+    if (m_cefManager) {
+        m_cefManager->notifyBrowserCreated(browser->GetIdentifier());
+    }
     
     // Windows 7特定优化
     if (m_windows7CompatibilityMode) {

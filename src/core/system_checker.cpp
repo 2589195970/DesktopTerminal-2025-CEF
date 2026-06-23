@@ -579,6 +579,10 @@ void SystemChecker::attemptAutoFix()
             fixedCount++;
         }
     }
+
+    if (fixedCount > 0 && !hasFatalErrors()) {
+        saveCacheCheckResults();
+    }
     
     emit autoFixCompleted(fixedCount);
 }
@@ -615,43 +619,59 @@ bool SystemChecker::installVCRuntimePackage()
 #ifdef Q_OS_WIN
     QString depDir = QCoreApplication::applicationDirPath() + "/resources/dependencies";
     bool is64Bit = QSysInfo::currentCpuArchitecture().contains("64", Qt::CaseInsensitive);
-    QStringList candidates;
+    QStringList installerNames;
     if (is64Bit) {
-        candidates << QDir(depDir).absoluteFilePath("VC_redist.x64.exe");
+        installerNames << "VC_redist.x64.exe";
     }
-    candidates << QDir(depDir).absoluteFilePath("VC_redist.x86.exe");
+    installerNames << "VC_redist.x86.exe";
     
-    QString installerPath;
-    for (const QString &candidate : candidates) {
-        if (QFileInfo::exists(candidate)) {
-            installerPath = candidate;
-            break;
+    QStringList installerPaths;
+    bool allInstallersFound = true;
+    QDir dependencyDir(depDir);
+    for (const QString &installerName : installerNames) {
+        QString installerPath = dependencyDir.absoluteFilePath(installerName);
+        if (QFileInfo::exists(installerPath)) {
+            installerPaths << installerPath;
+        } else {
+            allInstallersFound = false;
+            m_logger->errorEvent(QString("未找到离线VC++运行库安装包: %1").arg(installerPath));
         }
     }
     
-    if (installerPath.isEmpty()) {
+    if (installerPaths.isEmpty()) {
         m_logger->errorEvent("未找到离线VC++运行库安装包，无法自动修复运行库问题");
         return false;
     }
     
     QStringList args = { "/install", "/quiet", "/norestart" };
-    QProcess process;
-    process.start(installerPath, args);
-    if (!process.waitForFinished(5 * 60 * 1000)) {
-        process.kill();
-        process.waitForFinished(1000);
-        m_logger->errorEvent("VC++运行库自动安装超时");
-        return false;
+    bool allInstalled = allInstallersFound;
+    for (const QString &installerPath : installerPaths) {
+        QProcess process;
+        m_logger->appEvent(QString("开始安装VC++运行库: %1").arg(QFileInfo(installerPath).fileName()));
+        process.start(installerPath, args);
+        if (!process.waitForFinished(5 * 60 * 1000)) {
+            process.kill();
+            process.waitForFinished(1000);
+            m_logger->errorEvent(QString("VC++运行库自动安装超时: %1").arg(QFileInfo(installerPath).fileName()));
+            allInstalled = false;
+            continue;
+        }
+    
+        int exitCode = process.exitCode();
+        if (exitCode == 0 || exitCode == 1638 || exitCode == 3010) {
+            m_logger->appEvent(QString("VC++运行库安装完成: %1，退出码%2")
+                .arg(QFileInfo(installerPath).fileName())
+                .arg(exitCode));
+            continue;
+        }
+
+        m_logger->errorEvent(QString("VC++运行库安装失败: %1，退出码%2")
+            .arg(QFileInfo(installerPath).fileName())
+            .arg(exitCode));
+        allInstalled = false;
     }
     
-    int exitCode = process.exitCode();
-    if (exitCode == 0 || exitCode == 1638 || exitCode == 3010) {
-        m_logger->appEvent(QString("VC++运行库安装完成，退出码%1").arg(exitCode));
-        return true;
-    }
-    
-    m_logger->errorEvent(QString("VC++运行库安装失败，退出码%1").arg(exitCode));
-    return false;
+    return allInstalled;
 #else
     m_logger->appEvent("非Windows平台无需自动安装VC++运行库");
     return false;
@@ -735,8 +755,13 @@ bool SystemChecker::loadCachedCheckResults()
         result.level = static_cast<CheckLevel>(obj.value("level").toInt());
         result.title = obj.value("title").toString();
         result.message = obj.value("message").toString();
+        result.solution = obj.value("solution").toString();
         result.canRetry = obj.value("canRetry").toBool();
         result.autoFixable = obj.value("autoFixable").toBool();
+        QJsonArray detailsArray = obj.value("details").toArray();
+        for (const QJsonValue& detail : detailsArray) {
+            result.details << detail.toString();
+        }
         m_results.append(result);
     }
 
@@ -760,8 +785,14 @@ void SystemChecker::saveCacheCheckResults()
         obj["level"] = static_cast<int>(result.level);
         obj["title"] = result.title;
         obj["message"] = result.message;
+        obj["solution"] = result.solution;
         obj["canRetry"] = result.canRetry;
         obj["autoFixable"] = result.autoFixable;
+        QJsonArray detailsArray;
+        for (const QString& detail : result.details) {
+            detailsArray.append(detail);
+        }
+        obj["details"] = detailsArray;
         resultsArray.append(obj);
     }
     root["results"] = resultsArray;

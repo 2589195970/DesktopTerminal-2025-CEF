@@ -73,6 +73,7 @@ private slots:
     void onAutoFixCompleted(int fixed);
     void onRetrySystemCheck();
     void onShowErrorDetails();
+    void onContinueAfterOptionalFix();
     
 private:
     // UI初始化
@@ -89,6 +90,8 @@ private:
     void initializeSystemChecker();
     void displayCheckResults();
     QString formatCheckResult(const SystemChecker::CheckResult& result);
+    bool hasOptionalRuntimeDependencyIssue(const QList<SystemChecker::CheckResult>& results) const;
+    void showOptionalRuntimeFixPrompt(const QList<SystemChecker::CheckResult>& results);
     
 private:
     // 基础UI组件
@@ -109,6 +112,7 @@ private:
     QScrollArea* m_detailsScrollArea;
     QPushButton* m_detailsButton;
     QPushButton* m_autoFixButton;
+    QPushButton* m_continueButton;
     QVBoxLayout* m_mainLayout;
     
     // 系统检测
@@ -124,6 +128,7 @@ private:
     bool m_isError;
     bool m_systemCheckInProgress;
     bool m_showingDetails;
+    bool m_waitingForOptionalRuntimeFix;
     int m_progressValue;
     int m_progressMax;
     

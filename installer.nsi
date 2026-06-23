@@ -71,12 +71,17 @@ Var /GLOBAL ConfigURL
 Var /GLOBAL ConfigPassword
 Var /GLOBAL ConfigApiBaseUrl
 Var /GLOBAL RequirePassword
+Var /GLOBAL CefProcessMode
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
 Var /GLOBAL ApiBaseUrlText
 Var /GLOBAL RequirePasswordCheckbox
+Var /GLOBAL CefProcessModeAutoRadio
+Var /GLOBAL CefProcessModeSingleRadio
+Var /GLOBAL CefProcessModeMultiRadio
 Var /GLOBAL ConfigPatchResult
+Var /GLOBAL OpenSslRuntimeReady
 
 ; ─────────────────────────────────────────────
 ; 安装前检查
@@ -142,7 +147,17 @@ Function ConfigPage
     ${NSD_CreateText} 0 96u 100% 12u ""
     Pop $ApiBaseUrlText
 
-    ${NSD_CreateCheckbox} 0 116u 100% 12u "敏感操作需要密码验证(F10退出等)"
+    ${NSD_CreateLabel} 0 116u 100% 12u "CEF进程模式:"
+    Pop $0
+    ${NSD_CreateRadioButton} 0 128u 32% 12u "自动选择"
+    Pop $CefProcessModeAutoRadio
+    ${NSD_Check} $CefProcessModeAutoRadio
+    ${NSD_CreateRadioButton} 34% 128u 32% 12u "强制单进程"
+    Pop $CefProcessModeSingleRadio
+    ${NSD_CreateRadioButton} 68% 128u 32% 12u "强制多进程"
+    Pop $CefProcessModeMultiRadio
+
+    ${NSD_CreateCheckbox} 0 144u 100% 12u "敏感操作需要密码验证(F10退出等)"
     Pop $RequirePasswordCheckbox
     ${NSD_Check} $RequirePasswordCheckbox
 
@@ -154,6 +169,17 @@ Function ConfigPageLeave
     ${NSD_GetText} $PasswordText $ConfigPassword
     ${NSD_GetText} $ApiBaseUrlText $ConfigApiBaseUrl
     ${NSD_GetState} $RequirePasswordCheckbox $RequirePassword
+    ${NSD_GetState} $CefProcessModeSingleRadio $0
+    ${If} $0 == 1
+        StrCpy $CefProcessMode "single"
+    ${Else}
+        ${NSD_GetState} $CefProcessModeMultiRadio $0
+        ${If} $0 == 1
+            StrCpy $CefProcessMode "multi"
+        ${Else}
+            StrCpy $CefProcessMode "auto"
+        ${EndIf}
+    ${EndIf}
 FunctionEnd
 
 ; ─────────────────────────────────────────────
@@ -304,18 +330,61 @@ Section "主程序" SecMain
         ${If} ${FileExists} "$INSTDIR\Qt5Gui.dll"
             ${If} ${FileExists} "$INSTDIR\Qt5Widgets.dll"
                 ${If} ${FileExists} "$INSTDIR\Qt5Network.dll"
-                    ${Log} "Qt5 runtime DLLs verified"
+                    ${If} ${FileExists} "$INSTDIR\Qt5Concurrent.dll"
+                        ${Log} "Qt5 runtime DLLs verified"
+                    ${Else}
+                        ${Log} "WARNING: Qt5Concurrent.dll missing"
+                        StrCpy $VerificationErrors "$VerificationErrors- Qt5Concurrent.dll 缺失$\n"
+                    ${EndIf}
                 ${Else}
                     ${Log} "WARNING: Qt5Network.dll missing"
+                    StrCpy $VerificationErrors "$VerificationErrors- Qt5Network.dll 缺失，Qt网络与HTTPS不可用$\n"
                 ${EndIf}
             ${Else}
                 ${Log} "WARNING: Qt5Widgets.dll missing"
+                StrCpy $VerificationErrors "$VerificationErrors- Qt5Widgets.dll 缺失$\n"
             ${EndIf}
         ${Else}
             ${Log} "WARNING: Qt5Gui.dll missing"
+            StrCpy $VerificationErrors "$VerificationErrors- Qt5Gui.dll 缺失$\n"
         ${EndIf}
     ${Else}
         ${Log} "WARNING: Qt5Core.dll missing"
+        StrCpy $VerificationErrors "$VerificationErrors- Qt5Core.dll 缺失$\n"
+    ${EndIf}
+
+    ; 检查Qt HTTPS所需OpenSSL运行时库
+    StrCpy $OpenSslRuntimeReady "false"
+    ${If} "${ARCH}" == "x86"
+        ${If} ${FileExists} "$INSTDIR\libssl-1_1.dll"
+            ${If} ${FileExists} "$INSTDIR\libcrypto-1_1.dll"
+                StrCpy $OpenSslRuntimeReady "true"
+            ${EndIf}
+        ${EndIf}
+    ${Else}
+        ${If} ${FileExists} "$INSTDIR\libssl-1_1-x64.dll"
+            ${If} ${FileExists} "$INSTDIR\libcrypto-1_1-x64.dll"
+                StrCpy $OpenSslRuntimeReady "true"
+            ${EndIf}
+        ${EndIf}
+        ${If} $OpenSslRuntimeReady != "true"
+            ${If} ${FileExists} "$INSTDIR\libssl-1_1.dll"
+                ${If} ${FileExists} "$INSTDIR\libcrypto-1_1.dll"
+                    StrCpy $OpenSslRuntimeReady "true"
+                ${EndIf}
+            ${EndIf}
+        ${EndIf}
+    ${EndIf}
+
+    ${If} $OpenSslRuntimeReady == "true"
+        ${Log} "OpenSSL runtime verified"
+    ${Else}
+        ${Log} "WARNING: OpenSSL runtime missing or incomplete"
+        ${If} "${ARCH}" == "x86"
+            StrCpy $VerificationErrors "$VerificationErrors- OpenSSL运行时 libssl-1_1.dll / libcrypto-1_1.dll 缺失，HTTPS认证不可用$\n"
+        ${Else}
+            StrCpy $VerificationErrors "$VerificationErrors- OpenSSL运行时 libssl/libcrypto 成对DLL缺失，HTTPS认证不可用$\n"
+        ${EndIf}
     ${EndIf}
     
     ; 检查Qt5平台插件（缺失会导致"no Qt platform plugin"致命错误）
@@ -368,12 +437,15 @@ Section "主程序" SecMain
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_API_BASE_URL", w r0)i.r1'
     StrCpy $0 "$R9"
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_REQUIRE_PASSWORD", w r0)i.r1'
+    StrCpy $0 "$CefProcessMode"
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PROCESS_MODE", w r0)i.r1'
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -OverridePath "$INSTDIR\resources\config.override.ini" -LogPath "$INSTDIR\resources\install-config-patch.log"'
     Pop $ConfigPatchResult
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_URL", w "")i.r1'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PASSWORD", w "")i.r1'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_API_BASE_URL", w "")i.r1'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_REQUIRE_PASSWORD", w "")i.r1'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PROCESS_MODE", w "")i.r1'
 
     ${If} $ConfigPatchResult == 0
         ${Log} "config.json patched and config.override.ini written"
@@ -385,8 +457,11 @@ Section "主程序" SecMain
         FileWrite $0 "exitPassword=$ConfigPassword$\r$\n"
         FileWrite $0 "apiBaseUrl=$ConfigApiBaseUrl$\r$\n"
         FileWrite $0 "sensitiveOperationRequirePassword=$R9$\r$\n"
+        ${If} $CefProcessMode != "auto"
+            FileWrite $0 "cefProcessMode=$CefProcessMode$\r$\n"
+        ${EndIf}
         FileClose $0
-        ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl"
+        ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl, cefProcessMode=$CefProcessMode"
         MessageBox MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行，详情见 resources\install-config-patch.log。"
     ${EndIf}
     
