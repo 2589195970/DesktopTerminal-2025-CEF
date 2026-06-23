@@ -64,32 +64,36 @@ jobs:
       run: |
         $ErrorActionPreference = 'Stop'
         $arch = '${{ matrix.arch }}'
+        $opensslVersion = '1.1.1.20181020'
+        $opensslInstallDir = Join-Path $env:RUNNER_TEMP "openssl-$arch"
         $chocoArgs = @(
           'install',
           'openssl.light',
+          "--version=$opensslVersion",
           '-y',
           '--no-progress',
           '--timeout',
-          '180'
+          '180',
+          '--params',
+          "/InstallDir:$opensslInstallDir"
         )
         if ($arch -eq 'x86') {
           $chocoArgs += '--forcex86'
         }
-        Write-Host "Installing openssl.light for $arch"
+        Write-Host "Installing openssl.light $opensslVersion for $arch to $opensslInstallDir"
         & choco @chocoArgs
         if ($LASTEXITCODE -ne 0) {
-          throw "Failed to install OpenSSL runtime"
+          throw "Failed to install OpenSSL runtime $opensslVersion"
         }
 
         $requiredPairs = @()
         if ($arch -eq 'x86') {
           $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
-          $selectedDir = "${env:ProgramFiles(x86)}\OpenSSL-Win32\bin"
         } else {
           $requiredPairs += ,@('libssl-1_1-x64.dll', 'libcrypto-1_1-x64.dll')
           $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
-          $selectedDir = "$env:ProgramFiles\OpenSSL-Win64\bin"
         }
+        $selectedDir = Join-Path $opensslInstallDir "bin"
 
         function Test-OpenSslPair {
           param(
