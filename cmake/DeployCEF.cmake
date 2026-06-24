@@ -423,44 +423,70 @@ endfunction()
 # 验证CEF文件完整性
 function(verify_cef_deployment TARGET_NAME BINARY_DIR)
     message(STATUS "Setting up CEF deployment verification")
-    
+
     # 在配置时确定平台和文件列表
+    # CEF 109+ 使用新的资源文件名，CEF 75 使用旧文件名
+    # 验证时检查所有可能的文件名（优先检查新版本）
     if(WIN32)
-        set(REQUIRED_FILES "libcef.dll" "cef.pak")
+        set(REQUIRED_FILES "libcef.dll")
+        # 资源文件：检查新版本或旧版本（至少需要一个主资源文件）
+        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "Windows")
     elseif(APPLE)
-        set(REQUIRED_FILES "Chromium Embedded Framework.framework" "cef.pak")
+        set(REQUIRED_FILES "Chromium Embedded Framework.framework")
+        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "macOS")
     else()
-        set(REQUIRED_FILES "libcef.so" "cef.pak")
+        set(REQUIRED_FILES "libcef.so")
+        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "Linux")
     endif()
-    
+
     # Create verification script with platform-specific content
     set(VERIFY_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/verify_cef_${TARGET_NAME}.cmake")
-    
+
     # 生成平台特定的验证脚本
     file(WRITE "${VERIFY_SCRIPT}" "
         # CEF deployment verification script for ${PLATFORM_NAME}
         set(BINARY_DIR \"${BINARY_DIR}\")
         set(REQUIRED_FILES \"${REQUIRED_FILES}\")
+        set(RESOURCE_FILE_CANDIDATES \"${RESOURCE_FILE_CANDIDATES}\")
         set(MISSING_FILES \"\")
-        
+
         message(STATUS \"Verifying CEF deployment for ${PLATFORM_NAME}\")
         message(STATUS \"Binary directory: \${BINARY_DIR}\")
-        message(STATUS \"Required files: \${REQUIRED_FILES}\")
-        
+        message(STATUS \"Required core files: \${REQUIRED_FILES}\")
+
+        # 检查核心文件（必须存在）
         foreach(file \${REQUIRED_FILES})
             set(file_path \"\${BINARY_DIR}/\${file}\")
-            message(STATUS \"Checking: \${file_path}\")
+            message(STATUS \"Checking core file: \${file_path}\")
             if(NOT EXISTS \"\${file_path}\")
                 list(APPEND MISSING_FILES \"\${file}\")
-                message(WARNING \"Missing: \${file_path}\")
+                message(WARNING \"Missing core file: \${file_path}\")
             else()
                 message(STATUS \"Found: \${file_path}\")
             endif()
         endforeach()
-        
+
+        # 检查资源文件（至少需要一个候选文件存在）
+        foreach(candidate_group \${RESOURCE_FILE_CANDIDATES})
+            string(REPLACE \";\" \"|\" candidates \"\${candidate_group}\")
+            set(group_found FALSE)
+            foreach(candidate \${candidate_group})
+                set(file_path \"\${BINARY_DIR}/\${candidate}\")
+                if(EXISTS \"\${file_path}\")
+                    message(STATUS \"Found resource file: \${file_path}\")
+                    set(group_found TRUE)
+                    break()
+                endif()
+            endforeach()
+            if(NOT group_found)
+                message(WARNING \"Missing resource file group (one of): \${candidates}\")
+                list(APPEND MISSING_FILES \"(one of: \${candidates})\")
+            endif()
+        endforeach()
+
         if(MISSING_FILES)
             message(STATUS \"=== CEF Verification Failed ===\")
             message(STATUS \"Missing files: \${MISSING_FILES}\")
