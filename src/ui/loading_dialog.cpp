@@ -476,9 +476,12 @@ void LoadingDialog::onCheckCompleted(bool success, const QList<SystemChecker::Ch
     stopAnimation();
     
     if (success) {
-        if (hasOptionalRuntimeDependencyIssue(results)) {
-            showOptionalRuntimeFixPrompt(results);
-            return;
+        // 记录所有检测结果到日志,但不阻止启动
+        for (const auto& result : results) {
+            if (result.level != SystemChecker::LEVEL_OK) {
+                m_logger->appEvent(QString("检测警告(不阻止启动): %1 - %2")
+                    .arg(result.title).arg(result.message));
+            }
         }
 
         // 所有检测通过，准备启动应用程序
