@@ -426,19 +426,15 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
 
     # 在配置时确定平台和文件列表
     # CEF 109+ 使用新的资源文件名，CEF 75 使用旧文件名
-    # 验证时检查所有可能的文件名（优先检查新版本）
+    # 验证时检查至少有一个资源文件存在即可
     if(WIN32)
         set(REQUIRED_FILES "libcef.dll")
-        # 资源文件：检查新版本或旧版本（至少需要一个主资源文件）
-        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "Windows")
     elseif(APPLE)
         set(REQUIRED_FILES "Chromium Embedded Framework.framework")
-        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "macOS")
     else()
         set(REQUIRED_FILES "libcef.so")
-        set(RESOURCE_FILE_CANDIDATES "resources.pak;cef.pak" "chrome_100_percent.pak;cef_100_percent.pak")
         set(PLATFORM_NAME "Linux")
     endif()
 
@@ -450,7 +446,6 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
         # CEF deployment verification script for ${PLATFORM_NAME}
         set(BINARY_DIR \"${BINARY_DIR}\")
         set(REQUIRED_FILES \"${REQUIRED_FILES}\")
-        set(RESOURCE_FILE_CANDIDATES \"${RESOURCE_FILE_CANDIDATES}\")
         set(MISSING_FILES \"\")
 
         message(STATUS \"Verifying CEF deployment for ${PLATFORM_NAME}\")
@@ -469,23 +464,25 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
             endif()
         endforeach()
 
-        # 检查资源文件（至少需要一个候选文件存在）
-        foreach(candidate_group \${RESOURCE_FILE_CANDIDATES})
-            string(REPLACE \";\" \"|\" candidates \"\${candidate_group}\")
-            set(group_found FALSE)
-            foreach(candidate \${candidate_group})
-                set(file_path \"\${BINARY_DIR}/\${candidate}\")
-                if(EXISTS \"\${file_path}\")
-                    message(STATUS \"Found resource file: \${file_path}\")
-                    set(group_found TRUE)
-                    break()
-                endif()
-            endforeach()
-            if(NOT group_found)
-                message(WARNING \"Missing resource file group (one of): \${candidates}\")
-                list(APPEND MISSING_FILES \"(one of: \${candidates})\")
+        # 检查资源文件（CEF 75或CEF 109格式，至少一个存在）
+        # CEF 75: cef.pak, cef_100_percent.pak
+        # CEF 109+: resources.pak, chrome_100_percent.pak
+        set(RESOURCE_FILES_FOUND 0)
+        set(RESOURCE_CANDIDATES \"resources.pak\" \"cef.pak\" \"chrome_100_percent.pak\" \"cef_100_percent.pak\")
+        foreach(resource_file \${RESOURCE_CANDIDATES})
+            set(file_path \"\${BINARY_DIR}/\${resource_file}\")
+            if(EXISTS \"\${file_path}\")
+                message(STATUS \"Found resource file: \${resource_file}\")
+                math(EXPR RESOURCE_FILES_FOUND \"\${RESOURCE_FILES_FOUND} + 1\")
             endif()
         endforeach()
+
+        if(\${RESOURCE_FILES_FOUND} LESS 2)
+            message(WARNING \"Expected at least 2 CEF resource files, found: \${RESOURCE_FILES_FOUND}\")
+            list(APPEND MISSING_FILES \"CEF resource files (found \${RESOURCE_FILES_FOUND}, expected >= 2)\")
+        else()
+            message(STATUS \"Found \${RESOURCE_FILES_FOUND} CEF resource files\")
+        endif()
 
         if(MISSING_FILES)
             message(STATUS \"=== CEF Verification Failed ===\")
@@ -501,7 +498,7 @@ function(verify_cef_deployment TARGET_NAME BINARY_DIR)
             message(STATUS \"CEF files verification passed\")
         endif()
     ")
-    
+
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -P "${VERIFY_SCRIPT}"
         COMMENT "Verifying CEF file deployment for ${PLATFORM_NAME}")
