@@ -100,20 +100,8 @@ REM 创建临时目录
 set "TEMP_DIR=%TEMP%\cef_download_%RANDOM%"
 mkdir "%TEMP_DIR%"
 
-REM 优先从GitHub Release下载
-set "GITHUB_RELEASE_URL=https://github.com/%GITHUB_REPO%/releases/download/cef-75.1.14/cef-75.1.14-%CEF_PLATFORM%.tar.bz2"
-call :log_info "尝试从GitHub Release下载..."
-
-powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -Uri '%GITHUB_RELEASE_URL%' -OutFile '%TEMP_DIR%\%CEF_ARCHIVE_NAME%' -UseBasicParsing -TimeoutSec 300; exit 0 } catch { exit 1 } }" >nul 2>&1
-
-if !errorlevel! equ 0 (
-    call :log_success "GitHub Release下载成功！"
-    goto :verify_download
-)
-
-REM 回退到Spotify CDN
-call :log_warning "GitHub Release下载失败，回退到Spotify CDN..."
-call :log_info "下载 %CEF_ARCHIVE_NAME%..."
+REM 直接从Spotify CDN下载(官方镜像源)
+call :log_info "从Spotify CDN下载 %CEF_ARCHIVE_NAME%..."
 
 powershell -Command "exit" >nul 2>&1
 if !errorlevel! equ 0 (

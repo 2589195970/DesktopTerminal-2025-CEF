@@ -149,20 +149,8 @@ download_cef() {
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf $TEMP_DIR" EXIT
 
-    # 优先从GitHub Release下载
-    GITHUB_RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/cef-75.1.14/cef-75.1.14-${CEF_PLATFORM}.tar.bz2"
-    log_info "尝试从GitHub Release下载..."
-
-    if command -v curl >/dev/null 2>&1; then
-        if curl -L -f "$GITHUB_RELEASE_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME" 2>/dev/null; then
-            log_success "GitHub Release下载成功"
-            return 0
-        fi
-    fi
-
-    # 回退到Spotify CDN
-    log_warning "GitHub Release下载失败，回退到Spotify CDN..."
-    log_info "下载 $CEF_ARCHIVE_NAME..."
+    # 直接从Spotify CDN下载(官方镜像源)
+    log_info "从Spotify CDN下载 $CEF_ARCHIVE_NAME..."
 
     if command -v curl >/dev/null 2>&1; then
         if ! curl -L "$DOWNLOAD_URL" -o "$TEMP_DIR/$CEF_ARCHIVE_NAME"; then
