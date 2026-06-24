@@ -344,14 +344,19 @@ function(deploy_cef_resources TARGET_NAME RESOURCE_PATH RESOURCES_DIR)
     get_filename_component(CEF_ROOT_DIR "${RESOURCE_PATH}" DIRECTORY)
     set(CEF_RELEASE_DIR "${CEF_ROOT_DIR}/Release")
 
-    # CEF资源文件映射：旧版本 -> 新版本（CEF 109+）
+    # CEF资源文件映射：支持多个CEF版本的资源文件名
     # 定义文件映射关系：目标名 -> 可能的源文件名列表
+    #
+    # CEF 75: cef.pak, cef_100_percent.pak, cef_200_percent.pak, cef_extensions.pak, devtools_resources.pak
+    # CEF 109+: resources.pak, chrome_100_percent.pak, chrome_200_percent.pak
+    #
+    # 策略：优先使用新版本文件名，如果找不到则回退到旧版本
     set(RESOURCE_MAPPINGS
-        "cef.pak:resources.pak,cef.pak"
-        "cef_100_percent.pak:chrome_100_percent.pak,cef_100_percent.pak"
-        "cef_200_percent.pak:chrome_200_percent.pak,cef_200_percent.pak"
-        "cef_extensions.pak:resources.pak,cef_extensions.pak"
-        "devtools_resources.pak:resources.pak,devtools_resources.pak"
+        "resources.pak:resources.pak,cef.pak"
+        "chrome_100_percent.pak:chrome_100_percent.pak,cef_100_percent.pak"
+        "chrome_200_percent.pak:chrome_200_percent.pak,cef_200_percent.pak"
+        "cef_extensions.pak:cef_extensions.pak"
+        "devtools_resources.pak:devtools_resources.pak"
     )
 
     # 复制资源文件，支持多路径和文件名映射
