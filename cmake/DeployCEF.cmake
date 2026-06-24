@@ -339,7 +339,7 @@ endfunction()
 # 部署CEF资源文件（所有平台通用）
 function(deploy_cef_resources TARGET_NAME RESOURCE_PATH RESOURCES_DIR)
     message(STATUS "部署CEF资源文件")
-    
+
     # CEF资源文件
     set(CEF_RESOURCE_FILES
         "cef.pak"
@@ -348,15 +348,39 @@ function(deploy_cef_resources TARGET_NAME RESOURCE_PATH RESOURCES_DIR)
         "cef_extensions.pak"
         "devtools_resources.pak"
     )
-    
-    # 复制资源文件
+
+    # 获取CEF根目录和Release目录（用于fallback）
+    get_filename_component(CEF_ROOT_DIR "${RESOURCE_PATH}" DIRECTORY)
+    set(CEF_RELEASE_DIR "${CEF_ROOT_DIR}/Release")
+
+    # 复制资源文件，支持多路径fallback
     foreach(resource ${CEF_RESOURCE_FILES})
+        set(resource_copied FALSE)
+
+        # 首先尝试从Resources目录复制
         if(EXISTS "${RESOURCE_PATH}/${resource}")
             add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${RESOURCE_PATH}/${resource}"
                 "${RESOURCES_DIR}/${resource}"
                 COMMENT "复制CEF资源: ${resource}")
+            set(resource_copied TRUE)
+            message(STATUS "资源文件找到(Resources): ${resource}")
+        elseif(EXISTS "${CEF_RELEASE_DIR}/${resource}")
+            # Fallback: 从Release目录复制（CEF 109+的目录结构）
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CEF_RELEASE_DIR}/${resource}"
+                "${RESOURCES_DIR}/${resource}"
+                COMMENT "复制CEF资源(Release): ${resource}")
+            set(resource_copied TRUE)
+            message(STATUS "资源文件找到(Release fallback): ${resource}")
+        endif()
+
+        if(NOT resource_copied)
+            message(WARNING "CEF资源文件未找到: ${resource}")
+            message(WARNING "  检查路径1: ${RESOURCE_PATH}/${resource}")
+            message(WARNING "  检查路径2: ${CEF_RELEASE_DIR}/${resource}")
         endif()
     endforeach()
     
