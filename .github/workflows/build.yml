@@ -60,6 +60,7 @@ jobs:
         cache-key-prefix: qt-5.15.2-${{ matrix.arch }}
 
     - name: Install OpenSSL 1.1 Runtime
+      continue-on-error: true
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
