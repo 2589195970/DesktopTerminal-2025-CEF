@@ -134,12 +134,12 @@ Function ConfigPage
 
     ${NSD_CreateLabel} 0 20u 100% 12u "考试系统URL:"
     Pop $0
-    ${NSD_CreateText} 0 32u 100% 12u "https://ks.mypt.edu.cn/stu?Client='ExamTerminal'"
+    ${NSD_CreateText} 0 32u 100% 12u "http://wsyjxt.sdmpu.edu.cn/stu"
     Pop $URLText
 
     ${NSD_CreateLabel} 0 52u 100% 12u "退出密码:"
     Pop $0
-    ${NSD_CreatePassword} 0 64u 100% 12u "12753"
+    ${NSD_CreatePassword} 0 64u 100% 12u "sdzdf.com"
     Pop $PasswordText
 
     ${NSD_CreateLabel} 0 84u 100% 12u "后端API地址(可选,留空则自动从前端Config.json发现):"
@@ -151,11 +151,11 @@ Function ConfigPage
     Pop $0
     ${NSD_CreateRadioButton} 0 128u 32% 12u "智能模式"
     Pop $CefProcessModeAutoRadio
-    ${NSD_Check} $CefProcessModeAutoRadio
     ${NSD_CreateRadioButton} 34% 128u 32% 12u "普通版本"
     Pop $CefProcessModeSingleRadio
     ${NSD_CreateRadioButton} 68% 128u 32% 12u "高性能版本"
     Pop $CefProcessModeMultiRadio
+    ${NSD_Check} $CefProcessModeMultiRadio
 
     ${NSD_CreateCheckbox} 0 144u 100% 12u "敏感操作需要密码验证(F10退出等)"
     Pop $RequirePasswordCheckbox
