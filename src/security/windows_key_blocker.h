@@ -155,6 +155,7 @@ private:
     bool m_refreshRetryPending; // 是否存在待处理的定时重装快速重试
     bool m_leftCtrlPressed;  // 左Ctrl当前是否处于按下状态
     bool m_rightCtrlPressed; // 右Ctrl当前是否处于按下状态
+    bool m_f10Pressed;       // F10当前是否处于按下状态，用于防止长按重复触发
     DWORD m_lastErrorCode;   // 最近一次安装失败错误码
     QTimer* m_retryTimer;    // 安装失败后的快速重试定时器
     QTimer* m_refreshTimer;  // 定时恢复与定时重装共用定时器

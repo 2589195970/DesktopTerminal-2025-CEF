@@ -15,6 +15,7 @@ class SecureBrowser;
 class Logger;
 class ConfigManager;
 class NetworkChecker;
+class QWidget;
 #ifdef Q_OS_WIN
 class WindowsKeyBlocker;
 #endif
@@ -86,6 +87,14 @@ public:
      * @return SecureBrowser指针，如果未创建则返回nullptr
      */
     SecureBrowser* getMainWindow() const;
+
+    /**
+     * @brief 请求安全退出
+     * @param parent 密码对话框父窗口，可为空
+     * @param source 触发来源，用于日志
+     * @return 已确认退出返回true，其它情况返回false
+     */
+    bool requestSafeExit(QWidget* parent = nullptr, const QString& source = QString());
 
     // 系统信息获取
     static ArchType getSystemArchitecture();
@@ -188,6 +197,8 @@ private:
 
     bool m_initialized;
     bool m_shutdownRequested;
+    bool m_exitPromptActive;
+    qint64 m_lastSafeExitRequestAtMs;
     CefRefPtr<CEFApp> m_sharedCEFApp;
     int m_originalArgc;
     char** m_originalArgv;

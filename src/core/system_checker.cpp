@@ -12,21 +12,14 @@
 #include <QOffscreenSurface>
 #include <QOpenGLFunctions>
 #include <QStorageInfo>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QUrl>
 #include <QTimer>
 #include <QThread>
-#include <QHostAddress>
-#include <QNetworkAddressEntry>
 #include <QLibrary>
 #include <QProcess>
 #include <QSysInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QEventLoop>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -38,7 +31,6 @@ SystemChecker::SystemChecker(QObject *parent)
     , m_logger(&Logger::instance())
     , m_configManager(&ConfigManager::instance())
     , m_networkTimeout(nullptr)
-    , m_networkManager(nullptr)
     , m_currentCheck(0)
     , m_totalChecks(6)
     , m_checkInProgress(false)
@@ -46,10 +38,6 @@ SystemChecker::SystemChecker(QObject *parent)
 {
     // 注册自定义类型用于信号槽
     qRegisterMetaType<SystemChecker::CheckResult>("SystemChecker::CheckResult");
-    
-    // 初始化网络管理器
-    m_networkManager = new QNetworkAccessManager(this);
-    m_logger->appEvent("网络管理器已初始化");
     
     m_logger->appEvent("SystemChecker初始化完成");
 }
@@ -259,62 +247,21 @@ SystemChecker::CheckResult SystemChecker::checkNetworkConnection()
     CheckResult result;
     result.type = CHECK_NETWORK_CONNECTION;
     result.title = "网络连接检测";
-    result.canRetry = true;
+    result.canRetry = false;
 
     const QString serverUrl = m_configManager->getCheckUrl();
     if (serverUrl.isEmpty()) {
-        result.level = LEVEL_FATAL;
-        result.message = "未配置考试服务器地址";
-        result.solution = "请在 config.json 中配置 url 或 checkUrl";
+        result.level = LEVEL_OK;
+        result.message = "已跳过考试服务器连通性检测";
+        result.details << "未配置考试服务器地址，启动阶段不再执行网络连通性预检";
+        m_logger->appEvent("启动阶段跳过考试服务器连通性检测：未配置检测地址");
         return result;
     }
 
-    m_logger->appEvent(QString("检测考试服务器连通性: %1").arg(serverUrl));
-
-    QNetworkRequest request(serverUrl);
-    request.setRawHeader("User-Agent", "DesktopTerminal-CEF/1.0");
-    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-
-    const int timeoutMs = m_configManager->getNetworkCheckTimeout();
-    QNetworkReply* reply = m_networkManager->get(request);
-
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timer.start(timeoutMs);
-    loop.exec();
-
-    bool timedOut = !reply->isFinished();
-    if (timedOut) {
-        reply->abort();
-    }
-
-    if (timedOut) {
-        result.level = LEVEL_FATAL;
-        result.message = QString("连接考试服务器超时: %1").arg(serverUrl);
-        result.solution = "请检查网络连接、防火墙或代理设置";
-        result.details << QString("超时: %1ms").arg(timeoutMs);
-    } else if (reply->error() != QNetworkReply::NoError) {
-        result.level = LEVEL_FATAL;
-        result.message = QString("无法连接考试服务器: %1").arg(serverUrl);
-        result.solution = "请检查网络连接并重试";
-        result.details << reply->errorString();
-    } else {
-        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (httpStatus >= 200 && httpStatus < 400) {
-            result.level = LEVEL_OK;
-            result.message = QString("考试服务器连接正常 (HTTP %1)").arg(httpStatus);
-        } else {
-            result.level = LEVEL_ERROR;
-            result.message = QString("考试服务器响应异常 (HTTP %1)").arg(httpStatus);
-            result.solution = "请联系考试技术支持确认服务器状态";
-        }
-    }
-
-    reply->deleteLater();
+    result.level = LEVEL_OK;
+    result.message = "已跳过考试服务器连通性检测";
+    result.details << QString("考试地址: %1").arg(serverUrl);
+    m_logger->appEvent(QString("启动阶段跳过考试服务器连通性检测: %1").arg(serverUrl));
     return result;
 }
 

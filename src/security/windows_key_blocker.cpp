@@ -1,5 +1,9 @@
 #include "windows_key_blocker.h"
 #include "../logging/logger.h"
+#include "../core/application.h"
+
+#include <QApplication>
+#include <QMetaObject>
 
 #ifdef Q_OS_WIN
 
@@ -17,6 +21,7 @@ WindowsKeyBlocker::WindowsKeyBlocker(QObject *parent)
     , m_refreshRetryPending(false)
     , m_leftCtrlPressed(false)
     , m_rightCtrlPressed(false)
+    , m_f10Pressed(false)
     , m_lastErrorCode(0)
     , m_retryTimer(new QTimer(this))
     , m_refreshTimer(new QTimer(this))
@@ -47,6 +52,7 @@ bool WindowsKeyBlocker::install()
     m_refreshRetryPending = false;
     m_leftCtrlPressed = false;
     m_rightCtrlPressed = false;
+    m_f10Pressed = false;
     m_lastErrorCode = 0;
     startAutoRecovery();
 
@@ -84,6 +90,7 @@ void WindowsKeyBlocker::uninstall()
     m_installRetryCount = 0;
     m_leftCtrlPressed = false;
     m_rightCtrlPressed = false;
+    m_f10Pressed = false;
     s_instance = nullptr;
 }
 
@@ -310,6 +317,28 @@ LRESULT CALLBACK WindowsKeyBlocker::LowLevelKeyboardProc(
         const bool ctrlPressed = s_instance
             && (s_instance->m_leftCtrlPressed || s_instance->m_rightCtrlPressed);
         const bool ctrlEsc = (pKeyboard->vkCode == VK_ESCAPE) && ctrlPressed;
+
+        if (s_instance && pKeyboard->vkCode == VK_F10) {
+            if (isKeyUp) {
+                s_instance->m_f10Pressed = false;
+            } else if (isKeyDown && !s_instance->m_f10Pressed) {
+                s_instance->m_f10Pressed = true;
+                if (s_instance->m_logger) {
+                    s_instance->m_logger->hotkeyEvent("系统级F10安全退出热键被触发");
+                }
+                QObject* applicationObject = QApplication::instance();
+                if (!applicationObject) {
+                    return CallNextHookEx(NULL, nCode, wParam, lParam);
+                }
+
+                QMetaObject::invokeMethod(applicationObject, []() {
+                    Application* application = qobject_cast<Application*>(QApplication::instance());
+                    if (application) {
+                        application->requestSafeExit(nullptr, "Windows低级键盘钩子F10");
+                    }
+                }, Qt::QueuedConnection);
+            }
+        }
 
         // 拦截左右Win键（VK_LWIN=0x5B, VK_RWIN=0x5C）以及 Ctrl+Esc
         if (pKeyboard->vkCode == VK_LWIN || pKeyboard->vkCode == VK_RWIN || ctrlEsc) {

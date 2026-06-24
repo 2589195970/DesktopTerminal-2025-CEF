@@ -383,25 +383,8 @@ void SecureBrowser::handleExitHotkey()
 {
     m_needFocusCheck = false; // 暂时禁用焦点检查
 
-    // 检查是否需要密码验证
-    if (!m_configManager->isSensitiveOperationPasswordRequired()) {
-        m_logger->hotkeyEvent("无密码模式，直接退出");
-        m_logger->shutdown();
-        QApplication::quit();
-        return;
-    }
-
-    QString password;
-    bool ok = m_logger->getPassword(this, "安全退出", "请输入退出密码：", password);
-    QString exitPassword = m_configManager->getExitPassword();
-
-    if (ok && password == exitPassword) {
-        m_logger->hotkeyEvent("密码正确，退出");
-        m_logger->shutdown();
-        QApplication::quit();
-    } else {
-        m_logger->hotkeyEvent(ok ? "密码错误" : "取消输入");
-        m_logger->showMessage(this, "错误", ok ? "密码错误" : "已取消");
+    Application* application = qobject_cast<Application*>(QApplication::instance());
+    if (!application || !application->requestSafeExit(this, "SecureBrowser F10")) {
         m_needFocusCheck = true; // 恢复焦点检查
     }
 }

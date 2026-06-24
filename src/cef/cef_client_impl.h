@@ -101,6 +101,7 @@ public:
 
 private:
     // 键盘事件过滤
+    bool handleExitHotkeyEvent(const CefKeyEvent& event);
     bool isKeyEventAllowed(const CefKeyEvent& event);
     bool isSystemShortcut(const CefKeyEvent& event);
     bool isAllowedShortcut(const CefKeyEvent& event);

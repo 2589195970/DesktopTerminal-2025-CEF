@@ -13,7 +13,7 @@
 #include <QVersionNumber>
 #include <QTimer>
 #include <QElapsedTimer>
-#include <QEventLoop>
+#include <QDateTime>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -43,6 +43,8 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     , m_lockAcquired(false)
     , m_initialized(false)
     , m_shutdownRequested(false)
+    , m_exitPromptActive(false)
+    , m_lastSafeExitRequestAtMs(0)
     , m_sharedCEFApp(nullptr)
     , m_originalArgc(originalArgc)
     , m_originalArgv(originalArgv)
@@ -189,6 +191,60 @@ bool Application::startMainWindow()
 SecureBrowser* Application::getMainWindow() const
 {
     return m_mainWindow;
+}
+
+bool Application::requestSafeExit(QWidget* parent, const QString& source)
+{
+    Logger* logger = m_logger ? m_logger : &Logger::instance();
+    ConfigManager* configManager = m_configManager ? m_configManager : &ConfigManager::instance();
+    const QString triggerSource = source.trimmed().isEmpty() ? "未知来源" : source.trimmed();
+
+    if (m_shutdownRequested) {
+        logger->hotkeyEvent(QString("忽略安全退出请求，应用程序已在关闭中，来源: %1").arg(triggerSource));
+        return false;
+    }
+
+    if (m_exitPromptActive) {
+        logger->hotkeyEvent(QString("忽略重复安全退出请求，密码框已打开，来源: %1").arg(triggerSource));
+        return false;
+    }
+
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_lastSafeExitRequestAtMs > 0 && nowMs - m_lastSafeExitRequestAtMs < 500) {
+        logger->hotkeyEvent(QString("忽略过快重复安全退出请求，来源: %1").arg(triggerSource));
+        return false;
+    }
+    m_lastSafeExitRequestAtMs = nowMs;
+
+    QWidget* dialogParent = parent ? parent : static_cast<QWidget*>(m_mainWindow);
+
+    if (!configManager->isSensitiveOperationPasswordRequired()) {
+        logger->hotkeyEvent(QString("无密码模式，直接退出，来源: %1").arg(triggerSource));
+        logger->shutdown();
+        QApplication::quit();
+        return true;
+    }
+
+    m_exitPromptActive = true;
+
+    QString password;
+    bool ok = logger->getPassword(dialogParent, "安全退出", "请输入退出密码：", password);
+    QString exitPassword = configManager->getExitPassword();
+
+    if (ok && password == exitPassword) {
+        logger->hotkeyEvent(QString("密码正确，退出，来源: %1").arg(triggerSource));
+        m_exitPromptActive = false;
+        logger->shutdown();
+        QApplication::quit();
+        return true;
+    }
+
+    logger->hotkeyEvent(ok
+        ? QString("密码错误，来源: %1").arg(triggerSource)
+        : QString("取消输入，来源: %1").arg(triggerSource));
+    logger->showMessage(dialogParent, "错误", ok ? "密码错误" : "已取消");
+    m_exitPromptActive = false;
+    return false;
 }
 
 void Application::shutdown()
@@ -495,35 +551,16 @@ bool Application::initializeCEF()
     }
 }
 
-#include <QEventLoop>
 bool Application::checkNetworkConnection()
 {
-    m_networkChecker = new NetworkChecker(this);
-
     const QString checkUrl = m_configManager->getCheckUrl();
-    const int timeout = m_configManager->getNetworkCheckTimeout();
 
     if (checkUrl.isEmpty()) {
-        m_logger->errorEvent("网络检查失败：未配置考试服务器地址");
-        return false;
+        m_logger->appEvent("启动阶段跳过网络连通性检查：未配置考试服务器地址");
+        return true;
     }
 
-    m_logger->appEvent(QString("检测考试服务器连通性: %1").arg(checkUrl));
-
-    QEventLoop loop;
-    connect(m_networkChecker, &NetworkChecker::checkCompleted, &loop, &QEventLoop::quit);
-
-    m_networkChecker->startCheck(checkUrl, timeout);
-    loop.exec();
-
-    NetworkChecker::NetworkStatus status = m_networkChecker->getNetworkStatus();
-    
-    if (status != NetworkChecker::Connected) {
-        m_logger->errorEvent(QString("网络检查失败: %1").arg(m_networkChecker->getStatusDescription()));
-        return false;
-    }
-
-    m_logger->appEvent(QString("考试服务器连接正常: %1").arg(checkUrl));
+    m_logger->appEvent(QString("启动阶段跳过网络连通性检查，考试地址由浏览器加载: %1").arg(checkUrl));
     return true;
 }
 

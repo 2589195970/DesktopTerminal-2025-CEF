@@ -6,8 +6,6 @@
 #include <QStringList>
 #include <QTimer>
 #include <QNetworkInterface>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
 #include <QDateTime>
 
 class Logger;
@@ -18,7 +16,7 @@ class ConfigManager;
  * 
  * 负责启动时的各种系统检测，包括：
  * - 系统兼容性检测（Qt版本、OpenGL驱动、操作系统）
- * - 网络连接检测（连接状态、质量、目标可达性）
+ * - 网络连接检测（启动阶段仅记录并跳过，不阻断程序启动）
  * - CEF依赖完整性检查（文件存在、版本兼容、完整性）
  * - 配置和权限验证（文件权限、管理员权限、磁盘空间）
  */
@@ -178,7 +176,6 @@ private:
     ConfigManager* m_configManager;
     QList<CheckResult> m_results;
     QTimer* m_networkTimeout;
-    QNetworkAccessManager* m_networkManager;
     
     int m_currentCheck;
     int m_totalChecks;

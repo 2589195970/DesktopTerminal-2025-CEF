@@ -6,6 +6,8 @@
 #include "../core/cef_manager.h"
 
 #include <algorithm>
+#include <QApplication>
+#include <QMetaObject>
 #include <QUrl>
 #include "include/base/cef_bind.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -223,6 +225,13 @@ CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRef
 
 bool CEFClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event, CefEventHandle os_event, bool* is_keyboard_shortcut)
 {
+    if (handleExitHotkeyEvent(event)) {
+        if (is_keyboard_shortcut) {
+            *is_keyboard_shortcut = true;
+        }
+        return true;
+    }
+
     if (!m_keyboardFilterEnabled) {
         return false;
     }
@@ -394,6 +403,38 @@ void CEFClient::setLowMemoryMode(bool enable)
 }
 
 // ==================== 私有辅助方法 ====================
+
+bool CEFClient::handleExitHotkeyEvent(const CefKeyEvent& event)
+{
+    const uint32 modifiersWithoutLocks = event.modifiers & ~(
+        EVENTFLAG_NUM_LOCK_ON |
+        EVENTFLAG_CAPS_LOCK_ON |
+        EVENTFLAG_IS_KEY_PAD |
+        EVENTFLAG_IS_LEFT |
+        EVENTFLAG_IS_RIGHT
+    );
+
+    if (event.type != KEYEVENT_RAWKEYDOWN ||
+        event.windows_key_code != 121 ||
+        modifiersWithoutLocks != 0) {
+        return false;
+    }
+
+    m_logger->hotkeyEvent("CEF F10安全退出热键被触发");
+    QObject* applicationObject = QApplication::instance();
+    if (!applicationObject) {
+        return true;
+    }
+
+    QMetaObject::invokeMethod(applicationObject, []() {
+        Application* application = qobject_cast<Application*>(QApplication::instance());
+        if (application) {
+            application->requestSafeExit(nullptr, "CEF F10");
+        }
+    }, Qt::QueuedConnection);
+
+    return true;
+}
 
 bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
 {
