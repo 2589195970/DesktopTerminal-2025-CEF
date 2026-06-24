@@ -386,38 +386,18 @@ SystemChecker::CheckResult SystemChecker::checkRuntimeDependencies()
     CheckResult result;
     result.type = CHECK_RUNTIME_DEPENDENCIES;
     result.title = "运行库依赖检查";
-    result.autoFixable = true;
-    
-    QStringList issues;
-    CheckLevel maxLevel = LEVEL_OK;
+    result.autoFixable = false;
+    result.canRetry = false;
 
 #ifdef Q_OS_WIN
-    QStringList requiredDlls = { "vcruntime140", "vcruntime140_1", "msvcp140" };
-    for (const QString &dll : requiredDlls) {
-        QLibrary lib(dll);
-        if (!lib.load()) {
-            issues << QString("%1.dll 未正确安装").arg(dll);
-            maxLevel = qMax(maxLevel, LEVEL_ERROR);
-            result.solution = "请运行自动修复以安装VC++运行库，或重新执行安装程序。";
-        } else {
-            lib.unload();
-        }
-    }
+    // 安装器已负责VC++运行库安装,运行时不再检测,仅记录日志
+    m_logger->appEvent("运行库依赖检查: 由安装器负责,跳过运行时检测");
+    result.level = LEVEL_OK;
+    result.message = "运行库依赖由安装器管理";
 #else
     result.level = LEVEL_OK;
     result.message = "当前平台无需运行库检查";
-    result.canRetry = false;
-    return result;
 #endif
-
-    result.level = maxLevel;
-    result.details = issues;
-    
-    if (maxLevel == LEVEL_OK) {
-        result.message = "运行库依赖完整";
-    } else {
-        result.message = QString("发现%1个运行库问题").arg(issues.size());
-    }
 
     return result;
 }

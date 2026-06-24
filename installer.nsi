@@ -147,14 +147,14 @@ Function ConfigPage
     ${NSD_CreateText} 0 96u 100% 12u ""
     Pop $ApiBaseUrlText
 
-    ${NSD_CreateLabel} 0 116u 100% 12u "CEF进程模式:"
+    ${NSD_CreateLabel} 0 116u 100% 12u "运行模式:"
     Pop $0
-    ${NSD_CreateRadioButton} 0 128u 32% 12u "自动选择"
+    ${NSD_CreateRadioButton} 0 128u 32% 12u "智能模式"
     Pop $CefProcessModeAutoRadio
     ${NSD_Check} $CefProcessModeAutoRadio
-    ${NSD_CreateRadioButton} 34% 128u 32% 12u "强制单进程"
+    ${NSD_CreateRadioButton} 34% 128u 32% 12u "普通版本"
     Pop $CefProcessModeSingleRadio
-    ${NSD_CreateRadioButton} 68% 128u 32% 12u "强制多进程"
+    ${NSD_CreateRadioButton} 68% 128u 32% 12u "高性能版本"
     Pop $CefProcessModeMultiRadio
 
     ${NSD_CreateCheckbox} 0 144u 100% 12u "敏感操作需要密码验证(F10退出等)"
@@ -630,10 +630,26 @@ Section "主程序" SecMain
                     ${Else}
                         ${Log} "✓ VC++运行时安装验证成功，版本：$R0"
                     ${EndIf}
+
+                    ; 创建标记文件,告知应用程序安装器已完成VC++安装
+                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
+                    FileWrite $0 "VC++ Redistributable installed by installer$\r$\nVersion: $R0$\r$\nTimestamp: "
+                    FileClose $0
+                    ${Log} "✓ 已创建VC++运行库安装标记文件"
                 ${ElseIf} $R1 == 1638
                     ${Log} "ℹ VC++ Redistributable已是最新版本"
+                    ; 运行库已安装,同样创建标记文件
+                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
+                    FileWrite $0 "VC++ Redistributable already installed (latest version)$\r$\nReturn code: 1638$\r$\nTimestamp: "
+                    FileClose $0
+                    ${Log} "✓ 已创建VC++运行库安装标记文件"
                 ${ElseIf} $R1 == 3010
                     ${Log} "✓ VC++ Redistributable安装成功，但需要重启系统"
+                    ; 安装成功,创建标记文件
+                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
+                    FileWrite $0 "VC++ Redistributable installed (reboot required)$\r$\nReturn code: 3010$\r$\nTimestamp: "
+                    FileClose $0
+                    ${Log} "✓ 已创建VC++运行库安装标记文件"
                     MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。"
                 ${Else}
                     ${Log} "❌ VC++ Redistributable安装失败，返回码：$R1"
@@ -659,6 +675,11 @@ Section "主程序" SecMain
             ${EndIf}
         ${Else}
             ${Log} "✓ 检测到Visual C++ Redistributable，版本：$R0"
+            ; 已安装,创建标记文件
+            FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
+            FileWrite $0 "VC++ Redistributable already installed$\r$\nVersion: $R0$\r$\nTimestamp: "
+            FileClose $0
+            ${Log} "✓ 已创建VC++运行库安装标记文件"
         ${EndIf}
         
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致"
@@ -670,7 +691,7 @@ SectionEnd
 ; 卸载部分
 ; ─────────────────────────────────────────────
 Section "Uninstall"
-    ; 删除文件与目录
+    ; 删除文件与目录(包括VC++运行库标记文件)
     RMDir /r "$INSTDIR"
 
     ; 删除快捷方式
