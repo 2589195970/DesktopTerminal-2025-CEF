@@ -340,47 +340,59 @@ endfunction()
 function(deploy_cef_resources TARGET_NAME RESOURCE_PATH RESOURCES_DIR)
     message(STATUS "部署CEF资源文件")
 
-    # CEF资源文件
-    set(CEF_RESOURCE_FILES
-        "cef.pak"
-        "cef_100_percent.pak"
-        "cef_200_percent.pak"
-        "cef_extensions.pak"
-        "devtools_resources.pak"
-    )
-
     # 获取CEF根目录和Release目录（用于fallback）
     get_filename_component(CEF_ROOT_DIR "${RESOURCE_PATH}" DIRECTORY)
     set(CEF_RELEASE_DIR "${CEF_ROOT_DIR}/Release")
 
-    # 复制资源文件，支持多路径fallback
-    foreach(resource ${CEF_RESOURCE_FILES})
+    # CEF资源文件映射：旧版本 -> 新版本（CEF 109+）
+    # 定义文件映射关系：目标名 -> 可能的源文件名列表
+    set(RESOURCE_MAPPINGS
+        "cef.pak:resources.pak,cef.pak"
+        "cef_100_percent.pak:chrome_100_percent.pak,cef_100_percent.pak"
+        "cef_200_percent.pak:chrome_200_percent.pak,cef_200_percent.pak"
+        "cef_extensions.pak:resources.pak,cef_extensions.pak"
+        "devtools_resources.pak:resources.pak,devtools_resources.pak"
+    )
+
+    # 复制资源文件，支持多路径和文件名映射
+    foreach(mapping ${RESOURCE_MAPPINGS})
+        # 解析映射：目标名:源名1,源名2,...
+        string(REPLACE ":" ";" mapping_parts ${mapping})
+        list(GET mapping_parts 0 target_name)
+        list(GET mapping_parts 1 source_names_str)
+        string(REPLACE "," ";" source_names ${source_names_str})
+
         set(resource_copied FALSE)
+        set(actual_source_file "")
 
-        # 首先尝试从Resources目录复制
-        if(EXISTS "${RESOURCE_PATH}/${resource}")
+        # 尝试所有可能的源文件名
+        foreach(source_name ${source_names})
+            # 首先尝试从Resources目录复制
+            if(EXISTS "${RESOURCE_PATH}/${source_name}")
+                set(actual_source_file "${RESOURCE_PATH}/${source_name}")
+                set(resource_copied TRUE)
+                message(STATUS "资源文件映射: ${target_name} <- ${source_name} (Resources)")
+                break()
+            elseif(EXISTS "${CEF_RELEASE_DIR}/${source_name}")
+                # Fallback: 从Release目录复制
+                set(actual_source_file "${CEF_RELEASE_DIR}/${source_name}")
+                set(resource_copied TRUE)
+                message(STATUS "资源文件映射: ${target_name} <- ${source_name} (Release)")
+                break()
+            endif()
+        endforeach()
+
+        if(resource_copied)
+            # 复制文件到目标位置（使用统一的目标文件名）
             add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${RESOURCE_PATH}/${resource}"
-                "${RESOURCES_DIR}/${resource}"
-                COMMENT "复制CEF资源: ${resource}")
-            set(resource_copied TRUE)
-            message(STATUS "资源文件找到(Resources): ${resource}")
-        elseif(EXISTS "${CEF_RELEASE_DIR}/${resource}")
-            # Fallback: 从Release目录复制（CEF 109+的目录结构）
-            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CEF_RELEASE_DIR}/${resource}"
-                "${RESOURCES_DIR}/${resource}"
-                COMMENT "复制CEF资源(Release): ${resource}")
-            set(resource_copied TRUE)
-            message(STATUS "资源文件找到(Release fallback): ${resource}")
-        endif()
-
-        if(NOT resource_copied)
-            message(WARNING "CEF资源文件未找到: ${resource}")
-            message(WARNING "  检查路径1: ${RESOURCE_PATH}/${resource}")
-            message(WARNING "  检查路径2: ${CEF_RELEASE_DIR}/${resource}")
+                "${actual_source_file}"
+                "${RESOURCES_DIR}/${target_name}"
+                COMMENT "复制CEF资源: ${target_name}")
+        else()
+            message(WARNING "CEF资源文件未找到: ${target_name}")
+            message(WARNING "  尝试的源文件: ${source_names}")
+            message(WARNING "  检查路径: ${RESOURCE_PATH}, ${CEF_RELEASE_DIR}")
         endif()
     endforeach()
     
