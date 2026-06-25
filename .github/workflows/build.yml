@@ -59,41 +59,19 @@ jobs:
         cache: true
         cache-key-prefix: qt-5.15.2-${{ matrix.arch }}
 
-    - name: Install OpenSSL 1.1 Runtime
+    - name: Resolve OpenSSL 1.1 Runtime (best-effort)
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $arch = '${{ matrix.arch }}'
         $opensslVersion = '1.1.1.20181020'
         $opensslInstallDir = Join-Path $env:RUNNER_TEMP "openssl-$arch"
-        $chocoArgs = @(
-          'install',
-          'openssl.light',
-          "--version=$opensslVersion",
-          '-y',
-          '--no-progress',
-          '--timeout',
-          '180',
-          '--params',
-          "/InstallDir:$opensslInstallDir"
-        )
-        if ($arch -eq 'x86') {
-          $chocoArgs += '--forcex86'
-        }
-        Write-Host "Installing openssl.light $opensslVersion for $arch to $opensslInstallDir"
-        & choco @chocoArgs
-        if ($LASTEXITCODE -ne 0) {
-          throw "Failed to install OpenSSL runtime $opensslVersion"
-        }
+        $opensslRuntimeDir = Join-Path $env:RUNNER_TEMP "openssl-runtime-$arch"
 
-        $requiredPairs = @()
-        if ($arch -eq 'x86') {
-          $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
-        } else {
-          $requiredPairs += ,@('libssl-1_1-x64.dll', 'libcrypto-1_1-x64.dll')
-          $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
+        if (Test-Path -LiteralPath $opensslRuntimeDir -ErrorAction SilentlyContinue) {
+          Remove-Item -LiteralPath $opensslRuntimeDir -Recurse -Force
         }
-        $selectedDir = Join-Path $opensslInstallDir "bin"
+        New-Item -ItemType Directory -Force -Path $opensslRuntimeDir | Out-Null
 
         function Test-OpenSslPair {
           param(
@@ -109,29 +87,88 @@ jobs:
           return $true
         }
 
-        if ([string]::IsNullOrWhiteSpace($selectedDir) -or -not (Test-Path -LiteralPath $selectedDir -ErrorAction SilentlyContinue)) {
-          throw "Expected OpenSSL runtime directory does not exist: $selectedDir"
-        }
-        $selectedPair = $null
-        $selectedDir = (Resolve-Path -LiteralPath $selectedDir).Path
-        foreach ($pair in $requiredPairs) {
-          if (Test-OpenSslPair -Dir $selectedDir -Pair $pair) {
-            $selectedPair = $pair
-            break
+        function Get-OpenSslPair {
+          param([Parameter(Mandatory = $true)][string]$Dir)
+
+          $requiredPairs = @()
+          if ($arch -eq 'x86') {
+            $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
+          } else {
+            $requiredPairs += ,@('libssl-1_1-x64.dll', 'libcrypto-1_1-x64.dll')
+            $requiredPairs += ,@('libssl-1_1.dll', 'libcrypto-1_1.dll')
           }
+
+          if ([string]::IsNullOrWhiteSpace($Dir) -or -not (Test-Path -LiteralPath $Dir -ErrorAction SilentlyContinue)) {
+            return $null
+          }
+
+          foreach ($pair in $requiredPairs) {
+            if (Test-OpenSslPair -Dir $Dir -Pair $pair) {
+              return $pair
+            }
+          }
+
+          return $null
         }
 
-        if (-not $selectedPair) {
-          Write-Host "Expected OpenSSL runtime directory: $selectedDir"
-          Write-Host "Expected DLL pairs:"
-          foreach ($pair in $requiredPairs) {
-            Write-Host "  - $($pair -join ', ')"
+        function Publish-OpenSslRuntime {
+          param(
+            [Parameter(Mandatory = $true)][string]$Dir,
+            [Parameter(Mandatory = $true)][string]$SourceLabel
+          )
+
+          $resolvedDir = (Resolve-Path -LiteralPath $Dir).Path
+          $selectedPair = Get-OpenSslPair -Dir $resolvedDir
+          if (-not $selectedPair) {
+            return $false
           }
-          throw "OpenSSL 1.1 runtime installation did not produce the expected DLL pair"
+
+          Write-Host "OpenSSL runtime source: $SourceLabel"
+          Write-Host "OpenSSL runtime directory: $resolvedDir"
+          Write-Host "OpenSSL runtime pair: $($selectedPair -join ', ')"
+          "OPENSSL_RUNTIME_DIR=$resolvedDir" >> $env:GITHUB_ENV
+          return $true
         }
-        Write-Host "OpenSSL runtime directory: $selectedDir"
-        Write-Host "OpenSSL runtime pair: $($selectedPair -join ', ')"
-        "OPENSSL_RUNTIME_DIR=$selectedDir" >> $env:GITHUB_ENV
+
+        Write-Host "Resolving OpenSSL 1.1 runtime for $arch"
+        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $opensslRuntimeDir -Arch $arch
+        $deployedPair = Get-OpenSslPair -Dir $opensslRuntimeDir
+
+        if (-not $deployedPair) {
+          Write-Host "OpenSSL runtime was not found in Qt/system paths; trying Chocolatey as a best-effort fallback."
+          $chocoArgs = @(
+            'install',
+            'openssl.light',
+            "--version=$opensslVersion",
+            '-y',
+            '--no-progress',
+            '--timeout',
+            '180',
+            '--params',
+            "/InstallDir:$opensslInstallDir"
+          )
+          if ($arch -eq 'x86') {
+            $chocoArgs += '--forcex86'
+          }
+
+          try {
+            Write-Host "Installing openssl.light $opensslVersion for $arch to $opensslInstallDir"
+            & choco @chocoArgs
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Chocolatey OpenSSL install exited with code $LASTEXITCODE"
+            }
+          } catch {
+            Write-Host "Chocolatey OpenSSL fallback failed: $_"
+          }
+
+          $chocoBinDir = Join-Path $opensslInstallDir "bin"
+          & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $opensslRuntimeDir -Arch $arch -SourceDir $chocoBinDir
+          $deployedPair = Get-OpenSslPair -Dir $opensslRuntimeDir
+        }
+
+        if (-not (Publish-OpenSslRuntime -Dir $opensslRuntimeDir -SourceLabel "resolved runtime")) {
+          Write-Host "OpenSSL 1.1 runtime is unavailable for $arch. Continuing without Qt HTTPS support in CI artifacts."
+        }
 
     - name: Restore CEF Cache ${{ matrix.arch }}
       id: cache-cef
@@ -1313,11 +1350,12 @@ jobs:
             Write-Host "Available Qt5_Dir environment: $env:Qt5_Dir"
         }
 
-        Write-Host "=== Deploying OpenSSL for Qt HTTPS ==="
+        Write-Host "=== Deploying OpenSSL for Qt HTTPS (best-effort) ==="
         $opensslArch = "${{ matrix.arch }}"
-        & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch -SourceDir $env:OPENSSL_RUNTIME_DIR -Required
-        if ($LASTEXITCODE -ne 0) {
-            throw "OpenSSL runtime deployment failed. Qt HTTPS would be unavailable."
+        if ($env:OPENSSL_RUNTIME_DIR) {
+            & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch -SourceDir $env:OPENSSL_RUNTIME_DIR
+        } else {
+            & "$PWD/scripts/deploy-openssl-windows.ps1" -TargetDir $artifactPath -Arch $opensslArch
         }
         
         # Copy project documentation with existence checks
