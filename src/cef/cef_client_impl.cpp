@@ -566,11 +566,13 @@ void CEFClient::showDevTools()
 void CEFClient::showDevToolsOnUIThread()
 {
     if (!m_browser) {
+        m_logger->errorEvent("DevTools: 浏览器实例为空");
         return;
     }
 
     CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
     if (!host) {
+        m_logger->errorEvent("DevTools: 浏览器主机为空");
         return;
     }
 
@@ -578,24 +580,76 @@ void CEFClient::showDevToolsOnUIThread()
     CefBrowserSettings settings;
 
 #ifdef Q_OS_WIN
-    windowInfo.SetAsPopup(host->GetWindowHandle(), "DevTools");
+    HWND parentHwnd = host->GetWindowHandle();
+    if (!parentHwnd) {
+        m_logger->errorEvent("DevTools: 无法获取父窗口句柄");
+        return;
+    }
+
+    windowInfo.SetAsPopup(parentHwnd, "DesktopTerminal DevTools");
+    windowInfo.x = 100;
+    windowInfo.y = 100;
+    windowInfo.width = 1200;
+    windowInfo.height = 800;
+
+    m_logger->appEvent(QString("DevTools: Windows平台，父窗口句柄=0x%1")
+        .arg(reinterpret_cast<qulonglong>(parentHwnd), 0, 16));
 #elif defined(Q_OS_MAC)
-    CefString(&windowInfo.window_name).FromASCII("DevTools");
+    CefString(&windowInfo.window_name).FromASCII("DesktopTerminal DevTools");
     windowInfo.x = 100;
     windowInfo.y = 100;
-    windowInfo.width = 800;
-    windowInfo.height = 600;
+    windowInfo.width = 1200;
+    windowInfo.height = 800;
     windowInfo.hidden = false;
+
+    m_logger->appEvent("DevTools: macOS平台，创建独立窗口");
 #else
-    CefString(&windowInfo.window_name).FromASCII("DevTools");
+    CefString(&windowInfo.window_name).FromASCII("DesktopTerminal DevTools");
     windowInfo.x = 100;
     windowInfo.y = 100;
-    windowInfo.width = 800;
-    windowInfo.height = 600;
+    windowInfo.width = 1200;
+    windowInfo.height = 800;
+
+    m_logger->appEvent("DevTools: Linux平台，创建独立窗口");
 #endif
 
-    host->ShowDevTools(windowInfo, this, settings, CefPoint());
-    m_logger->appEvent("CEF DevTools窗口已创建");
+    settings.javascript = STATE_ENABLED;
+    settings.javascript_close_windows = STATE_ENABLED;
+    settings.javascript_access_clipboard = STATE_ENABLED;
+    settings.web_security = STATE_DISABLED;
+    settings.file_access_from_file_urls = STATE_ENABLED;
+    settings.universal_access_from_file_urls = STATE_ENABLED;
+    settings.image_loading = STATE_ENABLED;
+    settings.background_color = 0xFFFFFFFF;
+
+    m_logger->appEvent("DevTools: 开始调用ShowDevTools");
+    m_logger->appEvent(QString("  浏览器ID: %1").arg(m_browser->GetIdentifier()));
+    m_logger->appEvent(QString("  是否单进程模式: %1").arg(
+        Application::is32BitSystem() || Application::isWindows7SP1() ? "是" : "否"));
+
+    try {
+        host->ShowDevTools(windowInfo, this, settings, CefPoint());
+        m_logger->appEvent("DevTools: ShowDevTools调用成功");
+        m_logger->appEvent("==================================================");
+        m_logger->appEvent("DevTools故障排查指南:");
+        m_logger->appEvent("1. 如果DevTools窗口是白屏，这通常是因为：");
+        m_logger->appEvent("   a) CEF消息循环未正常运行（请检查日志中的'CEF消息循环正常运行'）");
+        m_logger->appEvent("   b) 单进程模式下DevTools渲染需要额外时间（等待5-10秒）");
+        m_logger->appEvent("   c) GPU加速问题（32位/Win7系统已禁用GPU）");
+        m_logger->appEvent("");
+        m_logger->appEvent("2. 可以通过以下方式访问DevTools：");
+        m_logger->appEvent("   a) F12弹出的窗口（如果不是白屏）");
+        m_logger->appEvent("   b) 浏览器中访问: chrome://inspect");
+        m_logger->appEvent("   c) 访问远程调试接口: http://localhost:9222");
+        m_logger->appEvent("");
+        m_logger->appEvent("3. 如果持续白屏，请尝试：");
+        m_logger->appEvent("   a) 等待10秒看是否能加载出来");
+        m_logger->appEvent("   b) 关闭DevTools窗口再重新按F12");
+        m_logger->appEvent("   c) 使用浏览器访问 http://localhost:9222 查看调试目标");
+        m_logger->appEvent("==================================================");
+    } catch (...) {
+        m_logger->errorEvent("DevTools: ShowDevTools调用发生异常");
+    }
 }
 
 void CEFClient::closeDevTools()

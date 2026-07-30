@@ -220,10 +220,9 @@ bool SecureBrowser::event(QEvent *event)
 
         // 关键修改：更细粒度拦截（与原项目逻辑相同）
         const bool onlyShift = (keyEvent->modifiers() == Qt::ShiftModifier);
-        const bool ctrlR = (keyEvent->key() == Qt::Key_R && keyEvent->modifiers() == Qt::ControlModifier);
 
-        if (onlyShift || ctrlR) {
-            // 放行单纯 Shift* 和 Ctrl+R
+        if (onlyShift) {
+            // 放行单纯 Shift
             return QWidget::event(event);
         }
 

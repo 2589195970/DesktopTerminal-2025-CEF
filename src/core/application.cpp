@@ -220,7 +220,7 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
 
     if (!configManager->isSensitiveOperationPasswordRequired()) {
         logger->hotkeyEvent(QString("无密码模式，直接退出，来源: %1").arg(triggerSource));
-        logger->shutdown();
+        m_shutdownRequested = true;
         QApplication::quit();
         return true;
     }
@@ -234,7 +234,7 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
     if (ok && password == exitPassword) {
         logger->hotkeyEvent(QString("密码正确，退出，来源: %1").arg(triggerSource));
         m_exitPromptActive = false;
-        logger->shutdown();
+        m_shutdownRequested = true;
         QApplication::quit();
         return true;
     }
@@ -281,18 +281,18 @@ void Application::shutdown()
     }
 #endif
 
-    // 关闭主窗口
-    if (m_mainWindow) {
-        m_mainWindow->close();
-        delete m_mainWindow;
-        m_mainWindow = nullptr;
-    }
-
-    // 关闭CEF
+    // 先关闭CEF（必须在销毁主窗口之前，避免CEF访问已销毁的HWND触发崩溃）
     if (m_cefManager) {
         m_cefManager->shutdown();
         delete m_cefManager;
         m_cefManager = nullptr;
+    }
+
+    // CEF关闭后再销毁主窗口
+    if (m_mainWindow) {
+        m_mainWindow->hide();
+        delete m_mainWindow;
+        m_mainWindow = nullptr;
     }
 
     // 关闭日志系统

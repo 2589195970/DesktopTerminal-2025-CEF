@@ -17,6 +17,8 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 CEFManager::CEFManager(Application* app, CefRefPtr<CEFApp> sharedApp, QObject* parent)
@@ -165,14 +167,42 @@ void CEFManager::shutdown()
     m_logger->appEvent("开始关闭CEF...");
 
     if (m_initialized) {
-        // 关闭CEF
+        // 第一步：先通过CEF API正式关闭浏览器，再调CefShutdown()
+        // 跳过此步直接调CefShutdown()会导致GPU子进程被强杀，
+        // GPU驱动状态损坏后可能触发TDR失败→BSOD→系统重启
+        if (m_cefClient) {
+            CefRefPtr<CefBrowser> browser = m_cefClient->getBrowser();
+            if (browser) {
+                m_logger->appEvent("正在通过CEF API关闭浏览器...");
+                browser->GetHost()->CloseBrowser(true);
+                // 驱动CEF消息循环处理关闭流程，最多等待3秒
+                const int maxIterations = 300;
+                for (int i = 0; i < maxIterations; ++i) {
+                    CefDoMessageLoopWork();
+                    if (!m_cefClient->getBrowser()) {
+                        m_logger->appEvent("CEF浏览器已正常关闭");
+                        break;
+                    }
+#ifdef Q_OS_WIN
+                    Sleep(10);
+#else
+                    usleep(10000);
+#endif
+                }
+                if (m_cefClient->getBrowser()) {
+                    m_logger->appEvent("CEF浏览器关闭等待超时，继续执行CefShutdown");
+                }
+            }
+        }
+
+        // 第二步：关闭CEF框架
         CefShutdown();
         m_initialized = false;
         m_logger->appEvent("CEF关闭完成");
     }
 
     m_cefApp = nullptr;
-    m_cefClient = nullptr; // 清理客户端引用
+    m_cefClient = nullptr;
 }
 
 int CEFManager::createBrowser(void* parentWidget, const QString& url)

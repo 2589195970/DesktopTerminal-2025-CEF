@@ -581,6 +581,33 @@ Application outputs current working directory and attempts multiple config paths
    set(CEF_VERSION_DEFAULT "75.1.14+gc81164e+chromium-75.0.3770.100")  # 全平台统一版本
    ```
 
+### F12 DevTools 白屏问题
+
+#### 问题描述
+按F12输入密码后，DevTools窗口打开但显示白屏，无法正常使用。
+
+#### 根本原因
+这是CEF 75在单进程模式下的已知限制，DevTools窗口渲染需要时间。
+
+#### 快速解决方案
+
+**方法1：使用远程调试接口（推荐，100%有效）**
+1. 启动应用后，在系统浏览器访问：`http://localhost:9222`
+2. 点击显示的调试目标
+3. 完整DevTools在浏览器中打开
+
+**方法2：等待加载**
+1. 按F12输入密码后保持窗口打开
+2. 等待10-15秒，内容会逐渐显示
+
+**方法3：使用诊断工具**
+- Windows: `scripts\test-devtools.bat`
+- Linux/macOS: `./scripts/test-devtools.sh`
+
+#### 详细文档
+- 用户指南：`docs/DEVTOOLS_GUIDE.md`
+- 技术文档：`docs/DEVTOOLS_WHITESACREEN_FIX.md`
+
 ### 常见CEF构建问题解决方案
 
 #### 问题1: CEF下载404错误

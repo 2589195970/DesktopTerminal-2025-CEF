@@ -40,6 +40,9 @@ public:
     CEFClient(CEFManager* cefManager = nullptr);
     virtual ~CEFClient();
 
+    // 获取当前浏览器实例（供 CEFManager 关闭时使用）
+    CefRefPtr<CefBrowser> getBrowser() const { return m_browser; }
+
     // CefClient接口
     virtual CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
     virtual CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
