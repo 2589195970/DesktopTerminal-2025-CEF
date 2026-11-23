@@ -18,6 +18,10 @@ Unicode true
 !define VERSIONMAJOR   1
 !define VERSIONMINOR   0
 !define VERSIONPATCH   0
+!define TERMINAL_APP   "DesktopTerminal-CEF.exe"
+!define TERMINAL_SERVICE "UMTerminalService"
+!define TERMINAL_SERVICE_EXE "DesktopTerminalService.exe"
+!define TERMINAL_SERVICE_DISPLAY "UM 考场终端服务"
 
 ; CEF版本信息（将在构建时由GitHub Actions设置）
 !ifndef CEF_VERSION
@@ -72,6 +76,12 @@ Var /GLOBAL ConfigPassword
 Var /GLOBAL ConfigApiBaseUrl
 Var /GLOBAL RequirePassword
 Var /GLOBAL CefProcessMode
+Var /GLOBAL TerminalURL
+Var /GLOBAL TerminalSlid
+Var /GLOBAL ExamAccount
+Var /GLOBAL SampleMode
+Var /GLOBAL TerminalDataDir
+Var /GLOBAL TerminalServiceResult
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
@@ -80,6 +90,10 @@ Var /GLOBAL RequirePasswordCheckbox
 Var /GLOBAL CefProcessModeAutoRadio
 Var /GLOBAL CefProcessModeSingleRadio
 Var /GLOBAL CefProcessModeMultiRadio
+Var /GLOBAL TerminalURLText
+Var /GLOBAL TerminalSlidText
+Var /GLOBAL ExamAccountText
+Var /GLOBAL SampleModeCheckbox
 Var /GLOBAL ConfigPatchResult
 Var /GLOBAL OpenSslRuntimeReady
 
@@ -91,7 +105,7 @@ Function .onInit
     UserInfo::GetAccountType
     Pop $R0
     ${If} $R0 != "admin"
-        MessageBox MB_ICONSTOP "此程序需要管理员权限才能安装，请右键选择'以管理员身份运行'。"
+        MessageBox MB_OK|MB_ICONSTOP "此程序需要管理员权限才能安装，请右键选择'以管理员身份运行'。" /SD IDOK
         SetErrorLevel 740 ; ERROR_ELEVATION_REQUIRED
         Quit
     ${EndIf}
@@ -99,26 +113,31 @@ Function .onInit
     ; 检查系统架构
     ${If} "${ARCH}" == "x64"
         ${IfNot} ${RunningX64}
-            MessageBox MB_ICONSTOP "此安装包仅适用于64位Windows系统。"
+            MessageBox MB_OK|MB_ICONSTOP "此安装包仅适用于64位Windows系统。" /SD IDOK
             Quit
         ${EndIf}
     ${EndIf}
     
     ; 检查操作系统版本（要求Windows 7或更高版本）
     ${IfNot} ${AtLeastWin7}
-        MessageBox MB_ICONSTOP "不支持的操作系统版本，需要Windows 7或更高版本。"
+        MessageBox MB_OK|MB_ICONSTOP "不支持的操作系统版本，需要Windows 7或更高版本。" /SD IDOK
         Quit
     ${EndIf}
     
-    ; 检查是否已安装
-    ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString"
-    ${If} $R0 != ""
-        MessageBox MB_YESNO|MB_ICONQUESTION "检测到已安装${APPNAME}，是否要先卸载旧版本？" IDYES uninstall_old IDNO continue_install
-        uninstall_old:
-            ExecWait '$R0 /S _?=$INSTDIR'
-            Delete $R0
-            RMDir "$INSTDIR"
-        continue_install:
+    ; 交互安装和静默安装共用考试端默认配置。
+    StrCpy $ConfigURL "http://wsyjxt.sdmpu.edu.cn/stu"
+    StrCpy $ConfigPassword "sdzdf.com"
+    StrCpy $RequirePassword "1"
+    StrCpy $CefProcessMode "multi"
+
+    ${GetParameters} $R0
+    ${GetOptions} $R0 "/TERMINAL_URL=" $TerminalURL
+    ${GetOptions} $R0 "/SLID=" $TerminalSlid
+    ${GetOptions} $R0 "/EXAM_ACCOUNT=" $ExamAccount
+    ${GetOptions} $R0 "/SAMPLE=" $R1
+    StrCpy $SampleMode "0"
+    ${If} $R1 == "1"
+        StrCpy $SampleMode "1"
     ${EndIf}
 FunctionEnd
 
@@ -132,34 +151,59 @@ Function ConfigPage
     ${NSD_CreateLabel} 0 0 100% 12u "请配置考试系统信息："
     Pop $0
 
-    ${NSD_CreateLabel} 0 20u 100% 12u "考试系统URL:"
+    ${NSD_CreateLabel} 0 18u 35% 12u "考试系统 URL"
     Pop $0
-    ${NSD_CreateText} 0 32u 100% 12u "http://wsyjxt.sdmpu.edu.cn/stu"
+    ${NSD_CreateText} 36% 16u 64% 13u "$ConfigURL"
     Pop $URLText
 
-    ${NSD_CreateLabel} 0 52u 100% 12u "退出密码:"
+    ${NSD_CreateLabel} 0 35u 35% 12u "退出密码"
     Pop $0
-    ${NSD_CreatePassword} 0 64u 100% 12u "sdzdf.com"
+    ${NSD_CreatePassword} 36% 33u 64% 13u "$ConfigPassword"
     Pop $PasswordText
 
-    ${NSD_CreateLabel} 0 84u 100% 12u "后端API地址(可选,留空则自动从前端Config.json发现):"
+    ${NSD_CreateLabel} 0 52u 35% 12u "后端 API 地址（可选）"
     Pop $0
-    ${NSD_CreateText} 0 96u 100% 12u ""
+    ${NSD_CreateText} 36% 50u 64% 13u "$ConfigApiBaseUrl"
     Pop $ApiBaseUrlText
 
-    ${NSD_CreateLabel} 0 116u 100% 12u "运行模式:"
+    ${NSD_CreateLabel} 0 69u 35% 12u "终端管理地址"
     Pop $0
-    ${NSD_CreateRadioButton} 0 128u 32% 12u "智能模式"
-    Pop $CefProcessModeAutoRadio
-    ${NSD_CreateRadioButton} 34% 128u 32% 12u "普通版本"
-    Pop $CefProcessModeSingleRadio
-    ${NSD_CreateRadioButton} 68% 128u 32% 12u "高性能版本"
-    Pop $CefProcessModeMultiRadio
-    ${NSD_Check} $CefProcessModeMultiRadio
+    ${NSD_CreateText} 36% 67u 64% 13u "$TerminalURL"
+    Pop $TerminalURLText
 
-    ${NSD_CreateCheckbox} 0 144u 100% 12u "敏感操作需要密码验证(F10退出等)"
+    ${NSD_CreateLabel} 0 86u 35% 12u "学校实例号（slid）"
+    Pop $0
+    ${NSD_CreateText} 36% 84u 64% 13u "$TerminalSlid"
+    Pop $TerminalSlidText
+
+    ${NSD_CreateLabel} 0 103u 35% 12u "考试 Windows 账户"
+    Pop $0
+    ${NSD_CreateText} 36% 101u 64% 13u "$ExamAccount"
+    Pop $ExamAccountText
+
+    ${NSD_CreateLabel} 0 121u 24% 12u "运行模式"
+    Pop $0
+    ${NSD_CreateRadioButton} 25% 120u 25% 12u "智能模式"
+    Pop $CefProcessModeAutoRadio
+    ${NSD_CreateRadioButton} 50% 120u 25% 12u "普通版本"
+    Pop $CefProcessModeSingleRadio
+    ${NSD_CreateRadioButton} 75% 120u 25% 12u "高性能版本"
+    Pop $CefProcessModeMultiRadio
+    ${If} $CefProcessMode == "auto"
+        ${NSD_Check} $CefProcessModeAutoRadio
+    ${ElseIf} $CefProcessMode == "single"
+        ${NSD_Check} $CefProcessModeSingleRadio
+    ${Else}
+        ${NSD_Check} $CefProcessModeMultiRadio
+    ${EndIf}
+
+    ${NSD_CreateCheckbox} 0 140u 70% 12u "敏感操作需要密码验证（F10 退出等）"
     Pop $RequirePasswordCheckbox
-    ${NSD_Check} $RequirePasswordCheckbox
+    ${NSD_SetState} $RequirePasswordCheckbox $RequirePassword
+
+    ${NSD_CreateCheckbox} 72% 140u 28% 12u "样机模式"
+    Pop $SampleModeCheckbox
+    ${NSD_SetState} $SampleModeCheckbox $SampleMode
 
     nsDialogs::Show
 FunctionEnd
@@ -168,6 +212,10 @@ Function ConfigPageLeave
     ${NSD_GetText} $URLText $ConfigURL
     ${NSD_GetText} $PasswordText $ConfigPassword
     ${NSD_GetText} $ApiBaseUrlText $ConfigApiBaseUrl
+    ${NSD_GetText} $TerminalURLText $TerminalURL
+    ${NSD_GetText} $TerminalSlidText $TerminalSlid
+    ${NSD_GetText} $ExamAccountText $ExamAccount
+    ${NSD_GetState} $SampleModeCheckbox $SampleMode
     ${NSD_GetState} $RequirePasswordCheckbox $RequirePassword
     ${NSD_GetState} $CefProcessModeSingleRadio $0
     ${If} $0 == 1
@@ -213,20 +261,140 @@ Var /GLOBAL InstallLogHandle
 
 !define Log "!insertmacro LOG_MSG"
 
+!macro TERMINAL_COMMAND _NAME _COMMAND
+    nsExec::ExecToLog /TIMEOUT=40000 `${_COMMAND}`
+    Pop $TerminalServiceResult
+    ${If} $TerminalServiceResult == 0
+        ${Log} "${_NAME} succeeded (0)"
+    ${Else}
+        ${Log} "${_NAME} failed ($TerminalServiceResult)"
+    ${EndIf}
+!macroend
+
+!define TerminalCommand "!insertmacro TERMINAL_COMMAND"
+
+!macro STOP_TERMINAL_SERVICE
+    nsExec::ExecToLog /TIMEOUT=40000 '"$SYSDIR\sc.exe" stop ${TERMINAL_SERVICE}'
+    Pop $TerminalServiceResult
+    ${If} $TerminalServiceResult == 1060
+        ${Log} "sc stop: service does not exist (1060)"
+    ${ElseIf} $TerminalServiceResult == 1062
+        ${Log} "sc stop: service is already stopped (1062)"
+    ${Else}
+        ${If} $TerminalServiceResult == 0
+            ${Log} "sc stop succeeded (0)"
+        ${Else}
+            ${Log} "sc stop failed ($TerminalServiceResult)"
+        ${EndIf}
+        ${TerminalCommand} "wait for ${TERMINAL_SERVICE} to stop" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; (Get-Service -Name '${TERMINAL_SERVICE}').WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))"`
+    ${EndIf}
+!macroend
+
+!macro GET_TERMINAL_DATA_DIR
+    SetShellVarContext all
+    StrCpy $TerminalDataDir "$APPDATA\UMTerminal"
+    SetShellVarContext current
+!macroend
+
+Function InstallTerminalService
+    !insertmacro GET_TERMINAL_DATA_DIR
+    ClearErrors
+    CreateDirectory "$TerminalDataDir"
+    ${If} ${Errors}
+        ${Log} "Failed to create $TerminalDataDir"
+        Return
+    ${EndIf}
+
+    ; 拒绝将服务配置写到重解析目录。
+    System::Call 'Kernel32::GetFileAttributesW(w "$TerminalDataDir") i.r0'
+    IntOp $1 $0 & 0x400
+    ${If} $1 != 0
+        ${Log} "Invalid directory for terminal service data: $TerminalDataDir"
+        Return
+    ${EndIf}
+
+    ${TerminalCommand} "icacls terminal directory" `"$SYSDIR\icacls.exe" "$TerminalDataDir" /L /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`
+    ${If} $TerminalServiceResult != 0
+        Return
+    ${EndIf}
+    ${TerminalCommand} "icacls terminal directory owner" `"$SYSDIR\icacls.exe" "$TerminalDataDir" /L /setowner "*S-1-5-32-544"`
+    ${If} $TerminalServiceResult != 0
+        Return
+    ${EndIf}
+
+    ; 使用 UTF-8 写入完整 INI，保留域账户和安装路径中的中文。
+    InitPluginsDir
+    SetOutPath "$PLUGINSDIR"
+    File "scripts\write-terminal-service-config.ps1"
+    SetOutPath "$INSTDIR"
+    StrCpy $0 $TerminalURL
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", w r0)'
+    StrCpy $0 $TerminalSlid
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", w r0)'
+    StrCpy $0 $ExamAccount
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", w r0)'
+    StrCpy $0 $SampleMode
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SAMPLE", w r0)'
+    ${TerminalCommand} "write service.ini" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\write-terminal-service-config.ps1" -DataDirectory "$TerminalDataDir" -AppPath "$INSTDIR\${TERMINAL_APP}"`
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", p 0)'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", p 0)'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", p 0)'
+    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SAMPLE", p 0)'
+    ${If} $TerminalServiceResult != 0
+        Return
+    ${EndIf}
+
+    ${IfNot} ${FileExists} "$INSTDIR\${TERMINAL_SERVICE_EXE}"
+        ${Log} "Service executable missing: $INSTDIR\${TERMINAL_SERVICE_EXE}"
+        Return
+    ${EndIf}
+
+    nsExec::ExecToLog /TIMEOUT=40000 '"$SYSDIR\sc.exe" query ${TERMINAL_SERVICE}'
+    Pop $TerminalServiceResult
+    ${If} $TerminalServiceResult == 0
+        ${Log} "sc query succeeded (0)"
+        ${TerminalCommand} "sc config" `"$SYSDIR\sc.exe" config ${TERMINAL_SERVICE} binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
+    ${ElseIf} $TerminalServiceResult == 1060
+        ${Log} "sc query: service does not exist (1060)"
+        ${TerminalCommand} "sc create" `"$SYSDIR\sc.exe" create ${TERMINAL_SERVICE} binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
+    ${Else}
+        ${Log} "sc query failed ($TerminalServiceResult)"
+        Return
+    ${EndIf}
+    ${If} $TerminalServiceResult != 0
+        Return
+    ${EndIf}
+
+    ${TerminalCommand} "sc failure" `"$SYSDIR\sc.exe" failure ${TERMINAL_SERVICE} reset= 86400 actions= restart/60000/restart/60000/restart/300000`
+    ${TerminalCommand} "sc description" `"$SYSDIR\sc.exe" description ${TERMINAL_SERVICE} "考场终端注册、状态上报及考试端管理"`
+    ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
+FunctionEnd
+
 ; ─────────────────────────────────────────────
 ; 安装部分
 ; ─────────────────────────────────────────────
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     !insertmacro LOG_INIT
+
+    ; 覆盖安装先停止服务，以便替换服务程序并保留终端状态。
+    !insertmacro STOP_TERMINAL_SERVICE
     
     ; 直接安装程序文件 - 使用正确的编译时源路径
     ; GitHub Actions构建文件位于artifacts\windows-${ARCH}\目录
     ${Log} "正在安装DesktopTerminal-CEF应用程序..."
     
     ; 安装主程序文件（从artifacts目录）
-    File "artifacts\windows-${ARCH}\DesktopTerminal-CEF.exe"
+    File "artifacts\windows-${ARCH}\${TERMINAL_APP}"
     ${Log} "✓ 主程序已安装: DesktopTerminal-CEF.exe"
+
+    ClearErrors
+    SetOverwrite try
+    File "artifacts\windows-${ARCH}\${TERMINAL_SERVICE_EXE}"
+    SetOverwrite lastused
+    ${If} ${Errors}
+        ${Log} "Failed to replace ${TERMINAL_SERVICE_EXE}"
+    ${EndIf}
     
     ; 安装CEF核心库文件
     File /nonfatal "artifacts\windows-${ARCH}\libcef.dll"
@@ -298,7 +466,7 @@ Section "主程序" SecMain
             ${Log} "⚠ 主程序文件可能不完整 ($R1 KB)"
         ${EndIf}
     ${Else}
-        MessageBox MB_ICONSTOP "❌ 主程序安装失败：$INSTDIR\DesktopTerminal-CEF.exe$\n$\n可能原因：$\n1. 磁盘空间不足$\n2. 目标目录无写权限$\n3. 杀毒软件拦截"
+        MessageBox MB_OK|MB_ICONSTOP "❌ 主程序安装失败：$INSTDIR\DesktopTerminal-CEF.exe$\n$\n可能原因：$\n1. 磁盘空间不足$\n2. 目标目录无写权限$\n3. 杀毒软件拦截" /SD IDOK
         Abort
     ${EndIf}
     
@@ -462,7 +630,7 @@ Section "主程序" SecMain
         ${EndIf}
         FileClose $0
         ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl, cefProcessMode=$CefProcessMode"
-        MessageBox MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行，详情见 resources\install-config-patch.log。"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行，详情见 resources\install-config-patch.log。" /SD IDOK
     ${EndIf}
     
     ; 复制资源文件到resources目录
@@ -592,7 +760,7 @@ Section "主程序" SecMain
     
     ; 如果发现错误，显示详细诊断信息
     ${If} $VerificationErrors != ""
-        MessageBox MB_ICONSTOP "❌ 安装验证失败！$\n$\n发现的问题：$\n$VerificationErrors$\n可能原因：$\n1. 安装包文件不完整或损坏$\n2. 磁盘空间不足或写权限受限$\n3. 杀毒软件阻止了文件写入$\n4. 系统环境不兼容$\n$\n建议：$\n- 重新下载安装包$\n- 以管理员身份运行安装程序$\n- 临时关闭杀毒软件后重试"
+        MessageBox MB_OK|MB_ICONSTOP "❌ 安装验证失败！$\n$\n发现的问题：$\n$VerificationErrors$\n可能原因：$\n1. 安装包文件不完整或损坏$\n2. 磁盘空间不足或写权限受限$\n3. 杀毒软件阻止了文件写入$\n4. 系统环境不兼容$\n$\n建议：$\n- 重新下载安装包$\n- 以管理员身份运行安装程序$\n- 临时关闭杀毒软件后重试" /SD IDOK
         Abort
     ${Else}
         ${Log} "✅ 所有验证检查通过"
@@ -650,10 +818,10 @@ Section "主程序" SecMain
                     FileWrite $0 "VC++ Redistributable installed (reboot required)$\r$\nReturn code: 3010$\r$\nTimestamp: "
                     FileClose $0
                     ${Log} "✓ 已创建VC++运行库安装标记文件"
-                    MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。"
+                    MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。" /SD IDOK
                 ${Else}
                     ${Log} "❌ VC++ Redistributable安装失败，返回码：$R1"
-                    MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" IDYES manual_vc_download IDNO skip_manual_vc_download
+                    MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" /SD IDNO IDYES manual_vc_download IDNO skip_manual_vc_download
                     manual_vc_download:
                         ${If} "${ARCH}" == "x64"
                             ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
@@ -664,7 +832,7 @@ Section "主程序" SecMain
                 ${EndIf}
             ${Else}
                 ${Log} "❌ 未找到VC++ Redistributable安装包"
-                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且离线安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" IDYES fallback_vc_download IDNO skip_fallback_vc_download
+                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且离线安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" /SD IDNO IDYES fallback_vc_download IDNO skip_fallback_vc_download
                 fallback_vc_download:
                     ${If} "${ARCH}" == "x64"
                         ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
@@ -682,7 +850,8 @@ Section "主程序" SecMain
             ${Log} "✓ 已创建VC++运行库安装标记文件"
         ${EndIf}
         
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致"
+        Call InstallTerminalService
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}
     !insertmacro LOG_CLOSE
 SectionEnd
@@ -691,7 +860,22 @@ SectionEnd
 ; 卸载部分
 ; ─────────────────────────────────────────────
 Section "Uninstall"
+    StrCpy $InstallLogHandle ""
+    !insertmacro STOP_TERMINAL_SERVICE
+    ${TerminalCommand} "sc delete" `"$SYSDIR\sc.exe" delete ${TERMINAL_SERVICE}`
+
+    !insertmacro GET_TERMINAL_DATA_DIR
+    System::Call 'Kernel32::GetFileAttributesW(w "$TerminalDataDir") i.r0'
+    IntOp $1 $0 & 0x400
+    ${If} $1 == 0
+        ; 卸载时清除本机绑定状态，空目录直接删除。
+        Delete "$TerminalDataDir\service.ini"
+        Delete "$TerminalDataDir\state.json"
+        RMDir "$TerminalDataDir"
+    ${EndIf}
+
     ; 删除文件与目录(包括VC++运行库标记文件)
+    Delete /REBOOTOK "$INSTDIR\${TERMINAL_SERVICE_EXE}"
     RMDir /r "$INSTDIR"
 
     ; 删除快捷方式
@@ -702,5 +886,5 @@ Section "Uninstall"
     DeleteRegKey HKLM "Software\${COMPANYNAME}\${APPNAME}"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 
-    MessageBox MB_OK "$(MSG_UninstallDone)"
+    MessageBox MB_OK "$(MSG_UninstallDone)" /SD IDOK
 SectionEnd

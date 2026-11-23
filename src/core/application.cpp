@@ -18,6 +18,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <versionhelpers.h>
+#include "single_instance.h"
 #include "../security/windows_key_blocker.h"
 #endif
 
@@ -38,11 +39,13 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     , m_keyboardFilter(nullptr) // 初始化
 #ifdef Q_OS_WIN
     , m_windowsKeyBlocker(nullptr) // 初始化Windows键拦截器
-#endif
+#else
     , m_lockFile(nullptr)
     , m_lockAcquired(false)
+#endif
     , m_initialized(false)
     , m_shutdownRequested(false)
+    , m_shuttingDown(false)
     , m_exitPromptActive(false)
     , m_lastSafeExitRequestAtMs(0)
     , m_sharedCEFApp(nullptr)
@@ -59,7 +62,8 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     // 设置退出策略
     setQuitOnLastWindowClosed(false);
 
-    // 单实例检测
+#ifndef Q_OS_WIN
+    // 非 Windows 平台继续使用锁文件。
     QString lockPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
                        + "/DesktopTerminal-CEF.lock";
     m_lockFile = new QLockFile(lockPath);
@@ -72,6 +76,7 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     }
 
     m_lockAcquired = true;
+#endif
 
     // 检测系统信息
     detectSystemInfo();
@@ -82,12 +87,14 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
 
 Application::~Application()
 {
+#ifndef Q_OS_WIN
     // 释放单实例锁
     if (m_lockFile) {
         m_lockFile->unlock();
         delete m_lockFile;
         m_lockFile = nullptr;
     }
+#endif
 
     shutdown();
 }
@@ -103,10 +110,11 @@ bool Application::initialize()
         return true;
     }
 
-    // 检查单实例锁是否成功获取
+#ifndef Q_OS_WIN
     if (!m_lockAcquired) {
         return false;
     }
+#endif
 
     // 1. 初始化日志系统
     emit initializationProgress("正在初始化日志系统...");
@@ -184,6 +192,12 @@ bool Application::startMainWindow()
         return false;
     }
 
+#ifdef Q_OS_WIN
+    if (!m_controlPipe.start(this, [this]() { requestControlledExit(QStringLiteral("UMTerminalService")); })) {
+        m_logger->errorEvent("启动考试端关闭管道失败");
+    }
+#endif
+
     m_logger->appEvent("主窗口启动成功");
     return true;
 }
@@ -220,8 +234,7 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
 
     if (!configManager->isSensitiveOperationPasswordRequired()) {
         logger->hotkeyEvent(QString("无密码模式，直接退出，来源: %1").arg(triggerSource));
-        m_shutdownRequested = true;
-        QApplication::quit();
+        quitAfterExitRequest();
         return true;
     }
 
@@ -229,13 +242,15 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
 
     QString password;
     bool ok = logger->getPassword(dialogParent, "安全退出", "请输入退出密码：", password);
-    QString exitPassword = configManager->getExitPassword();
+    if (m_shutdownRequested) {
+        m_exitPromptActive = false;
+        return true;
+    }
 
-    if (ok && password == exitPassword) {
+    if (ok && password == configManager->getExitPassword()) {
         logger->hotkeyEvent(QString("密码正确，退出，来源: %1").arg(triggerSource));
         m_exitPromptActive = false;
-        m_shutdownRequested = true;
-        QApplication::quit();
+        quitAfterExitRequest();
         return true;
     }
 
@@ -247,13 +262,35 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
     return false;
 }
 
-void Application::shutdown()
+void Application::requestControlledExit(const QString& source)
 {
     if (m_shutdownRequested) {
         return;
     }
 
+    Logger* logger = m_logger ? m_logger : &Logger::instance();
+    logger->appEvent(QString("收到服务关闭请求，来源: %1").arg(source));
+    quitAfterExitRequest();
+}
+
+void Application::quitAfterExitRequest()
+{
     m_shutdownRequested = true;
+    QApplication::quit();
+}
+
+void Application::shutdown()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+
+    m_shutdownRequested = true;
+    m_shuttingDown = true;
+
+#ifdef Q_OS_WIN
+    m_controlPipe.stop();
+#endif
 
     if (m_logger) {
         m_logger->appEvent("应用程序开始关闭...");
@@ -290,6 +327,9 @@ void Application::shutdown()
 
     // CEF关闭后再销毁主窗口
     if (m_mainWindow) {
+#ifdef Q_OS_WIN
+        SingleInstance::unmarkMainWindow(reinterpret_cast<void*>(m_mainWindow->internalWinId()));
+#endif
         m_mainWindow->hide();
         delete m_mainWindow;
         m_mainWindow = nullptr;

@@ -262,6 +262,8 @@ include_directories(
 set(SOURCES
     src/main.cpp
     src/core/application.cpp
+    src/core/control_pipe.cpp
+    src/core/single_instance.cpp
     src/core/cef_manager.cpp
     src/core/secure_browser.cpp
     src/core/window_manager.cpp
@@ -285,6 +287,8 @@ set(SOURCES
 # 头文件列表
 set(HEADERS
     src/core/application.h
+    src/core/control_pipe.h
+    src/core/single_instance.h
     src/core/cef_manager.h
     src/core/secure_browser.h
     src/core/window_manager.h
@@ -789,4 +793,8 @@ if(DEFINED ENV{GITHUB_ACTIONS})
     
     # 确保验证目标依赖于主项目
     add_dependencies(verify_build_success ${PROJECT_NAME})
+endif()
+
+if(WIN32)
+    add_subdirectory(src/terminal_service)
 endif()

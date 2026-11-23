@@ -9,6 +9,7 @@
 
 #include "core/application.h"
 #include "core/secure_browser.h"
+#include "core/single_instance.h"
 #include "logging/logger.h"
 #include "config/config_manager.h"
 #include "ui/loading_dialog.h"
@@ -17,6 +18,7 @@
 #include "include/cef_app.h"
 
 #ifdef Q_OS_WIN
+#include <cstring>
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
@@ -122,6 +124,31 @@ bool requireAdminPrivilegesOrExit(int argc, char* argv[], Logger& logger)
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_WIN
+    SingleInstance singleInstance;
+    bool isCefSubprocess = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strncmp(argv[i], "--type=", sizeof("--type=") - 1) == 0) {
+            isCefSubprocess = true;
+            break;
+        }
+    }
+
+    // 未提权的进程沿用后续的提权流程，由提权后的进程获取互斥体。
+    if (!isCefSubprocess && isRunningAsAdministrator()) {
+        const auto result = singleInstance.acquire();
+        if (result == SingleInstance::Result::AlreadyRunning) {
+            return 0;
+        }
+        if (result == SingleInstance::Result::Error) {
+            const auto error = GetLastError();
+            OutputDebugStringW(QStringLiteral("无法创建考试端单实例互斥体，错误码: %1\n")
+                                   .arg(error).toStdWString().c_str());
+            return 1;
+        }
+    }
+#endif
+
     int originalArgc = argc;
     char** originalArgv = argv;
 
@@ -333,6 +360,9 @@ int main(int argc, char *argv[])
             
             // 先显示主窗口以确保窗口句柄有效
             mainWindow->show();
+#ifdef Q_OS_WIN
+            SingleInstance::markMainWindow(reinterpret_cast<void*>(mainWindow->winId()));
+#endif
             
             // 确保窗口完全显示和初始化
             QApplication::processEvents();

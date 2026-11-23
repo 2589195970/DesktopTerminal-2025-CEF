@@ -5,8 +5,11 @@
 #include <QString>
 #include <QVersionNumber>
 #include <QThread>
+#ifndef Q_OS_WIN
 #include <QLockFile>
+#endif
 
+#include "control_pipe.h"
 #include "../security/keyboard_filter.h"
 #include "../cef/cef_app_impl.h"
 
@@ -96,6 +99,9 @@ public:
      */
     bool requestSafeExit(QWidget* parent = nullptr, const QString& source = QString());
 
+    /** @brief 处理 Windows 服务发来的关闭请求。 */
+    void requestControlledExit(const QString& source);
+
     // 系统信息获取
     static ArchType getSystemArchitecture();
     static PlatformType getSystemPlatform();
@@ -132,7 +138,7 @@ private:
     bool initializeCEF();
     bool checkNetworkConnection();
     bool createMainWindow();
-    
+    void quitAfterExitRequest();
 
     // 系统检测
     void detectSystemInfo();
@@ -179,11 +185,14 @@ private:
     // 键盘过滤器
     KeyboardFilter* m_keyboardFilter;
 
-    // 单实例锁文件
+#ifndef Q_OS_WIN
+    // 非 Windows 平台使用单实例锁文件。
     QLockFile* m_lockFile;
     bool m_lockAcquired;
+#endif
 
 #ifdef Q_OS_WIN
+    ControlPipe m_controlPipe;
     // Windows键拦截器
     WindowsKeyBlocker* m_windowsKeyBlocker;
 #endif
@@ -197,6 +206,7 @@ private:
 
     bool m_initialized;
     bool m_shutdownRequested;
+    bool m_shuttingDown;
     bool m_exitPromptActive;
     qint64 m_lastSafeExitRequestAtMs;
     CefRefPtr<CEFApp> m_sharedCEFApp;
