@@ -1,13 +1,16 @@
 #ifndef SINGLE_INSTANCE_H
 #define SINGLE_INSTANCE_H
 
+#ifdef _WIN32
+#include "../terminal_service/win_handle.h"
+#endif
+
 class SingleInstance
 {
 public:
     enum class Result { Acquired, AlreadyRunning, Error };
 
     SingleInstance() = default;
-    ~SingleInstance();
     SingleInstance(const SingleInstance&) = delete;
     SingleInstance& operator=(const SingleInstance&) = delete;
 
@@ -17,7 +20,7 @@ public:
 
 private:
 #ifdef _WIN32
-    void* m_mutex = nullptr;
+    terminal::WinHandle m_mutex;
 #endif
 };
 

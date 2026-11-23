@@ -4,6 +4,8 @@
 #include <functional>
 
 #ifdef _WIN32
+#include "../terminal_service/win_handle.h"
+
 #include <atomic>
 #endif
 
@@ -27,7 +29,7 @@ private:
     void serveClient(WorkerContext& context);
 
     std::atomic<bool> m_stopping{false};
-    void* m_worker = nullptr;
+    terminal::WinHandle m_worker;
 #endif
 };
 

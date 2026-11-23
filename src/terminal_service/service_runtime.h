@@ -31,6 +31,7 @@ private:
     void processQueuedCommands();
     void finishWorker();
     void finishPowerCommand();
+    void updateCommandResult(const CommandResult &result);
     bool saveState();
     void schedule(int intervalMs);
     void logResult(const CommandResult &result) const;

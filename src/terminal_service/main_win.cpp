@@ -14,13 +14,13 @@
 #include <QDir>
 #include <QLockFile>
 
-#include <memory>
 #include <mutex>
 #include <string_view>
 
 namespace {
 
 using terminal::WinHandle;
+using terminal::LocalMemory;
 
 wchar_t ServiceName[] = L"UMTerminalService";
 constexpr wchar_t DirectoryDacl[] = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
@@ -70,7 +70,7 @@ DWORD ensureRestrictedDirectory(const QString &path)
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(DirectoryDacl, SDDL_REVISION_1, &descriptor, nullptr)) {
         return GetLastError();
     }
-    const std::unique_ptr<void, decltype(&LocalFree)> security(descriptor, LocalFree);
+    const LocalMemory security(descriptor, LocalFree);
     const std::wstring nativePath = QDir::toNativeSeparators(path).toStdWString();
     SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor, FALSE};
     if (!CreateDirectoryW(nativePath.c_str(), &attributes)) {
@@ -80,9 +80,12 @@ DWORD ensureRestrictedDirectory(const QString &path)
         }
     }
 
-    const WinHandle directory(CreateFileW(nativePath.c_str(), READ_CONTROL | WRITE_DAC, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                           nullptr, OPEN_EXISTING,
-                                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    const auto openDirectory = [&nativePath](DWORD access) {
+        return WinHandle(CreateFileW(nativePath.c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                     nullptr, OPEN_EXISTING,
+                                     FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    };
+    const WinHandle directory = openDirectory(READ_CONTROL | WRITE_DAC);
     if (!directory) {
         return GetLastError();
     }
@@ -107,7 +110,7 @@ DWORD ensureRestrictedDirectory(const QString &path)
     if (query != ERROR_SUCCESS) {
         return query;
     }
-    const std::unique_ptr<void, decltype(&LocalFree)> existingSecurity(existingDescriptor, LocalFree);
+    const LocalMemory existingSecurity(existingDescriptor, LocalFree);
     // 目录所有者可以改写 DACL，确保所有者同样属于允许访问的安全主体。
     if (!owner || (!IsWellKnownSid(owner, WinLocalSystemSid) && !IsWellKnownSid(owner, WinBuiltinAdministratorsSid))) {
         alignas(DWORD) BYTE adminSid[SECURITY_MAX_SID_SIZE];
@@ -115,9 +118,7 @@ DWORD ensureRestrictedDirectory(const QString &path)
         if (!CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adminSid, &sidSize)) {
             return GetLastError();
         }
-        const WinHandle writableOwner(CreateFileW(nativePath.c_str(), WRITE_OWNER,
-                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        const WinHandle writableOwner = openDirectory(WRITE_OWNER);
         if (!writableOwner) {
             return GetLastError();
         }
@@ -149,11 +150,12 @@ QString secureDataDirectory()
         return {};
     }
     const QDir directory(QDir(programData).filePath(QStringLiteral("UMTerminal")));
-    const DWORD dataError = ensureRestrictedDirectory(directory.absolutePath());
-    const DWORD logError = dataError == ERROR_SUCCESS
-            ? ensureRestrictedDirectory(directory.filePath(QStringLiteral("logs"))) : dataError;
-    if (logError != ERROR_SUCCESS) {
-        qCritical().noquote() << QStringLiteral("无法保护终端服务目录（Windows 错误 %1）").arg(logError);
+    DWORD error = ensureRestrictedDirectory(directory.absolutePath());
+    if (error == ERROR_SUCCESS) {
+        error = ensureRestrictedDirectory(directory.filePath(QStringLiteral("logs")));
+    }
+    if (error != ERROR_SUCCESS) {
+        qCritical().noquote() << terminal::windowsFailure(QStringLiteral("无法保护终端服务目录"), error);
         return {};
     }
     for (const QString &file : {QStringLiteral("service.ini"), QStringLiteral("state.json"),

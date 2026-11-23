@@ -5,11 +5,12 @@
 #include <QString>
 #include <QVersionNumber>
 #include <QThread>
-#ifndef Q_OS_WIN
+#ifdef Q_OS_WIN
+#include "control_pipe.h"
+#else
 #include <QLockFile>
 #endif
 
-#include "control_pipe.h"
 #include "../security/keyboard_filter.h"
 #include "../cef/cef_app_impl.h"
 
@@ -99,9 +100,6 @@ public:
      */
     bool requestSafeExit(QWidget* parent = nullptr, const QString& source = QString());
 
-    /** @brief 处理 Windows 服务发来的关闭请求。 */
-    void requestControlledExit(const QString& source);
-
     // 系统信息获取
     static ArchType getSystemArchitecture();
     static PlatformType getSystemPlatform();
@@ -139,6 +137,9 @@ private:
     bool checkNetworkConnection();
     bool createMainWindow();
     void quitAfterExitRequest();
+#ifdef Q_OS_WIN
+    void requestControlledExit();
+#endif
 
     // 系统检测
     void detectSystemInfo();

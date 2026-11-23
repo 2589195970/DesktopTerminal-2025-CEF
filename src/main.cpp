@@ -18,6 +18,7 @@
 #include "include/cef_app.h"
 
 #ifdef Q_OS_WIN
+#include <algorithm>
 #include <cstring>
 #include <windows.h>
 #include <io.h>
@@ -126,13 +127,9 @@ int main(int argc, char *argv[])
 {
 #ifdef Q_OS_WIN
     SingleInstance singleInstance;
-    bool isCefSubprocess = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::strncmp(argv[i], "--type=", sizeof("--type=") - 1) == 0) {
-            isCefSubprocess = true;
-            break;
-        }
-    }
+    const bool isCefSubprocess = std::any_of(argv + 1, argv + argc, [](const char* argument) {
+        return std::strncmp(argument, "--type=", sizeof("--type=") - 1) == 0;
+    });
 
     // 未提权的进程沿用后续的提权流程，由提权后的进程获取互斥体。
     if (!isCefSubprocess && isRunningAsAdministrator()) {

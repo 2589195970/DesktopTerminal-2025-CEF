@@ -8,6 +8,11 @@ namespace terminal {
 
 using WaitForStop = std::function<bool(int milliseconds)>;
 
+inline QString windowsFailure(const QString &message, unsigned long error)
+{
+    return QStringLiteral("%1（Windows 错误 %2）").arg(message).arg(error);
+}
+
 bool appIsRunning();
 NetworkIdentity findNetworkIdentity(const QList<QHostAddress> &serverAddresses);
 CommandResult executeAppOrWake(const Command &command, const Config &config, const NetworkIdentity &network,

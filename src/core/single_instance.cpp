@@ -1,12 +1,12 @@
 #include "single_instance.h"
 
 #ifdef _WIN32
-#include <windows.h>
+#include "../terminal_service/app_control_protocol.h"
+
 #include <sddl.h>
 
 namespace {
 
-constexpr wchar_t mutexName[] = L"Global\\UMTerminal.CEF.SingleInstance";
 constexpr wchar_t windowProperty[] = L"UMTerminal.CEF.MainWindow";
 
 BOOL CALLBACK activateMainWindow(HWND window, LPARAM)
@@ -29,15 +29,6 @@ BOOL CALLBACK activateMainWindow(HWND window, LPARAM)
 } // namespace
 #endif
 
-SingleInstance::~SingleInstance()
-{
-#ifdef _WIN32
-    if (m_mutex) {
-        CloseHandle(m_mutex);
-    }
-#endif
-}
-
 SingleInstance::Result SingleInstance::acquire()
 {
 #ifdef _WIN32
@@ -48,10 +39,12 @@ SingleInstance::Result SingleInstance::acquire()
         return Result::Error;
     }
 
-    SECURITY_ATTRIBUTES attributes = {sizeof(SECURITY_ATTRIBUTES), descriptor, FALSE};
-    m_mutex = CreateMutexW(&attributes, FALSE, mutexName);
+    terminal::LocalMemory security(descriptor, LocalFree);
+    SECURITY_ATTRIBUTES attributes = {sizeof(SECURITY_ATTRIBUTES), security.get(), FALSE};
+    const HANDLE mutex = CreateMutexW(&attributes, FALSE, terminal::AppMutexName);
     const DWORD error = GetLastError();
-    LocalFree(descriptor);
+    security.reset();
+    m_mutex.reset(mutex);
     if (!m_mutex) {
         SetLastError(error);
         return Result::Error;

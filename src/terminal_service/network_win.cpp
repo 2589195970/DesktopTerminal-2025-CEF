@@ -59,6 +59,7 @@ QString enabledEthernetMac(const IP_ADAPTER_ADDRESSES *adapters)
 NetworkIdentity identityForRoute(const MIB_IPFORWARD_ROW2 &route, const QHostAddress &localIp,
                                  const IP_ADAPTER_ADDRESSES *adapters)
 {
+    const quint32 localAddress = localIp.toIPv4Address();
     for (const IP_ADAPTER_ADDRESSES *adapter = adapters; adapter; adapter = adapter->Next) {
         if (adapter->IfIndex != route.InterfaceIndex) {
             continue;
@@ -69,7 +70,7 @@ NetworkIdentity identityForRoute(const MIB_IPFORWARD_ROW2 &route, const QHostAdd
                 continue;
             }
             const auto *ipv4 = reinterpret_cast<const SOCKADDR_IN *>(address);
-            if (ntohl(ipv4->sin_addr.S_un.S_addr) == localIp.toIPv4Address()) {
+            if (ntohl(ipv4->sin_addr.S_un.S_addr) == localAddress) {
                 const QString mac = adapter->IfType == IF_TYPE_ETHERNET_CSMACD
                         ? adapterMac(*adapter) : enabledEthernetMac(adapters);
                 return {localIp, entry->OnLinkPrefixLength, mac};

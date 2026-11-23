@@ -2,6 +2,7 @@
 
 #ifdef Q_OS_WIN
 
+#include "app_control_protocol.h"
 #include "win_handle.h"
 
 #include <reason.h>
@@ -20,16 +21,9 @@
 namespace terminal {
 namespace {
 
-constexpr wchar_t AppMutexName[] = L"Global\\UMTerminal.CEF.SingleInstance";
-constexpr wchar_t ControlPipeName[] = L"\\\\.\\pipe\\UMTerminal.CEF.Control";
 constexpr int PipeTimeoutMs = 5000;
 constexpr int AppExitTimeoutMs = 30000;
 constexpr int StopPollMs = 100;
-
-QString windowsFailure(const QString &message, DWORD error)
-{
-    return QStringLiteral("%1（Windows 错误 %2）").arg(message).arg(error);
-}
 
 QString sessionText(DWORD sessionId, WTS_INFO_CLASS field)
 {
@@ -43,6 +37,12 @@ QString sessionText(DWORD sessionId, WTS_INFO_CLASS field)
     return QString::fromWCharArray(text.get());
 }
 
+bool sessionMatchesExamAccount(DWORD sessionId, const QString &examAccount)
+{
+    return examAccountMatches(examAccount, sessionText(sessionId, WTSUserName),
+                              sessionText(sessionId, WTSDomainName));
+}
+
 CommandResult startApp(const Command &command, const Config &config)
 {
     if (appIsRunning()) {
@@ -50,9 +50,7 @@ CommandResult startApp(const Command &command, const Config &config)
     }
     constexpr DWORD NoSession = 0xffffffffu;
     const DWORD sessionId = WTSGetActiveConsoleSessionId();
-    if (sessionId == NoSession
-            || !examAccountMatches(config.examAccount, sessionText(sessionId, WTSUserName),
-                                   sessionText(sessionId, WTSDomainName))) {
+    if (sessionId == NoSession || !sessionMatchesExamAccount(sessionId, config.examAccount)) {
         return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
     }
 
@@ -98,8 +96,7 @@ CommandResult startApp(const Command &command, const Config &config)
 
     // 验证用户名后控制台会话可能切换，启动前再次核对当前会话。
     if (WTSGetActiveConsoleSessionId() != sessionId
-            || !examAccountMatches(config.examAccount, sessionText(sessionId, WTSUserName),
-                                   sessionText(sessionId, WTSDomainName))) {
+            || !sessionMatchesExamAccount(sessionId, config.examAccount)) {
         return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
     }
     const std::wstring executable = QDir::toNativeSeparators(app.absoluteFilePath()).toStdWString();
@@ -196,23 +193,25 @@ QString requestAppStop(const WaitForStop &waitForStop)
     }
     QElapsedTimer timer;
     timer.start();
-    char request[] = "STOP\n";
-    constexpr DWORD requestLength = sizeof(request) - 1;
+    constexpr DWORD requestLength = sizeof(StopCommand) - 1;
+    char request[requestLength];
+    std::copy_n(StopCommand, requestLength, request);
     DWORD transferred = 0;
     DWORD error = transferPipe(pipe.get(), true, request, requestLength, transferred, timer, waitForStop);
     if (error != ERROR_SUCCESS || transferred != requestLength) {
         return windowsFailure(QStringLiteral("发送考试端关闭请求失败"), error == ERROR_SUCCESS ? ERROR_WRITE_FAULT : error);
     }
+    constexpr int maxReplyLength = sizeof(StopRejected) - 1;
     QByteArray reply;
-    while (reply.size() < 4 && !reply.contains('\n')) {
-        char buffer[4];
+    while (reply.size() < maxReplyLength && !reply.contains('\n')) {
+        char buffer[maxReplyLength];
         error = transferPipe(pipe.get(), false, buffer, sizeof(buffer), transferred, timer, waitForStop);
         if (error != ERROR_SUCCESS || transferred == 0) {
             return windowsFailure(QStringLiteral("读取考试端关闭响应失败"), error == ERROR_SUCCESS ? ERROR_BROKEN_PIPE : error);
         }
         reply.append(buffer, static_cast<int>(transferred));
     }
-    return reply == "OK\n" ? QString() : QStringLiteral("考试端未确认关闭请求");
+    return reply == StopAccepted ? QString() : QStringLiteral("考试端未确认关闭请求");
 }
 
 CommandResult stopApp(const Command &command, const WaitForStop &waitForStop)
@@ -242,32 +241,39 @@ CommandResult stopApp(const Command &command, const WaitForStop &waitForStop)
 
 CommandResult relayWake(const Command &command, const NetworkIdentity &network, const WaitForStop &waitForStop)
 {
+    struct WakePacket {
+        QByteArray bytes;
+        bool sent = false;
+    };
+
     QUdpSocket socket;
     const QHostAddress directed = broadcastAddress(network.localIp, network.prefixLength);
     const QHostAddress limited(QHostAddress::Broadcast);
-    QVector<QByteArray> packets;
+    QVector<WakePacket> packets;
     for (const QString &mac : command.macs) {
         const QByteArray packet = magicPacket(mac);
         if (!packet.isEmpty()) {
-            packets.append(packet);
+            packets.append(WakePacket{packet});
         }
     }
     if (!directed.isNull()) {
         socket.bind(network.localIp, 0);
     }
-    QVector<bool> sent(packets.size(), false);
     for (int round = 0; round < 3; ++round) {
         if (waitForStop(round == 0 ? 0 : 100)) {
             return {command.id, false, QStringLiteral("终端服务正在停止")};
         }
-        for (int index = 0; index < packets.size(); ++index) {
-            const QByteArray &packet = packets.at(index);
-            const bool sentDirected = !directed.isNull() && socket.writeDatagram(packet, directed, 9) == packet.size();
-            const bool sentLimited = socket.writeDatagram(packet, limited, 9) == packet.size();
-            sent[index] = sent.at(index) || sentDirected || sentLimited;
+        for (WakePacket &packet : packets) {
+            const bool sentDirected = !directed.isNull()
+                    && socket.writeDatagram(packet.bytes, directed, 9) == packet.bytes.size();
+            const bool sentLimited = socket.writeDatagram(packet.bytes, limited, 9) == packet.bytes.size();
+            packet.sent = packet.sent || sentDirected || sentLimited;
         }
     }
-    return {command.id, true, QStringLiteral("已发送 %1 个").arg(std::count(sent.cbegin(), sent.cend(), true))};
+    const auto sent = std::count_if(packets.cbegin(), packets.cend(), [](const WakePacket &packet) {
+        return packet.sent;
+    });
+    return {command.id, true, QStringLiteral("已发送 %1 个").arg(sent)};
 }
 
 } // namespace

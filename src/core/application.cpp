@@ -193,7 +193,7 @@ bool Application::startMainWindow()
     }
 
 #ifdef Q_OS_WIN
-    if (!m_controlPipe.start(this, [this]() { requestControlledExit(QStringLiteral("UMTerminalService")); })) {
+    if (!m_controlPipe.start(this, [this] { requestControlledExit(); })) {
         m_logger->errorEvent("启动考试端关闭管道失败");
     }
 #endif
@@ -262,16 +262,17 @@ bool Application::requestSafeExit(QWidget* parent, const QString& source)
     return false;
 }
 
-void Application::requestControlledExit(const QString& source)
+#ifdef Q_OS_WIN
+void Application::requestControlledExit()
 {
     if (m_shutdownRequested) {
         return;
     }
 
-    Logger* logger = m_logger ? m_logger : &Logger::instance();
-    logger->appEvent(QString("收到服务关闭请求，来源: %1").arg(source));
+    m_logger->appEvent(QStringLiteral("收到服务关闭请求，来源: UMTerminalService"));
     quitAfterExitRequest();
 }
+#endif
 
 void Application::quitAfterExitRequest()
 {

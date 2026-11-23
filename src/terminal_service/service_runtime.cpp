@@ -57,15 +57,10 @@ ServiceRuntime::~ServiceRuntime()
     if (m_worker) {
         m_worker->wait();
         delete m_worker;
-        m_state.updateResult(m_activeResult);
-        m_stateDirty = true;
-        logResult(m_activeResult);
+        updateCommandResult(m_activeResult);
     }
     if (m_powerCommand) {
-        const CommandResult interrupted{m_powerCommand->id, false, QStringLiteral("终端服务正在停止")};
-        m_state.updateResult(interrupted);
-        m_stateDirty = true;
-        logResult(interrupted);
+        updateCommandResult({m_powerCommand->id, false, QStringLiteral("终端服务正在停止")});
     }
     saveState();
 }
@@ -239,23 +234,24 @@ void ServiceRuntime::processQueuedCommands()
         }
         m_commands.dequeue();
 
-        if (expired) {
+        if (expired || power) {
             logResult(initialResult);
-        } else if (power) {
-            logResult(initialResult);
-            m_powerCommand = command;
-            m_tick.stop();
-            sendNextRequest();
-        } else {
-            m_activeCommandId = command.id;
-            m_activeResult = initialResult;
-            const NetworkIdentity network = m_network;
-            m_worker = QThread::create([this, command, network] {
-                m_activeResult = executeAppOrWake(command, m_config, network, m_waitForStop);
-            });
-            connect(m_worker, &QThread::finished, this, &ServiceRuntime::finishWorker);
-            m_worker->start();
+            if (power) {
+                m_powerCommand = command;
+                m_tick.stop();
+                sendNextRequest();
+            }
+            continue;
         }
+
+        m_activeCommandId = command.id;
+        m_activeResult = initialResult;
+        const NetworkIdentity network = m_network;
+        m_worker = QThread::create([this, command, network] {
+            m_activeResult = executeAppOrWake(command, m_config, network, m_waitForStop);
+        });
+        connect(m_worker, &QThread::finished, this, &ServiceRuntime::finishWorker);
+        m_worker->start();
     }
 }
 
@@ -264,9 +260,7 @@ void ServiceRuntime::finishWorker()
     m_worker->wait();
     m_worker->deleteLater();
     m_worker = nullptr;
-    m_state.updateResult(m_activeResult);
-    m_stateDirty = true;
-    logResult(m_activeResult);
+    updateCommandResult(m_activeResult);
     m_activeResult = {};
     m_activeCommandId.clear();
     saveState();
@@ -288,11 +282,15 @@ void ServiceRuntime::finishPowerCommand()
         m_commands.clear();
         return;
     }
-    const CommandResult failure{command.id, false, QStringLiteral("电源操作失败（Windows 错误 %1）").arg(error)};
-    m_state.updateResult(failure);
-    m_stateDirty = true;
-    logResult(failure);
+    updateCommandResult({command.id, false, windowsFailure(QStringLiteral("电源操作失败"), error)});
     saveState();
+}
+
+void ServiceRuntime::updateCommandResult(const CommandResult &result)
+{
+    m_state.updateResult(result);
+    m_stateDirty = true;
+    logResult(result);
 }
 
 bool ServiceRuntime::saveState()

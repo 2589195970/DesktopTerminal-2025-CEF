@@ -22,6 +22,7 @@ Unicode true
 !define TERMINAL_SERVICE "UMTerminalService"
 !define TERMINAL_SERVICE_EXE "DesktopTerminalService.exe"
 !define TERMINAL_SERVICE_DISPLAY "UM 考场终端服务"
+!define TERMINAL_SERVICE_OPTIONS `binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
 
 ; CEF版本信息（将在构建时由GitHub Actions设置）
 !ifndef CEF_VERSION
@@ -261,9 +262,12 @@ Var /GLOBAL InstallLogHandle
 
 !define Log "!insertmacro LOG_MSG"
 
-!macro TERMINAL_COMMAND _NAME _COMMAND
+!macro EXEC_TERMINAL_COMMAND _COMMAND
     nsExec::ExecToLog /TIMEOUT=40000 `${_COMMAND}`
     Pop $TerminalServiceResult
+!macroend
+
+!macro LOG_TERMINAL_RESULT _NAME
     ${If} $TerminalServiceResult == 0
         ${Log} "${_NAME} succeeded (0)"
     ${Else}
@@ -271,21 +275,21 @@ Var /GLOBAL InstallLogHandle
     ${EndIf}
 !macroend
 
+!macro TERMINAL_COMMAND _NAME _COMMAND
+    !insertmacro EXEC_TERMINAL_COMMAND `${_COMMAND}`
+    !insertmacro LOG_TERMINAL_RESULT "${_NAME}"
+!macroend
+
 !define TerminalCommand "!insertmacro TERMINAL_COMMAND"
 
 !macro STOP_TERMINAL_SERVICE
-    nsExec::ExecToLog /TIMEOUT=40000 '"$SYSDIR\sc.exe" stop ${TERMINAL_SERVICE}'
-    Pop $TerminalServiceResult
+    !insertmacro EXEC_TERMINAL_COMMAND `"$SYSDIR\sc.exe" stop ${TERMINAL_SERVICE}`
     ${If} $TerminalServiceResult == 1060
         ${Log} "sc stop: service does not exist (1060)"
     ${ElseIf} $TerminalServiceResult == 1062
         ${Log} "sc stop: service is already stopped (1062)"
     ${Else}
-        ${If} $TerminalServiceResult == 0
-            ${Log} "sc stop succeeded (0)"
-        ${Else}
-            ${Log} "sc stop failed ($TerminalServiceResult)"
-        ${EndIf}
+        !insertmacro LOG_TERMINAL_RESULT "sc stop"
         ${TerminalCommand} "wait for ${TERMINAL_SERVICE} to stop" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; (Get-Service -Name '${TERMINAL_SERVICE}').WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))"`
     ${EndIf}
 !macroend
@@ -294,6 +298,13 @@ Var /GLOBAL InstallLogHandle
     SetShellVarContext all
     StrCpy $TerminalDataDir "$APPDATA\UMTerminal"
     SetShellVarContext current
+!macroend
+
+!macro TERMINAL_ACL _NAME _OPTIONS
+    ${TerminalCommand} "${_NAME}" `"$SYSDIR\icacls.exe" "$TerminalDataDir" /L ${_OPTIONS}`
+    ${If} $TerminalServiceResult != 0
+        Return
+    ${EndIf}
 !macroend
 
 Function InstallTerminalService
@@ -313,14 +324,8 @@ Function InstallTerminalService
         Return
     ${EndIf}
 
-    ${TerminalCommand} "icacls terminal directory" `"$SYSDIR\icacls.exe" "$TerminalDataDir" /L /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`
-    ${If} $TerminalServiceResult != 0
-        Return
-    ${EndIf}
-    ${TerminalCommand} "icacls terminal directory owner" `"$SYSDIR\icacls.exe" "$TerminalDataDir" /L /setowner "*S-1-5-32-544"`
-    ${If} $TerminalServiceResult != 0
-        Return
-    ${EndIf}
+    !insertmacro TERMINAL_ACL "icacls terminal directory" `/inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`
+    !insertmacro TERMINAL_ACL "icacls terminal directory owner" `/setowner "*S-1-5-32-544"`
 
     ; 使用 UTF-8 写入完整 INI，保留域账户和安装路径中的中文。
     InitPluginsDir
@@ -349,17 +354,16 @@ Function InstallTerminalService
         Return
     ${EndIf}
 
-    nsExec::ExecToLog /TIMEOUT=40000 '"$SYSDIR\sc.exe" query ${TERMINAL_SERVICE}'
-    Pop $TerminalServiceResult
-    ${If} $TerminalServiceResult == 0
-        ${Log} "sc query succeeded (0)"
-        ${TerminalCommand} "sc config" `"$SYSDIR\sc.exe" config ${TERMINAL_SERVICE} binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
-    ${ElseIf} $TerminalServiceResult == 1060
+    !insertmacro EXEC_TERMINAL_COMMAND `"$SYSDIR\sc.exe" query ${TERMINAL_SERVICE}`
+    ${If} $TerminalServiceResult == 1060
         ${Log} "sc query: service does not exist (1060)"
-        ${TerminalCommand} "sc create" `"$SYSDIR\sc.exe" create ${TERMINAL_SERVICE} binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
+        ${TerminalCommand} "sc create" `"$SYSDIR\sc.exe" create ${TERMINAL_SERVICE} ${TERMINAL_SERVICE_OPTIONS}`
     ${Else}
-        ${Log} "sc query failed ($TerminalServiceResult)"
-        Return
+        !insertmacro LOG_TERMINAL_RESULT "sc query"
+        ${If} $TerminalServiceResult != 0
+            Return
+        ${EndIf}
+        ${TerminalCommand} "sc config" `"$SYSDIR\sc.exe" config ${TERMINAL_SERVICE} ${TERMINAL_SERVICE_OPTIONS}`
     ${EndIf}
     ${If} $TerminalServiceResult != 0
         Return
