@@ -67,10 +67,6 @@ ServiceRuntime::~ServiceRuntime()
 
 void ServiceRuntime::start()
 {
-    if (m_config.sample) {
-        log(QStringLiteral("终端服务以样机模式运行"));
-        return;
-    }
     log(QStringLiteral("终端服务已启动"));
     if (m_state.regToken.isEmpty()) {
         m_state.ensureRegToken();

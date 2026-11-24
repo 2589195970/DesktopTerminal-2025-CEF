@@ -15,7 +15,6 @@ struct Config {
     int slid = 0;
     QString appPath;
     QString examAccount;
-    bool sample = false;
 
     static bool load(const QString &path, Config &config, QString &error);
 };

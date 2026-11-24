@@ -94,7 +94,6 @@ bool Config::load(const QString &path, Config &config, QString &error)
         }
     }
     Config loaded;
-    loaded.sample = values.value(QStringLiteral("mode/sample")).toInt() == 1;
     loaded.serverUrl = QUrl(values.value(QStringLiteral("server/url")), QUrl::StrictMode);
     loaded.slid = values.value(QStringLiteral("server/slid")).toInt();
     loaded.appPath = values.value(QStringLiteral("app/path"));
@@ -103,10 +102,10 @@ bool Config::load(const QString &path, Config &config, QString &error)
         error = QStringLiteral("读取 service.ini 失败");
         return false;
     }
-    if (!loaded.sample && (!loaded.serverUrl.isValid() || loaded.serverUrl.host().isEmpty()
+    if (!loaded.serverUrl.isValid() || loaded.serverUrl.host().isEmpty()
             || loaded.serverUrl.scheme() != QStringLiteral("https")
             || !loaded.serverUrl.userInfo().isEmpty() || loaded.serverUrl.hasQuery()
-            || loaded.serverUrl.hasFragment() || loaded.slid <= 0)) {
+            || loaded.serverUrl.hasFragment() || loaded.slid <= 0) {
         error = QStringLiteral("service.ini 需要有效的 HTTPS 服务器地址和学校实例标识");
         return false;
     }

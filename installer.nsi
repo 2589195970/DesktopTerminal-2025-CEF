@@ -126,20 +126,63 @@ Function .onInit
     ${EndIf}
     
     ; 交互安装和静默安装共用考试端默认配置。
-    StrCpy $ConfigURL "http://wsyjxt.sdmpu.edu.cn/stu"
     StrCpy $ConfigPassword "sdzdf.com"
     StrCpy $RequirePassword "1"
     StrCpy $CefProcessMode "multi"
 
+    ReadINIStr $TerminalURL "$EXEDIR\school-config.ini" "school" "terminalUrl"
+    ReadINIStr $TerminalSlid "$EXEDIR\school-config.ini" "school" "slid"
+    ReadINIStr $ConfigURL "$EXEDIR\school-config.ini" "school" "examUrl"
+
     ${GetParameters} $R0
-    ${GetOptions} $R0 "/TERMINAL_URL=" $TerminalURL
-    ${GetOptions} $R0 "/SLID=" $TerminalSlid
+    ; 以空格分隔参数，保留 URL 中的斜杠。
+    ${GetOptions} " $R0" " /TERMINAL_URL=" $R1
+    ${IfNot} ${Errors}
+        StrCpy $TerminalURL $R1
+    ${EndIf}
+    ${GetOptions} " $R0" " /SLID=" $R1
+    ${IfNot} ${Errors}
+        StrCpy $TerminalSlid $R1
+    ${EndIf}
     ${GetOptions} $R0 "/EXAM_ACCOUNT=" $ExamAccount
     ${GetOptions} $R0 "/SAMPLE=" $R1
     StrCpy $SampleMode "0"
     ${If} $R1 == "1"
         StrCpy $SampleMode "1"
     ${EndIf}
+
+    Push $TerminalURL
+    Call TrimSchoolConfigValue
+    Pop $TerminalURL
+    Push $TerminalSlid
+    Call TrimSchoolConfigValue
+    Pop $TerminalSlid
+    Push $ConfigURL
+    Call TrimSchoolConfigValue
+    Pop $ConfigURL
+FunctionEnd
+
+Function TrimSchoolConfigValue
+    Exch $0
+    Push $1
+    ${Do}
+        StrCpy $1 $0 1
+        ${If} $1 != " "
+        ${AndIf} $1 != "$\t"
+            ${ExitDo}
+        ${EndIf}
+        StrCpy $0 $0 "" 1
+    ${Loop}
+    ${Do}
+        StrCpy $1 $0 1 -1
+        ${If} $1 != " "
+        ${AndIf} $1 != "$\t"
+            ${ExitDo}
+        ${EndIf}
+        StrCpy $0 $0 -1
+    ${Loop}
+    Pop $1
+    Exch $0
 FunctionEnd
 
 ; ─────────────────────────────────────────────
@@ -157,38 +200,38 @@ Function ConfigPage
     ${NSD_CreateText} 36% 16u 64% 13u "$ConfigURL"
     Pop $URLText
 
-    ${NSD_CreateLabel} 0 35u 35% 12u "退出密码"
+    ${NSD_CreateLabel} 0 33u 35% 12u "退出密码"
     Pop $0
-    ${NSD_CreatePassword} 36% 33u 64% 13u "$ConfigPassword"
+    ${NSD_CreatePassword} 36% 31u 64% 13u "$ConfigPassword"
     Pop $PasswordText
 
-    ${NSD_CreateLabel} 0 52u 35% 12u "后端 API 地址（可选）"
+    ${NSD_CreateLabel} 0 48u 35% 12u "后端 API 地址（可选）"
     Pop $0
-    ${NSD_CreateText} 36% 50u 64% 13u "$ConfigApiBaseUrl"
+    ${NSD_CreateText} 36% 46u 64% 13u "$ConfigApiBaseUrl"
     Pop $ApiBaseUrlText
 
-    ${NSD_CreateLabel} 0 69u 35% 12u "终端管理地址"
+    ${NSD_CreateLabel} 0 63u 35% 12u "终端管理地址"
     Pop $0
-    ${NSD_CreateText} 36% 67u 64% 13u "$TerminalURL"
+    ${NSD_CreateText} 36% 61u 64% 13u "$TerminalURL"
     Pop $TerminalURLText
 
-    ${NSD_CreateLabel} 0 86u 35% 12u "学校实例号（slid）"
+    ${NSD_CreateLabel} 0 78u 35% 12u "学校实例号（slid）"
     Pop $0
-    ${NSD_CreateText} 36% 84u 64% 13u "$TerminalSlid"
+    ${NSD_CreateText} 36% 76u 64% 13u "$TerminalSlid"
     Pop $TerminalSlidText
 
-    ${NSD_CreateLabel} 0 103u 35% 12u "考试 Windows 账户"
+    ${NSD_CreateLabel} 0 93u 35% 12u "考试 Windows 账户"
     Pop $0
-    ${NSD_CreateText} 36% 101u 64% 13u "$ExamAccount"
+    ${NSD_CreateText} 36% 91u 64% 13u "$ExamAccount"
     Pop $ExamAccountText
 
-    ${NSD_CreateLabel} 0 121u 24% 12u "运行模式"
+    ${NSD_CreateLabel} 0 107u 24% 12u "运行模式"
     Pop $0
-    ${NSD_CreateRadioButton} 25% 120u 25% 12u "智能模式"
+    ${NSD_CreateRadioButton} 25% 106u 25% 12u "智能模式"
     Pop $CefProcessModeAutoRadio
-    ${NSD_CreateRadioButton} 50% 120u 25% 12u "普通版本"
+    ${NSD_CreateRadioButton} 50% 106u 25% 12u "普通版本"
     Pop $CefProcessModeSingleRadio
-    ${NSD_CreateRadioButton} 75% 120u 25% 12u "高性能版本"
+    ${NSD_CreateRadioButton} 75% 106u 25% 12u "高性能版本"
     Pop $CefProcessModeMultiRadio
     ${If} $CefProcessMode == "auto"
         ${NSD_Check} $CefProcessModeAutoRadio
@@ -198,11 +241,11 @@ Function ConfigPage
         ${NSD_Check} $CefProcessModeMultiRadio
     ${EndIf}
 
-    ${NSD_CreateCheckbox} 0 140u 70% 12u "敏感操作需要密码验证（F10 退出等）"
+    ${NSD_CreateCheckbox} 0 118u 100% 11u "敏感操作需要密码验证（F10 退出等）"
     Pop $RequirePasswordCheckbox
     ${NSD_SetState} $RequirePasswordCheckbox $RequirePassword
 
-    ${NSD_CreateCheckbox} 72% 140u 28% 12u "样机模式"
+    ${NSD_CreateCheckbox} 0 129u 100% 11u "样机模式（只安装，不启动服务）"
     Pop $SampleModeCheckbox
     ${NSD_SetState} $SampleModeCheckbox $SampleMode
 
@@ -338,13 +381,10 @@ Function InstallTerminalService
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", w r0)'
     StrCpy $0 $ExamAccount
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", w r0)'
-    StrCpy $0 $SampleMode
-    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SAMPLE", w r0)'
     ${TerminalCommand} "write service.ini" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\write-terminal-service-config.ps1" -DataDirectory "$TerminalDataDir" -AppPath "$INSTDIR\${TERMINAL_APP}"`
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", p 0)'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", p 0)'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", p 0)'
-    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SAMPLE", p 0)'
     ${If} $TerminalServiceResult != 0
         Return
     ${EndIf}
@@ -371,7 +411,9 @@ Function InstallTerminalService
 
     ${TerminalCommand} "sc failure" `"$SYSDIR\sc.exe" failure ${TERMINAL_SERVICE} reset= 86400 actions= restart/60000/restart/60000/restart/300000`
     ${TerminalCommand} "sc description" `"$SYSDIR\sc.exe" description ${TERMINAL_SERVICE} "考场终端注册、状态上报及考试端管理"`
-    ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
+    ${If} $SampleMode != "1"
+        ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
+    ${EndIf}
 FunctionEnd
 
 ; ─────────────────────────────────────────────

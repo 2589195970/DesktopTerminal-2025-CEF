@@ -188,16 +188,14 @@ int runTerminal(bool console)
     }
 
     QLockFile lock(data.filePath(QStringLiteral("state.json.lock")));
-    if (!config.sample) {
-        lock.setStaleLockTime(0);
-        if (!lock.tryLock(0)) {
-            terminal::writeServiceLog(directory, QStringLiteral("无法锁定 state.json，检查是否已有服务或控制台实例"));
-            return 1;
-        }
-        if (!terminal::State::load(data.filePath(QStringLiteral("state.json")), state, error)) {
-            terminal::writeServiceLog(directory, QStringLiteral("读取 state.json 失败：%1").arg(error));
-            return 1;
-        }
+    lock.setStaleLockTime(0);
+    if (!lock.tryLock(0)) {
+        terminal::writeServiceLog(directory, QStringLiteral("无法锁定 state.json，检查是否已有服务或控制台实例"));
+        return 1;
+    }
+    if (!terminal::State::load(data.filePath(QStringLiteral("state.json")), state, error)) {
+        terminal::writeServiceLog(directory, QStringLiteral("读取 state.json 失败：%1").arg(error));
+        return 1;
     }
 
     QTimer stopCheck;

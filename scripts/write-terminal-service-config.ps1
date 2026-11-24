@@ -29,9 +29,7 @@ $lines = @(
     "slid=$env:DTCEF_TERMINAL_SLID",
     "[app]",
     "path=$AppPath",
-    "examAccount=$env:DTCEF_TERMINAL_EXAM_ACCOUNT",
-    "[mode]",
-    "sample=$env:DTCEF_TERMINAL_SAMPLE"
+    "examAccount=$env:DTCEF_TERMINAL_EXAM_ACCOUNT"
 )
 $encoding = New-Object System.Text.UTF8Encoding -ArgumentList $false
 
