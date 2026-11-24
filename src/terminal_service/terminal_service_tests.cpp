@@ -20,6 +20,8 @@ private slots:
     void calculateDirectedBroadcast();
     void matchExamAccount();
     void readWindowsConfig();
+    void validateServerUrl_data();
+    void validateServerUrl();
     void persistState();
 };
 
@@ -28,6 +30,11 @@ void TerminalServiceTests::requestsUseContract()
     const QUrl base(QStringLiteral("https://exam.example.org/um/"));
     QCOMPARE(Protocol::registerUrl(base), QUrl(QStringLiteral("https://exam.example.org/um/api/terminal/v1/register")));
     QCOMPARE(Protocol::heartbeatUrl(base), QUrl(QStringLiteral("https://exam.example.org/um/api/terminal/v1/heartbeat")));
+    const QUrl httpBase(QStringLiteral("http://exam.example.org:8080/um/"));
+    QCOMPARE(Protocol::registerUrl(httpBase),
+             QUrl(QStringLiteral("http://exam.example.org:8080/um/api/terminal/v1/register")));
+    QCOMPARE(Protocol::heartbeatUrl(httpBase),
+             QUrl(QStringLiteral("http://exam.example.org:8080/um/api/terminal/v1/heartbeat")));
     const NetworkIdentity network{QHostAddress(QStringLiteral("192.168.124.37")), 24, QStringLiteral("AA:BB:CC:DD:EE:FF")};
     const QJsonObject registration = Protocol::registerRequest(10003, QStringLiteral("token"), QStringLiteral("PC01"),
                                                                network, QStringLiteral("1.0.0"));
@@ -189,6 +196,38 @@ void TerminalServiceTests::readWindowsConfig()
     QCOMPARE(legacyConfig.slid, config.slid);
     QCOMPARE(legacyConfig.appPath, config.appPath);
     QCOMPARE(legacyConfig.examAccount, config.examAccount);
+}
+
+void TerminalServiceTests::validateServerUrl_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<bool>("valid");
+    QTest::newRow("HTTP") << QStringLiteral("http://exam.example.org:8080/um/") << true;
+    QTest::newRow("HTTPS") << QStringLiteral("https://exam.example.org") << true;
+    QTest::newRow("混合大小写 HTTP") << QStringLiteral("HtTp://exam.example.org") << true;
+    QTest::newRow("混合大小写 HTTPS") << QStringLiteral("HtTpS://exam.example.org") << true;
+    QTest::newRow("FTP") << QStringLiteral("ftp://exam.example.org") << false;
+    QTest::newRow("缺少主机名") << QStringLiteral("http:///um") << false;
+}
+
+void TerminalServiceTests::validateServerUrl()
+{
+    QFETCH(QString, url);
+    QFETCH(bool, valid);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile file(dir.filePath(QStringLiteral("service.ini")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray ini = QStringLiteral("[server]\r\nurl=%1\r\nslid=10003\r\n").arg(url).toUtf8();
+    QCOMPARE(file.write(ini), static_cast<qint64>(ini.size()));
+    file.close();
+
+    Config config;
+    QString error;
+    QCOMPARE(Config::load(file.fileName(), config, error), valid);
+    if (valid) {
+        QCOMPARE(config.serverUrl, QUrl(url));
+    }
 }
 
 void TerminalServiceTests::persistState()

@@ -102,11 +102,13 @@ bool Config::load(const QString &path, Config &config, QString &error)
         error = QStringLiteral("读取 service.ini 失败");
         return false;
     }
+    const QString scheme = loaded.serverUrl.scheme();
+    const bool hasSupportedScheme = scheme.compare(QStringLiteral("http"), Qt::CaseInsensitive) == 0
+            || scheme.compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0;
     if (!loaded.serverUrl.isValid() || loaded.serverUrl.host().isEmpty()
-            || loaded.serverUrl.scheme() != QStringLiteral("https")
-            || !loaded.serverUrl.userInfo().isEmpty() || loaded.serverUrl.hasQuery()
+            || !hasSupportedScheme || !loaded.serverUrl.userInfo().isEmpty() || loaded.serverUrl.hasQuery()
             || loaded.serverUrl.hasFragment() || loaded.slid <= 0) {
-        error = QStringLiteral("service.ini 需要有效的 HTTPS 服务器地址和学校实例标识");
+        error = QStringLiteral("service.ini 需要有效的 HTTP 或 HTTPS 服务器地址和学校实例标识");
         return false;
     }
     config = loaded;
