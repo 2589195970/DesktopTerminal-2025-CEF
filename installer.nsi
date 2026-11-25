@@ -6,6 +6,7 @@ Unicode true
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
+!include "WordFunc.nsh"
 !include "WinVer.nsh"
 !include "nsDialogs.nsh"
 
@@ -33,9 +34,11 @@ Unicode true
 !endif
 
 !if "${ARCH}" == "x86"
+  !define VC_MIN_VERSION "14.29.30157.0"
   !define INSTALL_DIR "$PROGRAMFILES32\${COMPANYNAME}\${APPNAME}"
   !define OUTPUT_FILE "Output\DesktopTerminal-CEF-v${APP_VERSION}-${ARCH}-cef${CEF_VERSION}-win7-setup.exe"
 !else
+  !define VC_MIN_VERSION "14.44.35211.0"
   !define INSTALL_DIR "$PROGRAMFILES64\${COMPANYNAME}\${APPNAME}"
   !define OUTPUT_FILE "Output\DesktopTerminal-CEF-v${APP_VERSION}-${ARCH}-cef${CEF_VERSION}-setup.exe"
 !endif
@@ -69,7 +72,8 @@ LangString MSG_InstallDone ${LANG_SIMPCHINESE} "安装完成！桌面快捷方�
 LangString MSG_UninstallDone ${LANG_SIMPCHINESE} "卸载完成，相关文件已全部移除。"
 
 Var /GLOBAL VerificationErrors
-Var /GLOBAL VCInstallerPath
+Var /GLOBAL VCRuntimeReady
+Var /GLOBAL VCRuntimeRebootRequired
 Var /GLOBAL ConfigURL
 Var /GLOBAL ConfigPassword
 Var /GLOBAL ConfigApiBaseUrl
@@ -348,6 +352,88 @@ Var /GLOBAL InstallLogHandle
     ${EndIf}
 !macroend
 
+!macro CHECK_VC_DLL _DLL
+    ${GetFileVersion} "$0\${_DLL}" $3
+    ${If} ${Errors}
+        ${Log} "VC++ ${ARCH}: ${_DLL} is missing or its version cannot be read"
+        StrCpy $VCRuntimeReady "0"
+    ${Else}
+        ${Log} "VC++ ${ARCH}: ${_DLL} version $3, required ${VC_MIN_VERSION}"
+        ${VersionCompare} "$3" "${VC_MIN_VERSION}" $1
+        ${If} $1 == 2
+            StrCpy $VCRuntimeReady "0"
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+Function CheckVCRuntime
+    ; 安装器为 32 位进程。Sysnative 访问 64 位系统库。
+    !if "${ARCH}" == "x64"
+        StrCpy $0 "$WINDIR\Sysnative"
+    !else
+        StrCpy $0 "$SYSDIR"
+    !endif
+    StrCpy $VCRuntimeReady "1"
+    !insertmacro CHECK_VC_DLL "msvcp140.dll"
+    !insertmacro CHECK_VC_DLL "vcruntime140.dll"
+    !if "${ARCH}" == "x64"
+        !insertmacro CHECK_VC_DLL "vcruntime140_1.dll"
+    !endif
+FunctionEnd
+
+!macro RUN_VC_REDIST _MODE
+    ${Log} "VC++ ${ARCH}: running bundled redistributable (/${_MODE})"
+    ClearErrors
+    ExecWait '"$PLUGINSDIR\VC_redist.${ARCH}.exe" /${_MODE} /quiet /norestart /log "$INSTDIR\vc-redist-${_MODE}.log"' $R0
+    ${If} ${Errors}
+        StrCpy $R0 "launch failed"
+    ${EndIf}
+    ${Log} "VC++ ${ARCH}: /${_MODE} result $R0"
+!macroend
+
+Function EnsureVCRuntime
+    StrCpy $VCRuntimeRebootRequired "0"
+    Call CheckVCRuntime
+    ${If} $VCRuntimeReady == "1"
+        Return
+    ${EndIf}
+
+    ; 从安装包解压到私有临时目录，再运行匹配架构的 Microsoft 安装程序。
+    InitPluginsDir
+    SetOutPath "$PLUGINSDIR"
+    File "resources\dependencies\VC_redist.${ARCH}.exe"
+    SetOutPath "$INSTDIR"
+    !insertmacro RUN_VC_REDIST "install"
+
+    ${If} $R0 == 0
+        Call CheckVCRuntime
+        ${If} $VCRuntimeReady == "1"
+            Return
+        ${EndIf}
+        ; 已注册的同版本运行库可能需要修复丢失的文件。
+        !insertmacro RUN_VC_REDIST "repair"
+    ${EndIf}
+    ${If} $R0 == 0
+    ${OrIf} $R0 == 1638
+        Call CheckVCRuntime
+        ${If} $VCRuntimeReady == "1"
+            Return
+        ${EndIf}
+    ${ElseIf} $R0 == 3010
+    ${OrIf} $R0 == 1641
+        StrCpy $VCRuntimeRebootRequired "1"
+        SetRebootFlag true
+        ${Log} "VC++ ${ARCH}: Windows restart required"
+        Return
+    ${EndIf}
+
+    ${Log} "VC++ ${ARCH}: prerequisite check failed"
+    FileClose $InstallLogHandle
+    MessageBox MB_OK|MB_ICONSTOP "VC++ ${ARCH} 运行库安装或验证失败（返回：$R0）。$\n请查看安装目录中的 install.log 和 vc-redist-*.log。" /SD IDOK
+    SetErrorLevel 1
+    Abort
+FunctionEnd
+
 Function InstallTerminalService
     !insertmacro GET_TERMINAL_DATA_DIR
     ClearErrors
@@ -409,7 +495,9 @@ Function InstallTerminalService
 
     ${TerminalCommand} "sc failure" `"$SYSDIR\sc.exe" failure ${TERMINAL_SERVICE} reset= 86400 actions= restart/60000/restart/60000/restart/300000`
     ${TerminalCommand} "sc description" `"$SYSDIR\sc.exe" description ${TERMINAL_SERVICE} "考场终端注册、状态上报及考试端管理"`
-    ${If} $SampleMode != "1"
+    ${If} $VCRuntimeRebootRequired == "1"
+        ${Log} "Terminal service will start after Windows restart"
+    ${ElseIf} $SampleMode != "1"
         ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
     ${EndIf}
 FunctionEnd
@@ -420,6 +508,9 @@ FunctionEnd
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     !insertmacro LOG_INIT
+
+    Call EnsureVCRuntime
+    SetOutPath "$INSTDIR"
 
     ; 覆盖安装先停止服务，以便替换服务程序并保留终端状态。
     !insertmacro STOP_TERMINAL_SERVICE
@@ -688,8 +779,8 @@ Section "主程序" SecMain
     ; 复制离线运行时安装包
     CreateDirectory "$INSTDIR\resources\dependencies"
     SetOutPath "$INSTDIR\resources\dependencies"
-    File /nonfatal "resources\dependencies\VC_redist.x86.exe"
-    File /nonfatal "resources\dependencies\VC_redist.x64.exe"
+    File "resources\dependencies\VC_redist.x86.exe"
+    File "resources\dependencies\VC_redist.x64.exe"
     File /nonfatal "resources\dependencies\manifest.json"
     ${Log} "✓ 依赖安装包已复制"
 
@@ -809,95 +900,13 @@ Section "主程序" SecMain
     ${Else}
         ${Log} "✅ 所有验证检查通过"
         
-        ; 检查并自动安装VC++运行时（CEF需要）
-        ${Log} "检查Visual C++ Redistributable运行时..."
-        ClearErrors
-        ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
-        ${If} ${Errors}
-            ${Log} "未检测到Visual C++ Redistributable，正在自动安装..."
-            
-            StrCpy $VCInstallerPath ""
-            ${If} "${ARCH}" == "x64"
-                ${If} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x64.exe"
-                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x64.exe"
-                ${ElseIf} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
-                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
-                ${EndIf}
-            ${Else}
-                ${If} ${FileExists} "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
-                    StrCpy $VCInstallerPath "$INSTDIR\resources\dependencies\VC_redist.x86.exe"
-                ${EndIf}
-            ${EndIf}
-            
-            ${If} $VCInstallerPath != ""
-                ${Log} "开始静默安装VC++ Redistributable..."
-                ExecWait '"$VCInstallerPath" /install /quiet /norestart' $R1
-                
-                ${If} $R1 == 0
-                    ${Log} "✓ VC++ Redistributable安装成功"
-                    ClearErrors
-                    ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\${ARCH}" "Version"
-                    ${If} ${Errors}
-                        ${Log} "⚠ 安装后仍无法检测到VC++运行时，可能需要重启系统"
-                    ${Else}
-                        ${Log} "✓ VC++运行时安装验证成功，版本：$R0"
-                    ${EndIf}
-
-                    ; 创建标记文件,告知应用程序安装器已完成VC++安装
-                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
-                    FileWrite $0 "VC++ Redistributable installed by installer$\r$\nVersion: $R0$\r$\nTimestamp: "
-                    FileClose $0
-                    ${Log} "✓ 已创建VC++运行库安装标记文件"
-                ${ElseIf} $R1 == 1638
-                    ${Log} "ℹ VC++ Redistributable已是最新版本"
-                    ; 运行库已安装,同样创建标记文件
-                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
-                    FileWrite $0 "VC++ Redistributable already installed (latest version)$\r$\nReturn code: 1638$\r$\nTimestamp: "
-                    FileClose $0
-                    ${Log} "✓ 已创建VC++运行库安装标记文件"
-                ${ElseIf} $R1 == 3010
-                    ${Log} "✓ VC++ Redistributable安装成功，但需要重启系统"
-                    ; 安装成功,创建标记文件
-                    FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
-                    FileWrite $0 "VC++ Redistributable installed (reboot required)$\r$\nReturn code: 3010$\r$\nTimestamp: "
-                    FileClose $0
-                    ${Log} "✓ 已创建VC++运行库安装标记文件"
-                    MessageBox MB_OK|MB_ICONINFORMATION "VC++ Redistributable安装完成，建议重启系统后运行程序以确保最佳兼容性。" /SD IDOK
-                ${Else}
-                    ${Log} "❌ VC++ Redistributable安装失败，返回码：$R1"
-                    MessageBox MB_YESNO|MB_ICONQUESTION "自动安装VC++ Redistributable失败（错误码：$R1）。$\n$\n程序可能无法正常运行。是否打开Microsoft官网手动下载？" /SD IDNO IDYES manual_vc_download IDNO skip_manual_vc_download
-                    manual_vc_download:
-                        ${If} "${ARCH}" == "x64"
-                            ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-                        ${Else}
-                            ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x86.exe"
-                        ${EndIf}
-                    skip_manual_vc_download:
-                ${EndIf}
-            ${Else}
-                ${Log} "❌ 未找到VC++ Redistributable安装包"
-                MessageBox MB_YESNO|MB_ICONQUESTION "未检测到Visual C++ Redistributable，且离线安装包缺失。$\n$\n程序可能无法运行。是否现在打开Microsoft官网下载？" /SD IDNO IDYES fallback_vc_download IDNO skip_fallback_vc_download
-                fallback_vc_download:
-                    ${If} "${ARCH}" == "x64"
-                        ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-                    ${Else}
-                        ExecShell "open" "https://aka.ms/vs/17/release/vc_redist.x86.exe"
-                    ${EndIf}
-                skip_fallback_vc_download:
-            ${EndIf}
-        ${Else}
-            ${Log} "✓ 检测到Visual C++ Redistributable，版本：$R0"
-            ; 已安装,创建标记文件
-            FileOpen $0 "$INSTDIR\resources\.vcredist_installed" w
-            FileWrite $0 "VC++ Redistributable already installed$\r$\nVersion: $R0$\r$\nTimestamp: "
-            FileClose $0
-            ${Log} "✓ 已创建VC++运行库安装标记文件"
-        ${EndIf}
-        
         Call InstallTerminalService
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}
     !insertmacro LOG_CLOSE
+    ${If} $VCRuntimeRebootRequired == "1"
+        SetErrorLevel 3010
+    ${EndIf}
 SectionEnd
 
 ; ─────────────────────────────────────────────
