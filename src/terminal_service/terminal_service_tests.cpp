@@ -14,6 +14,7 @@ private slots:
     void requestsUseContract();
     void parseRegisterResponses();
     void parseHeartbeatResponses();
+    void parseExamSeatDisplay();
     void deduplicateAndExpireCommands();
     void acknowledgeOnlySentResults();
     void buildMagicPacket();
@@ -63,6 +64,27 @@ void TerminalServiceTests::parseRegisterResponses()
     QCOMPARE(error.error, QStringLiteral("register error"));
     QVERIFY(!Protocol::parseRegister(503, R"({"code":10200,"result":{"terminalCode":"012345678901"}})").valid);
     QVERIFY(!Protocol::parseRegister(200, R"({"code":10200,"result":{}})").valid);
+}
+
+void TerminalServiceTests::parseExamSeatDisplay()
+{
+    const auto waiting = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"WAITING","seatNumber":"002","releaseId":"room-1","validForSeconds":20}}})");
+    QVERIFY(waiting.valid);
+    QCOMPARE(waiting.examSeatDisplay.value("state").toString(), QStringLiteral("WAITING"));
+    QCOMPARE(waiting.examSeatDisplay.value("seatNumber").toString(), QStringLiteral("002"));
+
+    const auto opened = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"LOGIN_OPEN","seatNumber":"002","releaseId":"room-1","validForSeconds":20}}})");
+    QCOMPARE(opened.examSeatDisplay.value("state").toString(), QStringLiteral("LOGIN_OPEN"));
+
+    const auto stale = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"LOGIN_OPEN","seatNumber":"002","releaseId":"room-1","validForSeconds":0}}})");
+    QCOMPARE(stale.examSeatDisplay.value("state").toString(), QStringLiteral("SYNC"));
+
+    const auto unused = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"UNUSED","releaseId":"room-1","validForSeconds":20}}})");
+    QCOMPARE(unused.examSeatDisplay.value("state").toString(), QStringLiteral("UNUSED"));
+    QVERIFY(!unused.examSeatDisplay.contains("seatNumber"));
+
+    const auto ordinary = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[]}})");
+    QVERIFY(ordinary.examSeatDisplay.isEmpty());
 }
 
 void TerminalServiceTests::parseHeartbeatResponses()

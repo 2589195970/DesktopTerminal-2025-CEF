@@ -193,7 +193,11 @@ bool Application::startMainWindow()
     }
 
 #ifdef Q_OS_WIN
-    if (!m_controlPipe.start(this, [this] { requestControlledExit(); })) {
+    if (!m_controlPipe.start(this, [this] { requestControlledExit(); }, [this](const QByteArray &display) {
+        if (m_mainWindow) {
+            m_mainWindow->setExamSeatDisplay(display);
+        }
+    })) {
         m_logger->errorEvent("启动考试端关闭管道失败");
     }
 #endif

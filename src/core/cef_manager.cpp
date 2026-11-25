@@ -10,9 +10,13 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QWidget>
+#include <utility>
 
 #include "cef_browser.h"
 #include "cef_command_line.h"
+#include "cef_cookie.h"
+#include "cef_frame.h"
+#include "cef_request_context.h"
 #include "wrapper/cef_helpers.h"
 
 #ifdef Q_OS_WIN
@@ -20,6 +24,38 @@
 #else
 #include <unistd.h>
 #endif
+
+namespace {
+
+class ManagedStudentLoginReset final : public CefDeleteCookiesCallback {
+public:
+    ManagedStudentLoginReset(CefRefPtr<CefCookieManager> cookies, CefRefPtr<CefFrame> frame,
+                             const CefString& url, std::function<void(bool)> completion)
+        : m_cookies(cookies), m_frame(frame), m_url(url), m_completion(std::move(completion)) {}
+
+    void OnComplete(int /*numDeleted*/) override
+    {
+        if (!m_refreshRequested) {
+            m_refreshRequested = true;
+            if (!m_cookies->DeleteCookies(m_url, "xsRefreshToken", this)) {
+                m_completion(false);
+            }
+            return;
+        }
+        m_frame->LoadURL(m_url);
+        m_completion(true);
+    }
+
+private:
+    CefRefPtr<CefCookieManager> m_cookies;
+    CefRefPtr<CefFrame> m_frame;
+    CefString m_url;
+    std::function<void(bool)> m_completion;
+    bool m_refreshRequested = false;
+    IMPLEMENT_REFCOUNTING(ManagedStudentLoginReset);
+};
+
+} // namespace
 
 CEFManager::CEFManager(Application* app, CefRefPtr<CEFApp> sharedApp, QObject* parent)
     : QObject(parent)
@@ -334,6 +370,24 @@ bool CEFManager::resizeBrowser(int browserId, int width, int height)
 
     m_cefClient->resizeBrowser(width, height);
     return true;
+}
+
+bool CEFManager::resetManagedStudentLogin(const QString& url, std::function<void(bool)> completion)
+{
+    CefRefPtr<CefBrowser> browser = m_cefClient ? m_cefClient->getBrowser() : CefRefPtr<CefBrowser>();
+    if (!browser || url.isEmpty()) {
+        return false;
+    }
+    auto frame = browser->GetMainFrame();
+    auto context = browser->GetHost()->GetRequestContext();
+    CefRefPtr<CefCookieManager> cookies = context ? context->GetCookieManager(nullptr) : CefRefPtr<CefCookieManager>();
+    if (!frame || !cookies) {
+        return false;
+    }
+    frame->LoadURL("about:blank");
+    const CefString examUrl(url.toStdString());
+    return cookies->DeleteCookies(examUrl, "xsToken",
+            new ManagedStudentLoginReset(cookies, frame, examUrl, std::move(completion)));
 }
 
 bool CEFManager::setBrowserZoomLevel(int browserId, double zoomLevel)

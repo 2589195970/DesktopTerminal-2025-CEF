@@ -5,6 +5,7 @@
 #include "../config/config_manager.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDesktopWidget>
 #include <QScreen>
 #include <QGuiApplication>
@@ -17,6 +18,12 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QHotkey>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QMetaObject>
+#include <QPointer>
+#include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
 
@@ -65,6 +72,28 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
 
     // 初始化各个组件
     initializeWindow();
+#ifdef Q_OS_WIN
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    m_examSeatLabel = new QLabel(this);
+    m_examSeatLabel->setTextFormat(Qt::PlainText);
+    m_examSeatLabel->setAlignment(Qt::AlignCenter);
+    m_examSeatLabel->setWordWrap(true);
+    m_examSeatLabel->hide();
+    layout->addWidget(m_examSeatLabel);
+    m_browserHost = new QWidget(this);
+    m_browserHost->setAttribute(Qt::WA_NativeWindow);
+    layout->addWidget(m_browserHost, 1);
+    m_examSeatLease = new QTimer(this);
+    m_examSeatLease->setSingleShot(true);
+    connect(m_examSeatLease, &QTimer::timeout, this, [this] {
+        setExamSeatDisplay(R"({"state":"SYNC"})");
+    });
+    if (QCoreApplication::arguments().contains(QStringLiteral("--managed-exam-seat"))) {
+        setExamSeatDisplay(R"({"state":"SYNC"})");
+    }
+#endif
     initializeCEF();
     initializeHotkeys();
     
@@ -81,6 +110,77 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     setupSecuritySettings();
 
     m_logger->appEvent("SecureBrowser创建完成");
+}
+
+void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
+{
+#ifdef Q_OS_WIN
+    const QJsonObject display = QJsonDocument::fromJson(payload).object();
+    const QString state = display.value(QStringLiteral("state")).toString();
+    const QString seat = display.value(QStringLiteral("seatNumber")).toString();
+    const QString releaseId = display.value(QStringLiteral("releaseId")).toString();
+    const int seconds = display.value(QStringLiteral("validForSeconds")).toInt();
+    m_examSeatPayload = payload;
+    const bool wantsLogin = state == QStringLiteral("LOGIN_OPEN");
+    const bool waiting = state == QStringLiteral("WAITING");
+    const bool unused = state == QStringLiteral("UNUSED");
+    const bool syncing = state == QStringLiteral("SYNC");
+    if (seconds > 0) {
+        m_examSeatLease->start(seconds * 1000);
+    } else {
+        m_examSeatLease->stop();
+    }
+
+    if (!releaseId.isEmpty() && m_examSeatReleaseId != releaseId && m_examSeatResettingId != releaseId
+            && m_cefBrowserCreated && m_cefManager && !unused) {
+        const QPointer<SecureBrowser> window(this);
+        auto complete = [window, releaseId](bool success) {
+            if (window) {
+                QMetaObject::invokeMethod(window.data(), [window, releaseId, success] {
+                    if (window && window->m_examSeatResettingId == releaseId) {
+                        window->m_examSeatResettingId.clear();
+                        if (success) {
+                            window->m_examSeatReleaseId = releaseId;
+                            const QByteArray latest = window->m_examSeatPayload;
+                            window->setExamSeatDisplay(latest);
+                        }
+                    }
+                }, Qt::QueuedConnection);
+            }
+        };
+        if (m_cefManager->resetManagedStudentLogin(m_currentUrl.isEmpty()
+                ? m_configManager->getUrl() : m_currentUrl.toString(), complete)) {
+            m_examSeatResettingId = releaseId;
+        }
+    }
+    if (state.isEmpty() || syncing) {
+        m_examSeatReleaseId.clear();
+        m_examSeatResettingId.clear();
+    }
+    const bool loginOpen = wantsLogin && m_examSeatReleaseId == releaseId;
+
+    m_browserHost->setVisible(state.isEmpty() || loginOpen);
+    m_examSeatLabel->setVisible(!state.isEmpty());
+    if (waiting || unused || syncing || (wantsLogin && !loginOpen)) {
+        m_examSeatLabel->setMinimumHeight(0);
+        m_examSeatLabel->setMaximumHeight(QWIDGETSIZE_MAX);
+        m_examSeatLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        m_examSeatLabel->setStyleSheet(QStringLiteral("background:#f4f7fa;color:#142936;font-size:64px"));
+        if (waiting || wantsLogin) {
+            m_examSeatLabel->setText(QStringLiteral("考试座号 %1\n等待开考").arg(seat));
+        } else {
+            m_examSeatLabel->setText(unused ? QStringLiteral("本场不使用") : QStringLiteral("等待获取考场状态"));
+        }
+    } else if (loginOpen) {
+        m_examSeatLabel->setFixedHeight(44);
+        m_examSeatLabel->setStyleSheet(QStringLiteral("background:#e8f4f3;color:#134e4a;font-size:20px"));
+        m_examSeatLabel->setText(QStringLiteral("考试座号 %1").arg(seat));
+    }
+    layout()->activate();
+    resizeCEFBrowser();
+#else
+    Q_UNUSED(payload);
+#endif
 }
 
 SecureBrowser::~SecureBrowser()
@@ -494,6 +594,12 @@ void SecureBrowser::onBrowserCreated(int browserId)
     m_cefBrowserId = browserId;
     m_logger->appEvent("CEF浏览器创建完成，页面继续加载");
 
+#ifdef Q_OS_WIN
+    if (!m_examSeatPayload.isEmpty()) {
+        const QByteArray latest = m_examSeatPayload;
+        setExamSeatDisplay(latest);
+    }
+#endif
     resizeCEFBrowser();
     m_cefMessageLoopLogCounter = 0;
 
@@ -963,7 +1069,12 @@ void SecureBrowser::createCEFBrowser()
         // 增强诊断：记录创建浏览器前的状态
         m_logger->appEvent(QString("CEF管理器状态检查 - 已初始化: %1").arg(m_cefManager->isInitialized() ? "是" : "否"));
         
-        m_cefBrowserId = m_cefManager->createBrowser(m_windowHandle, initialUrl);
+#ifdef Q_OS_WIN
+        void* parentHandle = reinterpret_cast<void*>(m_browserHost->winId());
+#else
+        void* parentHandle = m_windowHandle;
+#endif
+        m_cefBrowserId = m_cefManager->createBrowser(parentHandle, initialUrl);
         
         if (m_cefBrowserId > 0) {
             m_logger->appEvent(QString("CEF浏览器创建请求已提交，临时ID: %1").arg(m_cefBrowserId));
@@ -991,6 +1102,10 @@ void SecureBrowser::resizeCEFBrowser()
 {
     if (m_cefBrowserCreated) {
         QSize windowSize = size();
+#ifdef Q_OS_WIN
+        if (m_browserHost->isHidden()) return;
+        windowSize = m_browserHost->size();
+#endif
 
         if (!windowSize.isValid()) {
             m_logger->errorEvent("调整CEF浏览器大小失败：当前窗口尺寸无效");
@@ -1018,7 +1133,7 @@ void SecureBrowser::resizeCEFBrowser()
             dpr = 1.0;
         }
 #ifdef Q_OS_WIN
-        HWND hwnd = reinterpret_cast<HWND>(winId());
+        HWND hwnd = reinterpret_cast<HWND>(m_browserHost->winId());
         RECT rc;
         if (hwnd && GetClientRect(hwnd, &rc)) {
             physicalWidth  = rc.right  - rc.left;

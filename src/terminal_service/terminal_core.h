@@ -77,6 +77,7 @@ struct HeartbeatResponse {
     bool codeValid = false;
     QVector<Command> commands;
     QString error;
+    QJsonObject examSeatDisplay;
 };
 
 class Protocol {

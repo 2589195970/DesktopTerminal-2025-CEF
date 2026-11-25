@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <functional>
 
 #include "../cef/cef_app_impl.h"
 #include "../cef/cef_client_impl.h"
@@ -89,6 +90,7 @@ public:
      * @return 成功返回true
      */
     bool resizeBrowser(int browserId, int width, int height);
+    bool resetManagedStudentLogin(const QString& url, std::function<void(bool)> completion);
 
     /**
      * @brief 设置浏览器页面缩放级别

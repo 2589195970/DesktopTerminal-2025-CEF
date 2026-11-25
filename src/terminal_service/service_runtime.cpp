@@ -185,16 +185,18 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QSt
         log(QStringLiteral("心跳失败：%1").arg(transportError.isEmpty() ? response.error : transportError));
         schedule(HeartbeatIntervalMs);
     } else if (!response.codeValid) {
+        publishExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}}, m_waitForStop);
         m_state.terminalCode.clear();
         m_stateDirty = true;
         m_commands.clear();
         log(QStringLiteral("终端码已失效，重新注册"));
         m_tick.start(0);
     } else {
+        publishExamSeatDisplay(response.examSeatDisplay, m_waitForStop);
         for (const Command &command : response.commands) {
             m_commands.enqueue(command);
         }
-        schedule(HeartbeatIntervalMs + QRandomGenerator::global()->bounded(5001));
+        schedule(appIsRunning() ? 5000 : HeartbeatIntervalMs + QRandomGenerator::global()->bounded(5001));
     }
     saveState();
     if (m_powerCommand) {

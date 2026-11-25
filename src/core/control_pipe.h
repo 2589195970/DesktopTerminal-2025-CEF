@@ -2,6 +2,7 @@
 #define CONTROL_PIPE_H
 
 #include <functional>
+#include <QByteArray>
 
 #ifdef _WIN32
 #include "../terminal_service/win_handle.h"
@@ -19,7 +20,8 @@ public:
     ControlPipe(const ControlPipe&) = delete;
     ControlPipe& operator=(const ControlPipe&) = delete;
 
-    bool start(QObject* receiver, std::function<void()> onStop);
+    bool start(QObject* receiver, std::function<void()> onStop,
+               std::function<void(QByteArray)> onExamSeatDisplay);
     void stop();
 
 private:

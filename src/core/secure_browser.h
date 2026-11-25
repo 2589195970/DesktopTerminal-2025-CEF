@@ -2,6 +2,7 @@
 #define SECURE_BROWSER_H
 
 #include <QWidget>
+#include <QByteArray>
 #include <QTimer>
 #include <QKeyEvent>
 #include <QCloseEvent>
@@ -15,6 +16,7 @@ class QHotkey;
 class CEFManager;
 class Logger;
 class ConfigManager;
+class QLabel;
 
 /**
  * @brief 安全浏览器窗口类
@@ -60,6 +62,8 @@ public:
      * @brief 设置键盘过滤器实例
      */
     void setKeyboardFilter(KeyboardFilter* filter);
+
+    void setExamSeatDisplay(const QByteArray &payload);
 
 signals:
     /**
@@ -209,6 +213,14 @@ private:
     bool m_cefBrowserCreated;
     int m_cefBrowserId;
     QUrl m_currentUrl;
+#ifdef Q_OS_WIN
+    QWidget* m_browserHost = nullptr;
+    QLabel* m_examSeatLabel = nullptr;
+    QTimer* m_examSeatLease = nullptr;
+    QString m_examSeatReleaseId;
+    QString m_examSeatResettingId;
+    QByteArray m_examSeatPayload;
+#endif
     QString m_windowTitle;
 
     // 安全设置
