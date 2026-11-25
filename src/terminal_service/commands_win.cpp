@@ -18,6 +18,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace terminal {
 namespace {
@@ -25,6 +27,13 @@ namespace {
 constexpr int PipeTimeoutMs = 5000;
 constexpr int AppExitTimeoutMs = 30000;
 constexpr int StopPollMs = 100;
+constexpr DWORD NoSession = 0xffffffffu;
+
+struct UserSession {
+    DWORD id;
+    QString user;
+    QString domain;
+};
 
 QString sessionText(DWORD sessionId, WTS_INFO_CLASS field)
 {
@@ -38,10 +47,51 @@ QString sessionText(DWORD sessionId, WTS_INFO_CLASS field)
     return QString::fromWCharArray(text.get());
 }
 
-bool sessionMatchesExamAccount(DWORD sessionId, const QString &examAccount)
+std::optional<UserSession> loggedOnSession(DWORD sessionId)
 {
-    return examAccountMatches(examAccount, sessionText(sessionId, WTSUserName),
-                              sessionText(sessionId, WTSDomainName));
+    const QString user = sessionText(sessionId, WTSUserName);
+    if (user.isEmpty()) {
+        return std::nullopt;
+    }
+    return UserSession{sessionId, user, sessionText(sessionId, WTSDomainName)};
+}
+
+std::optional<UserSession> findLaunchSession(QString &error)
+{
+    const DWORD consoleId = WTSGetActiveConsoleSessionId();
+    if (consoleId != NoSession && consoleId != 0) {
+        if (auto console = loggedOnSession(consoleId)) {
+            return console;
+        }
+    }
+
+    WTS_SESSION_INFOW *sessions = nullptr;
+    DWORD count = 0;
+    if (!WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessions, &count)) {
+        error = windowsFailure(QStringLiteral("无法枚举 Windows 登录会话"), GetLastError());
+        return std::nullopt;
+    }
+    const std::unique_ptr<WTS_SESSION_INFOW, decltype(&WTSFreeMemory)> sessionList(sessions, WTSFreeMemory);
+    std::optional<UserSession> selected;
+    for (DWORD index = 0; index < count; ++index) {
+        const auto &session = sessionList.get()[index];
+        if (session.SessionId == 0 || session.SessionId == consoleId || session.State != WTSActive) {
+            continue;
+        }
+        auto remote = loggedOnSession(session.SessionId);
+        if (!remote) {
+            continue;
+        }
+        if (selected) {
+            error = QStringLiteral("当前有多个活动的远程桌面会话，无法确定考试端启动位置");
+            return std::nullopt;
+        }
+        selected = std::move(remote);
+    }
+    if (!selected) {
+        error = QStringLiteral("Windows 没有可用的已登录会话");
+    }
+    return selected;
 }
 
 CommandResult startApp(const Command &command, const Config &config)
@@ -49,10 +99,10 @@ CommandResult startApp(const Command &command, const Config &config)
     if (appIsRunning()) {
         return {command.id, true, QStringLiteral("考试端已在运行")};
     }
-    constexpr DWORD NoSession = 0xffffffffu;
-    const DWORD sessionId = WTSGetActiveConsoleSessionId();
-    if (sessionId == NoSession || !sessionMatchesExamAccount(sessionId, config.examAccount)) {
-        return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
+    QString sessionError;
+    const auto session = findLaunchSession(sessionError);
+    if (!session) {
+        return {command.id, false, sessionError};
     }
 
     const QFileInfo app(config.appPath);
@@ -60,19 +110,19 @@ CommandResult startApp(const Command &command, const Config &config)
         return {command.id, false, QStringLiteral("考试端程序路径无效")};
     }
     HANDLE sessionToken = nullptr;
-    if (!WTSQueryUserToken(sessionId, &sessionToken)) {
+    if (!WTSQueryUserToken(session->id, &sessionToken)) {
         const DWORD error = GetLastError();
         if (error == ERROR_NO_TOKEN || error == ERROR_NO_SUCH_LOGON_SESSION) {
-            return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
+            return {command.id, false, QStringLiteral("Windows 没有可用的已登录会话")};
         }
-        return {command.id, false, windowsFailure(QStringLiteral("无法获取考试账户令牌"), error)};
+        return {command.id, false, windowsFailure(QStringLiteral("无法获取登录用户令牌"), error)};
     }
     const WinHandle originalToken(sessionToken);
     TOKEN_ELEVATION_TYPE elevationType{};
     DWORD tokenInfoSize = 0;
     if (!GetTokenInformation(originalToken.get(), TokenElevationType, &elevationType, sizeof(elevationType),
                              &tokenInfoSize)) {
-        return {command.id, false, windowsFailure(QStringLiteral("无法查询考试账户令牌的提权类型"), GetLastError())};
+        return {command.id, false, windowsFailure(QStringLiteral("无法查询用户令牌的提权类型"), GetLastError())};
     }
 
     TOKEN_LINKED_TOKEN linkedTokenInfo{};
@@ -80,25 +130,28 @@ CommandResult startApp(const Command &command, const Config &config)
     if (elevationType == TokenElevationTypeLimited
             && !GetTokenInformation(originalToken.get(), TokenLinkedToken, &linkedTokenInfo, sizeof(linkedTokenInfo),
                                     &tokenInfoSize)) {
-        return {command.id, false, windowsFailure(QStringLiteral("无法获取考试账户关联的完整令牌"), GetLastError())};
+        return {command.id, false, windowsFailure(QStringLiteral("无法获取登录用户的完整令牌"), GetLastError())};
     }
     const WinHandle linkedToken(linkedTokenInfo.LinkedToken);
     const HANDLE launchToken = elevationType == TokenElevationTypeLimited ? linkedToken.get() : originalToken.get();
     HANDLE primaryToken = nullptr;
     if (!DuplicateTokenEx(launchToken, MAXIMUM_ALLOWED, nullptr, SecurityImpersonation, TokenPrimary, &primaryToken)) {
-        return {command.id, false, windowsFailure(QStringLiteral("无法复制考试账户令牌"), GetLastError())};
+        return {command.id, false, windowsFailure(QStringLiteral("无法复制登录用户令牌"), GetLastError())};
     }
     const WinHandle token(primaryToken);
     LPVOID block = nullptr;
     if (!CreateEnvironmentBlock(&block, token.get(), FALSE)) {
-        return {command.id, false, windowsFailure(QStringLiteral("无法创建考试账户环境"), GetLastError())};
+        return {command.id, false, windowsFailure(QStringLiteral("无法创建登录用户环境"), GetLastError())};
     }
     const std::unique_ptr<void, decltype(&DestroyEnvironmentBlock)> environment(block, DestroyEnvironmentBlock);
 
-    // 验证用户名后控制台会话可能切换，启动前再次核对当前会话。
-    if (WTSGetActiveConsoleSessionId() != sessionId
-            || !sessionMatchesExamAccount(sessionId, config.examAccount)) {
-        return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
+    // 获取启动令牌期间会话可能断开或切换，启动前重新检查选择结果。
+    const auto current = findLaunchSession(sessionError);
+    if (!current) {
+        return {command.id, false, sessionError};
+    }
+    if (current->id != session->id || current->user != session->user || current->domain != session->domain) {
+        return {command.id, false, QStringLiteral("Windows 登录会话已变化，请重新下发开启指令")};
     }
     const std::wstring executable = QDir::toNativeSeparators(app.absoluteFilePath()).toStdWString();
     std::wstring commandLine = L"\"" + executable + L"\" --managed-exam-seat";

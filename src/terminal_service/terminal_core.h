@@ -16,7 +16,6 @@ struct Config {
     QUrl serverUrl;
     int slid = 0;
     QString appPath;
-    QString examAccount;
 
     static bool load(const QString &path, Config &config, QString &error);
 };
@@ -98,6 +97,5 @@ public:
 
 QByteArray magicPacket(const QString &mac);
 QHostAddress broadcastAddress(const QHostAddress &localIp, int prefixLength);
-bool examAccountMatches(const QString &examAccount, const QString &user, const QString &domain);
 
 } // namespace terminal

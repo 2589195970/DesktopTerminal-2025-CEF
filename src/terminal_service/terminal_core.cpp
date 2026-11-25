@@ -69,7 +69,7 @@ bool Config::load(const QString &path, Config &config, QString &error)
         error = file.errorString();
         return false;
     }
-    // Windows INI 中的反斜杠是路径和账户名的一部分，按原文读取。
+    // Windows INI 中的反斜杠是路径的一部分，按原文读取。
     QTextStream ini(&file);
     ini.setCodec("UTF-8");
     QHash<QString, QString> values;
@@ -97,7 +97,6 @@ bool Config::load(const QString &path, Config &config, QString &error)
     loaded.serverUrl = QUrl(values.value(QStringLiteral("server/url")), QUrl::StrictMode);
     loaded.slid = values.value(QStringLiteral("server/slid")).toInt();
     loaded.appPath = values.value(QStringLiteral("app/path"));
-    loaded.examAccount = values.value(QStringLiteral("app/examaccount"));
     if (ini.status() != QTextStream::Ok || file.error() != QFileDevice::NoError) {
         error = QStringLiteral("读取 service.ini 失败");
         return false;
@@ -396,18 +395,6 @@ QHostAddress broadcastAddress(const QHostAddress &localIp, int prefixLength)
     }
     const quint32 hostMask = prefixLength == 32 ? 0 : (0xffffffffu >> prefixLength);
     return QHostAddress(localIp.toIPv4Address() | hostMask);
-}
-
-bool examAccountMatches(const QString &examAccount, const QString &user, const QString &domain)
-{
-    if (user.isEmpty()) {
-        return false;
-    }
-    if (examAccount.isEmpty()) {
-        return true;
-    }
-    const QString loggedIn = examAccount.contains('\\') ? domain + '\\' + user : user;
-    return examAccount.compare(loggedIn, Qt::CaseInsensitive) == 0;
 }
 
 } // namespace terminal

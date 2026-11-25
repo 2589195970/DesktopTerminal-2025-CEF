@@ -81,7 +81,6 @@ Var /GLOBAL RequirePassword
 Var /GLOBAL CefProcessMode
 Var /GLOBAL TerminalURL
 Var /GLOBAL TerminalSlid
-Var /GLOBAL ExamAccount
 Var /GLOBAL SampleMode
 Var /GLOBAL TerminalDataDir
 Var /GLOBAL TerminalServiceResult
@@ -95,7 +94,6 @@ Var /GLOBAL CefProcessModeSingleRadio
 Var /GLOBAL CefProcessModeMultiRadio
 Var /GLOBAL TerminalURLText
 Var /GLOBAL TerminalSlidText
-Var /GLOBAL ExamAccountText
 Var /GLOBAL SampleModeCheckbox
 Var /GLOBAL ConfigPatchResult
 Var /GLOBAL OpenSslRuntimeReady
@@ -146,7 +144,6 @@ Function .onInit
     ${IfNot} ${Errors}
         StrCpy $TerminalSlid $R1
     ${EndIf}
-    ${GetOptions} $R0 "/EXAM_ACCOUNT=" $ExamAccount
     ${GetOptions} $R0 "/SAMPLE=" $R1
     StrCpy $SampleMode "0"
     ${If} $R1 == "1"
@@ -222,18 +219,13 @@ Function ConfigPage
     ${NSD_CreateText} 36% 76u 64% 13u "$TerminalSlid"
     Pop $TerminalSlidText
 
-    ${NSD_CreateLabel} 0 93u 35% 12u "考试 Windows 账户"
+    ${NSD_CreateLabel} 0 92u 24% 12u "运行模式"
     Pop $0
-    ${NSD_CreateText} 36% 91u 64% 13u "$ExamAccount"
-    Pop $ExamAccountText
-
-    ${NSD_CreateLabel} 0 107u 24% 12u "运行模式"
-    Pop $0
-    ${NSD_CreateRadioButton} 25% 106u 25% 12u "智能模式"
+    ${NSD_CreateRadioButton} 25% 91u 25% 12u "智能模式"
     Pop $CefProcessModeAutoRadio
-    ${NSD_CreateRadioButton} 50% 106u 25% 12u "普通版本"
+    ${NSD_CreateRadioButton} 50% 91u 25% 12u "普通版本"
     Pop $CefProcessModeSingleRadio
-    ${NSD_CreateRadioButton} 75% 106u 25% 12u "高性能版本"
+    ${NSD_CreateRadioButton} 75% 91u 25% 12u "高性能版本"
     Pop $CefProcessModeMultiRadio
     ${If} $CefProcessMode == "auto"
         ${NSD_Check} $CefProcessModeAutoRadio
@@ -243,11 +235,11 @@ Function ConfigPage
         ${NSD_Check} $CefProcessModeMultiRadio
     ${EndIf}
 
-    ${NSD_CreateCheckbox} 0 118u 100% 11u "敏感操作需要密码验证（F10 退出等）"
+    ${NSD_CreateCheckbox} 0 103u 100% 11u "敏感操作需要密码验证（F10 退出等）"
     Pop $RequirePasswordCheckbox
     ${NSD_SetState} $RequirePasswordCheckbox $RequirePassword
 
-    ${NSD_CreateCheckbox} 0 129u 100% 11u "样机模式（只安装，不启动服务）"
+    ${NSD_CreateCheckbox} 0 114u 100% 11u "样机模式（只安装，不启动服务）"
     Pop $SampleModeCheckbox
     ${NSD_SetState} $SampleModeCheckbox $SampleMode
 
@@ -260,7 +252,6 @@ Function ConfigPageLeave
     ${NSD_GetText} $ApiBaseUrlText $ConfigApiBaseUrl
     ${NSD_GetText} $TerminalURLText $TerminalURL
     ${NSD_GetText} $TerminalSlidText $TerminalSlid
-    ${NSD_GetText} $ExamAccountText $ExamAccount
     ${NSD_GetState} $SampleModeCheckbox $SampleMode
     ${NSD_GetState} $RequirePasswordCheckbox $RequirePassword
     ${NSD_GetState} $CefProcessModeSingleRadio $0
@@ -454,7 +445,7 @@ Function InstallTerminalService
     !insertmacro TERMINAL_ACL "icacls terminal directory" `/inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"`
     !insertmacro TERMINAL_ACL "icacls terminal directory owner" `/setowner "*S-1-5-32-544"`
 
-    ; 使用 UTF-8 写入完整 INI，保留域账户和安装路径中的中文。
+    ; 使用 UTF-8 写入完整 INI，保留安装路径中的中文。
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
     File "scripts\write-terminal-service-config.ps1"
@@ -463,12 +454,9 @@ Function InstallTerminalService
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", w r0)'
     StrCpy $0 $TerminalSlid
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", w r0)'
-    StrCpy $0 $ExamAccount
-    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", w r0)'
     ${TerminalCommand} "write service.ini" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\write-terminal-service-config.ps1" -DataDirectory "$TerminalDataDir" -AppPath "$INSTDIR\${TERMINAL_APP}"`
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", p 0)'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", p 0)'
-    System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_EXAM_ACCOUNT", p 0)'
     ${If} $TerminalServiceResult != 0
         Return
     ${EndIf}

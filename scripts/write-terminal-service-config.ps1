@@ -28,8 +28,7 @@ $lines = @(
     "url=$env:DTCEF_TERMINAL_URL",
     "slid=$env:DTCEF_TERMINAL_SLID",
     "[app]",
-    "path=$AppPath",
-    "examAccount=$env:DTCEF_TERMINAL_EXAM_ACCOUNT"
+    "path=$AppPath"
 )
 $encoding = New-Object System.Text.UTF8Encoding -ArgumentList $false
 

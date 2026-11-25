@@ -19,7 +19,6 @@ private slots:
     void acknowledgeOnlySentResults();
     void buildMagicPacket();
     void calculateDirectedBroadcast();
-    void matchExamAccount();
     void readWindowsConfig();
     void validateServerUrl_data();
     void validateServerUrl();
@@ -183,16 +182,6 @@ void TerminalServiceTests::calculateDirectedBroadcast()
     QVERIFY(broadcastAddress(ip, 33).isNull());
 }
 
-void TerminalServiceTests::matchExamAccount()
-{
-    QVERIFY(examAccountMatches(QStringLiteral("SCHOOL\\EXAM01"), QStringLiteral("exam01"), QStringLiteral("School")));
-    QVERIFY(examAccountMatches(QStringLiteral("Exam01"), QStringLiteral("exam01"), QStringLiteral("School")));
-    QVERIFY(examAccountMatches({}, QStringLiteral("exam01"), {}));
-    QVERIFY(!examAccountMatches(QStringLiteral("OTHER\\exam01"), QStringLiteral("exam01"), QStringLiteral("School")));
-    QVERIFY(!examAccountMatches(QStringLiteral("exam02"), QStringLiteral("exam01"), QStringLiteral("School")));
-    QVERIFY(!examAccountMatches({}, {}, {}));
-}
-
 void TerminalServiceTests::readWindowsConfig()
 {
     QTemporaryDir dir;
@@ -201,7 +190,7 @@ void TerminalServiceTests::readWindowsConfig()
     QFile file(path);
     QVERIFY(file.open(QIODevice::WriteOnly));
     const QByteArray ini = QStringLiteral("[server]\r\nurl=https://exam.example.org\r\nslid=10003\r\n"
-                                          "[app]\r\npath=C:\\软件\\terminal.exe\r\nexamAccount=School\\考试账户\r\n").toUtf8();
+                                          "[app]\r\npath=C:\\软件\\terminal.exe\r\n").toUtf8();
     QCOMPARE(file.write(ini), static_cast<qint64>(ini.size()));
     file.close();
     Config config;
@@ -210,18 +199,16 @@ void TerminalServiceTests::readWindowsConfig()
     QCOMPARE(config.serverUrl, QUrl(QStringLiteral("https://exam.example.org")));
     QCOMPARE(config.slid, 10003);
     QCOMPARE(config.appPath, QStringLiteral("C:\\软件\\terminal.exe"));
-    QCOMPARE(config.examAccount, QStringLiteral("School\\考试账户"));
 
-    const QByteArray legacyMode = "[mode]\r\nsample=1\r\n";
+    const QByteArray legacyOptions = "examAccount=School\\Exam01\r\n[mode]\r\nsample=1\r\n";
     QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Append));
-    QCOMPARE(file.write(legacyMode), static_cast<qint64>(legacyMode.size()));
+    QCOMPARE(file.write(legacyOptions), static_cast<qint64>(legacyOptions.size()));
     file.close();
     Config legacyConfig;
     QVERIFY2(Config::load(path, legacyConfig, error), qPrintable(error));
     QCOMPARE(legacyConfig.serverUrl, config.serverUrl);
     QCOMPARE(legacyConfig.slid, config.slid);
     QCOMPARE(legacyConfig.appPath, config.appPath);
-    QCOMPARE(legacyConfig.examAccount, config.examAccount);
 }
 
 void TerminalServiceTests::validateServerUrl_data()
