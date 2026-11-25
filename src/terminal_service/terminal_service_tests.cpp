@@ -68,14 +68,16 @@ void TerminalServiceTests::parseRegisterResponses()
 
 void TerminalServiceTests::parseExamSeatDisplay()
 {
-    const auto waiting = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"seatNumber":"07","examSeatDisplay":{"state":"WAITING","seatNumber":"002","releaseId":"room-1","validForSeconds":20}}})");
+    const auto waiting = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"seatNumber":"07","examSeatDisplay":{"state":"WAITING","sessionName":" 上午第一场 ","seatNumber":"002","releaseId":"room-1","validForSeconds":20}}})");
     QVERIFY(waiting.valid);
     QCOMPARE(waiting.seatNumber.value_or(QString()), QStringLiteral("07"));
     QCOMPARE(waiting.examSeatDisplay.value("state").toString(), QStringLiteral("WAITING"));
     QCOMPARE(waiting.examSeatDisplay.value("seatNumber").toString(), QStringLiteral("002"));
+    QCOMPARE(waiting.examSeatDisplay.value("sessionName").toString(), QStringLiteral("上午第一场"));
 
     const auto opened = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"LOGIN_OPEN","seatNumber":"002","releaseId":"room-1","validForSeconds":20}}})");
     QCOMPARE(opened.examSeatDisplay.value("state").toString(), QStringLiteral("LOGIN_OPEN"));
+    QVERIFY(!opened.examSeatDisplay.contains("sessionName"));
 
     const auto stale = Protocol::parseHeartbeat(200, R"({"code":10200,"result":{"codeValid":true,"commands":[],"examSeatDisplay":{"state":"LOGIN_OPEN","seatNumber":"002","releaseId":"room-1","validForSeconds":0}}})");
     QCOMPARE(stale.examSeatDisplay.value("state").toString(), QStringLiteral("SYNC"));

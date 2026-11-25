@@ -124,7 +124,12 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     m_examTerminalInfoTimer = new QTimer(this);
     m_examTerminalInfoTimer->setInterval(5000);
     connect(m_examTerminalInfoTimer, &QTimer::timeout, this, [this] {
+        const QSize previousSize = m_browserHost->size();
         m_examTerminalInfo->setText(ExamSeatPage::terminalDetails());
+        this->layout()->activate();
+        if (m_browserHost->size() != previousSize) {
+            resizeCEFBrowser();
+        }
     });
 
     m_examSeatLease = new QTimer(this);
@@ -1096,10 +1101,11 @@ void SecureBrowser::fitManagedExamWindow()
     if (!m_examTerminalInfo || m_examTerminalInfo->isHidden() || !isVisible() || !isFullScreen()) {
         return;
     }
-    const QWindow* window = windowHandle();
+    QWindow* window = windowHandle();
     const QScreen* screen = window ? window->screen() : nullptr;
-    if (screen && geometry() != screen->geometry()) {
-        setGeometry(screen->geometry());
+    if (screen && window->geometry() != screen->geometry()) {
+        // QWidget::setGeometry 会清除 Qt 的全屏状态。
+        window->setGeometry(screen->geometry());
     }
 }
 

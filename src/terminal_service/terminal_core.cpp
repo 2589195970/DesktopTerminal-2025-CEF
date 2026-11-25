@@ -347,6 +347,10 @@ HeartbeatResponse Protocol::parseHeartbeat(int httpStatus, const QByteArray &bod
             response.examSeatDisplay = {{QStringLiteral("state"), state},
                     {QStringLiteral("releaseId"), releaseId},
                     {QStringLiteral("validForSeconds"), seconds}};
+            const QString sessionName = display.value(QStringLiteral("sessionName")).toString().trimmed();
+            if (!sessionName.isEmpty()) {
+                response.examSeatDisplay.insert(QStringLiteral("sessionName"), sessionName);
+            }
             if (state != QStringLiteral("UNUSED")) {
                 response.examSeatDisplay.insert(QStringLiteral("seatNumber"), seatNumber);
             }

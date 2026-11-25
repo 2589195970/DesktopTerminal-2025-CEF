@@ -288,7 +288,13 @@ void publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitF
     if (!appIsRunning()) {
         return;
     }
-    const QByteArray request = QByteArray(ExamSeatPrefix) + QJsonDocument(display).toJson(QJsonDocument::Compact) + '\n';
+    QByteArray request = QByteArray(ExamSeatPrefix) + QJsonDocument(display).toJson(QJsonDocument::Compact) + '\n';
+    if (request.size() > MaxControlMessageBytes && display.contains(QStringLiteral("sessionName"))) {
+        // 场次名称超出管道容量时，仍然发送座号和放行状态。
+        QJsonObject displayWithoutName = display;
+        displayWithoutName.remove(QStringLiteral("sessionName"));
+        request = QByteArray(ExamSeatPrefix) + QJsonDocument(displayWithoutName).toJson(QJsonDocument::Compact) + '\n';
+    }
     if (request.size() <= MaxControlMessageBytes) {
         sendControlRequest(request, waitForStop, false);
     }
