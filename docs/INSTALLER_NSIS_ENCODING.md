@@ -49,11 +49,14 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 3. **输出编码**：补丁脚本使用 `UTF8Encoding(false)` 写出，**无 BOM**（与仓库模板一致）；程序侧已支持跳过 BOM 读取。
 4. **程序侧兜底**：`ConfigManager::loadConfig` 在 Windows 上若 UTF-8 解析失败，会尝试 GB18030 解码（兼容历史错误安装包生成的文件）。
 
+安装器调用系统自带的 Windows PowerShell。遇到配置写入失败时，`install.log` 记录补丁返回值，`resources/install-config-patch.log` 记录脚本启动后的执行结果和出错位置。
+
 ### 修改安装器配置时的检查清单
 
 - [ ] 是否新增/修改了 `FileWrite` 写入含中文或 JSON 的逻辑？若是，改为「UTF-8 模板 + 补丁脚本」。
 - [ ] `resources/config.json` 是否保持 UTF-8（无 BOM 或有 BOM 均可，程序会处理）？
 - [ ] 补丁脚本是否覆盖所有安装页可配置项？
+- [ ] 是否用 Windows PowerShell 运行 `scripts/test-install-config.ps1`？Windows CI 在打包前运行同一测试。
 - [ ] 本地或 CI 打安装包后，是否用十六进制编辑器或 `file` 命令确认 `config.json` 中文段为 UTF-8 三字节序列（非 GBK 双字节）？
 - [ ] 安装后启动程序，确认不再出现 `invalid UTF8 string`。
 
@@ -92,4 +95,3 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 - 本地构建：`scripts/build.bat` 在 Windows 构建后复制 OpenSSL DLL 到主程序目录，Release 构建缺失时失败。
 - 本地打包：`scripts/package.sh` 的 Windows 包会复制 `Qt5Network.dll`、`Qt5Concurrent.dll` 和 OpenSSL DLL。
 - 安装包：`installer.nsi` 安装并校验上述 DLL。
-- 参数传递：用户输入通过环境变量传入补丁脚本，避免命令行转义导致 URL 未写入；失败时 MessageBox 提示，并保留 `config.override.ini` 兜底。日志：`resources/install-config-patch.log`。

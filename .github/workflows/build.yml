@@ -38,6 +38,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v5
 
+    - name: Test installer configuration patch
+      shell: powershell
+      run: ./scripts/test-install-config.ps1
+
     - name: Setup MSVC Environment
       uses: step-security/msvc-dev-cmd@v1.13.1
       with:

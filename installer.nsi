@@ -786,7 +786,7 @@ Section "主程序" SecMain
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_REQUIRE_PASSWORD", w r0)i.r1'
     StrCpy $0 "$CefProcessMode"
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PROCESS_MODE", w r0)i.r1'
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -OverridePath "$INSTDIR\resources\config.override.ini" -LogPath "$INSTDIR\resources\install-config-patch.log"'
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\patch-install-config.ps1" -ConfigPath "$INSTDIR\resources\config.json" -OverridePath "$INSTDIR\resources\config.override.ini" -LogPath "$INSTDIR\resources\install-config-patch.log"'
     Pop $ConfigPatchResult
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_URL", w "")i.r1'
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_CONFIG_PASSWORD", w "")i.r1'
@@ -797,7 +797,7 @@ Section "主程序" SecMain
     ${If} $ConfigPatchResult == 0
         ${Log} "config.json patched and config.override.ini written"
     ${Else}
-        ${Log} "WARNING: config.json patch failed, writing config.override.ini fallback"
+        ${Log} "WARNING: config.json patch failed ($ConfigPatchResult), writing config.override.ini fallback"
         FileOpen $0 "$INSTDIR\resources\config.override.ini" w
         FileWrite $0 "[override]$\r$\n"
         FileWrite $0 "url=$ConfigURL$\r$\n"
@@ -809,7 +809,7 @@ Section "主程序" SecMain
         ${EndIf}
         FileClose $0
         ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl, cefProcessMode=$CefProcessMode"
-        MessageBox MB_OK|MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行，详情见 resources\install-config-patch.log。" /SD IDOK
+        MessageBox MB_OK|MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行。请查看安装目录中的 install.log 和 resources\install-config-patch.log（补丁脚本启动后生成）。" /SD IDOK
     ${EndIf}
     
     ; 复制资源文件到resources目录

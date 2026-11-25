@@ -199,53 +199,24 @@ function Format-JsonText {
     return $builder.ToString()
 }
 
-function Set-DictionaryValue {
-    param(
-        [System.Collections.IDictionary]$Dictionary,
-        [string]$Key,
-        $Value
-    )
-
-    if ($Dictionary.Contains($Key)) {
-        $Dictionary[$Key] = $Value
-    } else {
-        $Dictionary.Add($Key, $Value)
-    }
-}
-
-function Remove-DictionaryValue {
-    param(
-        [System.Collections.IDictionary]$Dictionary,
-        [string]$Key
-    )
-
-    if ($Dictionary.Contains($Key)) {
-        $Dictionary.Remove($Key)
-    }
-}
-
 function Get-DesktopAuthDictionary {
     param([System.Collections.IDictionary]$Config)
 
-    if ($Config.Contains("desktopAuth") -and $Config["desktopAuth"] -is [System.Collections.IDictionary]) {
-        return $Config["desktopAuth"]
+    if ($Config["desktopAuth"] -isnot [System.Collections.IDictionary]) {
+        $Config["desktopAuth"] = @{}
     }
 
-    $desktopAuth = New-Object System.Collections.Hashtable
-    Set-DictionaryValue $Config "desktopAuth" $desktopAuth
-    return $desktopAuth
+    return $Config["desktopAuth"]
 }
 
 function Get-CefSettingsDictionary {
     param([System.Collections.IDictionary]$Config)
 
-    if ($Config.Contains("cefSettings") -and $Config["cefSettings"] -is [System.Collections.IDictionary]) {
-        return $Config["cefSettings"]
+    if ($Config["cefSettings"] -isnot [System.Collections.IDictionary]) {
+        $Config["cefSettings"] = @{}
     }
 
-    $cefSettings = New-Object System.Collections.Hashtable
-    Set-DictionaryValue $Config "cefSettings" $cefSettings
-    return $cefSettings
+    return $Config["cefSettings"]
 }
 
 function Normalize-CefProcessMode {
@@ -275,17 +246,16 @@ function Apply-CefProcessMode {
         [string]$ProcessMode
     )
 
-    Remove-DictionaryValue $Config "cefSingleProcessMode"
+    [void]$Config.Remove("cefSingleProcessMode")
 
     $cefSettings = Get-CefSettingsDictionary $Config
+    [void]$cefSettings.Remove("singleProcess")
     if ($ProcessMode -eq "auto") {
-        Remove-DictionaryValue $cefSettings "singleProcessMode"
-        Remove-DictionaryValue $cefSettings "singleProcess"
+        [void]$cefSettings.Remove("singleProcessMode")
         return
     }
 
-    Set-DictionaryValue $cefSettings "singleProcessMode" ($ProcessMode -eq "single")
-    Remove-DictionaryValue $cefSettings "singleProcess"
+    $cefSettings["singleProcessMode"] = ($ProcessMode -eq "single")
 }
 
 function Write-OverrideConfig {
@@ -340,12 +310,12 @@ try {
         throw "Config root must be a JSON object"
     }
 
-    Set-DictionaryValue $config "url" $url
-    Set-DictionaryValue $config "exitPassword" $exitPassword
-    Set-DictionaryValue $config "sensitiveOperationRequirePassword" $requirePassword
+    $config["url"] = $url
+    $config["exitPassword"] = $exitPassword
+    $config["sensitiveOperationRequirePassword"] = $requirePassword
 
     $desktopAuth = Get-DesktopAuthDictionary $config
-    Set-DictionaryValue $desktopAuth "apiBaseUrl" $apiBaseUrl
+    $desktopAuth["apiBaseUrl"] = $apiBaseUrl
     Apply-CefProcessMode $config $processMode
 
     $patchedJson = Format-JsonText ($serializer.Serialize($config))
@@ -356,18 +326,20 @@ try {
     $verifyConfig = $serializer.DeserializeObject($verifyText)
     $verifyDesktopAuth = $verifyConfig["desktopAuth"]
     $verifyCefSettings = $verifyConfig["cefSettings"]
-    if ($verifyConfig["url"] -ne $url -or
-        $verifyConfig["exitPassword"] -ne $exitPassword -or
+    if ($verifyConfig["url"] -cne $url -or
+        $verifyConfig["exitPassword"] -cne $exitPassword -or
         $verifyConfig["sensitiveOperationRequirePassword"] -ne $requirePassword -or
-        $verifyDesktopAuth["apiBaseUrl"] -ne $apiBaseUrl) {
+        $verifyDesktopAuth["apiBaseUrl"] -cne $apiBaseUrl) {
         throw "Config verification failed"
     }
     if ($processMode -eq "auto") {
-        if ($verifyConfig.Contains("cefSingleProcessMode") -or
-            ($verifyCefSettings -is [System.Collections.IDictionary] -and $verifyCefSettings.Contains("singleProcessMode"))) {
+        if ($verifyConfig.ContainsKey("cefSingleProcessMode") -or
+            $verifyCefSettings.ContainsKey("singleProcessMode") -or
+            $verifyCefSettings.ContainsKey("singleProcess")) {
             throw "CEF process mode verification failed"
         }
-    } elseif ($verifyCefSettings["singleProcessMode"] -ne ($processMode -eq "single")) {
+    } elseif (-not $verifyCefSettings.ContainsKey("singleProcessMode") -or
+        $verifyCefSettings["singleProcessMode"] -ne ($processMode -eq "single")) {
         throw "CEF process mode verification failed"
     }
 
@@ -379,7 +351,7 @@ try {
     exit 0
 } catch {
     try {
-        Write-InstallLog ("config patch failed: " + $_.Exception.Message)
+        Write-InstallLog ("config patch failed at script line {0}: {1}" -f $_.InvocationInfo.ScriptLineNumber, $_.Exception.Message)
     } catch {
     }
     exit 1
