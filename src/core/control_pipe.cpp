@@ -5,6 +5,7 @@
 
 #include <QMetaObject>
 #include <QObject>
+#include <QJsonDocument>
 
 #include <memory>
 #include <new>
@@ -18,6 +19,7 @@ struct ControlPipe::WorkerContext
     terminal::WinHandle pipe;
     QObject* receiver;
     std::function<void()> onStop;
+    std::function<void(QByteArray)> onExamSeatDisplay;
 };
 
 unsigned __stdcall ControlPipe::run(void* argument)
@@ -37,25 +39,26 @@ unsigned __stdcall ControlPipe::run(void* argument)
 void ControlPipe::serveClient(WorkerContext& context)
 {
     const HANDLE pipe = context.pipe.get();
-    constexpr size_t commandSize = sizeof(terminal::StopCommand) - 1;
-    // 读到行尾再回执，避免客户端尚在写入时断开管道。
-    size_t matched = 0;
-    bool matchesStop = true;
+    QByteArray request;
     char byte = 0;
     do {
+        if (request.size() >= terminal::MaxControlMessageBytes) {
+            return;
+        }
         DWORD received = 0;
         if (m_stopping || !ReadFile(pipe, &byte, 1, &received, nullptr) || received == 0) {
             return;
         }
-        if (matchesStop) {
-            matchesStop = matched < commandSize && byte == terminal::StopCommand[matched];
-            ++matched;
-        }
+        request.append(byte);
     } while (byte != '\n');
 
-    const bool stopRequested = matchesStop && matched == commandSize;
-    const char* reply = stopRequested ? terminal::StopAccepted : terminal::StopRejected;
-    const DWORD replySize = (stopRequested ? sizeof(terminal::StopAccepted) : sizeof(terminal::StopRejected)) - 1;
+    const bool stopRequested = request == terminal::StopCommand;
+    const QByteArray display = request.startsWith(terminal::ExamSeatPrefix)
+            ? request.mid(sizeof(terminal::ExamSeatPrefix) - 1) : QByteArray();
+    const bool seatDisplayReceived = !display.isEmpty() && QJsonDocument::fromJson(display).isObject();
+    const bool accepted = stopRequested || seatDisplayReceived;
+    const char* reply = accepted ? terminal::StopAccepted : terminal::StopRejected;
+    const DWORD replySize = (accepted ? sizeof(terminal::StopAccepted) : sizeof(terminal::StopRejected)) - 1;
     DWORD written = 0;
     if (m_stopping || !WriteFile(pipe, reply, replySize, &written, nullptr) || written != replySize) {
         return;
@@ -65,6 +68,9 @@ void ControlPipe::serveClient(WorkerContext& context)
     FlushFileBuffers(pipe);
     if (stopRequested && !m_stopping) {
         QMetaObject::invokeMethod(context.receiver, context.onStop, Qt::QueuedConnection);
+    } else if (seatDisplayReceived && !m_stopping) {
+        const auto update = context.onExamSeatDisplay;
+        QMetaObject::invokeMethod(context.receiver, [update, display] { update(display); }, Qt::QueuedConnection);
     }
 }
 #endif
@@ -74,7 +80,8 @@ ControlPipe::~ControlPipe()
     stop();
 }
 
-bool ControlPipe::start(QObject* receiver, std::function<void()> onStop)
+bool ControlPipe::start(QObject* receiver, std::function<void()> onStop,
+                        std::function<void(QByteArray)> onExamSeatDisplay)
 {
 #ifdef _WIN32
     if (m_worker) {
@@ -97,7 +104,8 @@ bool ControlPipe::start(QObject* receiver, std::function<void()> onStop)
         return false;
     }
 
-    auto* context = new (std::nothrow) WorkerContext{this, std::move(pipe), receiver, std::move(onStop)};
+    auto* context = new (std::nothrow) WorkerContext{
+        this, std::move(pipe), receiver, std::move(onStop), std::move(onExamSeatDisplay)};
     if (!context) {
         return false;
     }
@@ -111,6 +119,7 @@ bool ControlPipe::start(QObject* receiver, std::function<void()> onStop)
 #else
     (void)receiver;
     (void)onStop;
+    (void)onExamSeatDisplay;
 #endif
     return true;
 }

@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QUdpSocket>
 
 #include <algorithm>
@@ -100,7 +101,7 @@ CommandResult startApp(const Command &command, const Config &config)
         return {command.id, false, QStringLiteral("Windows 未登录考试账户")};
     }
     const std::wstring executable = QDir::toNativeSeparators(app.absoluteFilePath()).toStdWString();
-    std::wstring commandLine = L"\"" + executable + L"\"";
+    std::wstring commandLine = L"\"" + executable + L"\" --managed-exam-seat";
     const std::wstring workingDirectory = QDir::toNativeSeparators(app.absolutePath()).toStdWString();
     wchar_t desktop[] = L"winsta0\\default";
     STARTUPINFOW startup{};
@@ -180,9 +181,9 @@ DWORD transferPipe(HANDLE pipe, bool writing, char *bytes, DWORD size, DWORD &tr
     }
 }
 
-QString requestAppStop(const WaitForStop &waitForStop)
+QString sendControlRequest(QByteArray request, const WaitForStop &waitForStop, bool waitForPipe)
 {
-    const DWORD ready = awaitControlPipe(waitForStop);
+    const DWORD ready = waitForPipe ? awaitControlPipe(waitForStop) : ERROR_SUCCESS;
     if (ready != ERROR_SUCCESS) {
         return windowsFailure(QStringLiteral("等待考试端关闭管道失败"), ready);
     }
@@ -193,11 +194,9 @@ QString requestAppStop(const WaitForStop &waitForStop)
     }
     QElapsedTimer timer;
     timer.start();
-    constexpr DWORD requestLength = sizeof(StopCommand) - 1;
-    char request[requestLength];
-    std::copy_n(StopCommand, requestLength, request);
+    const DWORD requestLength = static_cast<DWORD>(request.size());
     DWORD transferred = 0;
-    DWORD error = transferPipe(pipe.get(), true, request, requestLength, transferred, timer, waitForStop);
+    DWORD error = transferPipe(pipe.get(), true, request.data(), requestLength, transferred, timer, waitForStop);
     if (error != ERROR_SUCCESS || transferred != requestLength) {
         return windowsFailure(QStringLiteral("发送考试端关闭请求失败"), error == ERROR_SUCCESS ? ERROR_WRITE_FAULT : error);
     }
@@ -219,7 +218,7 @@ CommandResult stopApp(const Command &command, const WaitForStop &waitForStop)
     if (!appIsRunning()) {
         return {command.id, true, QStringLiteral("考试端未运行")};
     }
-    const QString error = requestAppStop(waitForStop);
+    const QString error = sendControlRequest(StopCommand, waitForStop, true);
     if (!error.isEmpty()) {
         return {command.id, false, error};
     }
@@ -282,6 +281,17 @@ bool appIsRunning()
 {
     const WinHandle mutex(OpenMutexW(SYNCHRONIZE, FALSE, AppMutexName));
     return static_cast<bool>(mutex);
+}
+
+void publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitForStop)
+{
+    if (!appIsRunning()) {
+        return;
+    }
+    const QByteArray request = QByteArray(ExamSeatPrefix) + QJsonDocument(display).toJson(QJsonDocument::Compact) + '\n';
+    if (request.size() <= MaxControlMessageBytes) {
+        sendControlRequest(request, waitForStop, false);
+    }
 }
 
 CommandResult executeAppOrWake(const Command &command, const Config &config, const NetworkIdentity &network,

@@ -332,6 +332,28 @@ HeartbeatResponse Protocol::parseHeartbeat(int httpStatus, const QByteArray &bod
     if (seatNumber.isString()) {
         response.seatNumber = seatNumber.toString().trimmed();
     }
+    const QJsonValue displayValue = result.value(QStringLiteral("examSeatDisplay"));
+    if (!displayValue.isUndefined() && !displayValue.isNull()) {
+        const QJsonObject display = displayValue.toObject();
+        const QString state = display.value(QStringLiteral("state")).toString();
+        const QString seatNumber = display.value(QStringLiteral("seatNumber")).toString();
+        const QString releaseId = display.value(QStringLiteral("releaseId")).toString();
+        const int seconds = display.value(QStringLiteral("validForSeconds")).toInt();
+        static const QRegularExpression numberPattern(QStringLiteral("\\A[0-9]{1,32}\\z"));
+        if ((state == QStringLiteral("UNUSED") || state == QStringLiteral("WAITING")
+                || state == QStringLiteral("LOGIN_OPEN"))
+                && (state == QStringLiteral("UNUSED") || numberPattern.match(seatNumber).hasMatch())
+                && !releaseId.isEmpty() && releaseId.size() <= 36 && seconds > 0 && seconds <= 90) {
+            response.examSeatDisplay = {{QStringLiteral("state"), state},
+                    {QStringLiteral("releaseId"), releaseId},
+                    {QStringLiteral("validForSeconds"), seconds}};
+            if (state != QStringLiteral("UNUSED")) {
+                response.examSeatDisplay.insert(QStringLiteral("seatNumber"), seatNumber);
+            }
+        } else {
+            response.examSeatDisplay = {{QStringLiteral("state"), QStringLiteral("SYNC")}};
+        }
+    }
     const QJsonArray items = commands.toArray();
     for (const QJsonValue &value : items) {
         const QJsonObject item = value.toObject();

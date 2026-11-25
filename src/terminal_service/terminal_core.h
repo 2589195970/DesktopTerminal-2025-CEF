@@ -80,6 +80,7 @@ struct HeartbeatResponse {
     QVector<Command> commands;
     QString error;
     std::optional<QString> seatNumber;
+    QJsonObject examSeatDisplay;
 };
 
 class Protocol {
