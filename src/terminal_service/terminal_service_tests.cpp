@@ -26,6 +26,7 @@ private slots:
     void readWindowsConfig();
     void validateServerUrl_data();
     void validateServerUrl();
+    void editServerSettings();
     void persistState();
     void monitorRegistrationLifecycle();
     void monitorPreservesFailureAfterRestart();
@@ -248,6 +249,44 @@ void TerminalServiceTests::validateServerUrl()
     if (valid) {
         QCOMPARE(config.serverUrl, QUrl(url));
     }
+}
+
+void TerminalServiceTests::editServerSettings()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile file(dir.filePath(QStringLiteral("service.ini")));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray otherSettings = QStringLiteral("[app]\r\npath=\"C:\\软件\\terminal.exe\"\r\n; 安装路径\r\n"
+                                                    "[mode]\r\nsample=1\r\n").toUtf8();
+    const QByteArray ini = "[server]\r\nurl=http://old.example.org\r\n[SERVER]\r\nURL=invalid\r\n" + otherSettings;
+    QCOMPARE(file.write(ini), static_cast<qint64>(ini.size()));
+    file.close();
+
+    QString url;
+    QString school;
+    QString error;
+    QVERIFY2(Config::loadServerSettings(file.fileName(), url, school, error), qPrintable(error));
+    QCOMPARE(url, QStringLiteral("invalid"));
+    QVERIFY(school.isEmpty());
+
+    QVERIFY(!Config::saveServerSettings(file.fileName(), QStringLiteral("ftp://example.org"), QStringLiteral("1"), error));
+    QVERIFY(!Config::saveServerSettings(file.fileName(), QStringLiteral("https://example.org"), QStringLiteral("0"), error));
+    QVERIFY(!Config::saveServerSettings(file.fileName(), QStringLiteral("https://example.org/path\nurl=http://localhost"),
+                                        QStringLiteral("1"), error));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), ini);
+    file.close();
+
+    const QString validUrl = QStringLiteral("https://exam.example.org:8443/um");
+    QVERIFY2(Config::saveServerSettings(file.fileName(), validUrl, QStringLiteral("10003"), error), qPrintable(error));
+    Config config;
+    QVERIFY2(Config::load(file.fileName(), config, error), qPrintable(error));
+    QCOMPARE(config.serverUrl, QUrl(validUrl));
+    QCOMPARE(config.slid, 10003);
+    QCOMPARE(config.appPath, QStringLiteral("C:\\软件\\terminal.exe"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(file.readAll().endsWith(otherSettings));
 }
 
 void TerminalServiceTests::persistState()

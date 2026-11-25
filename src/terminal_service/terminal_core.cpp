@@ -60,57 +60,150 @@ Envelope parseEnvelope(int httpStatus, const QByteArray &body)
     return {true, object.value(QStringLiteral("result")), {}};
 }
 
+struct ServiceIni {
+    QStringList lines;
+    QHash<QString, int> entries;
+    int serverSection = -1;
+
+    bool load(const QString &path, QString &error)
+    {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            error = file.errorString();
+            return false;
+        }
+
+        // Windows INI 中的反斜杠是路径的一部分，按原文读取。
+        QTextStream ini(&file);
+        ini.setCodec("UTF-8");
+        QString section;
+        while (!ini.atEnd()) {
+            const QString line = ini.readLine();
+            lines.append(line);
+            const QString trimmed = line.trimmed();
+            if (trimmed.isEmpty() || trimmed.startsWith(';') || trimmed.startsWith('#')) {
+                continue;
+            }
+            if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                section = trimmed.mid(1, trimmed.size() - 2).trimmed().toLower();
+                if (section == QStringLiteral("server")) {
+                    serverSection = lines.size() - 1;
+                }
+                continue;
+            }
+            const int separator = trimmed.indexOf('=');
+            if (separator > 0) {
+                const QString key = trimmed.left(separator).trimmed().toLower();
+                entries.insert(section + '/' + key, lines.size() - 1);
+            }
+        }
+        if (ini.status() != QTextStream::Ok || file.error() != QFileDevice::NoError) {
+            error = QStringLiteral("读取 service.ini 失败");
+            return false;
+        }
+        return true;
+    }
+
+    QString value(const QString &key) const
+    {
+        const int row = entries.value(key, -1);
+        if (row < 0) {
+            return {};
+        }
+        const QString &line = lines.at(row);
+        const QString value = line.mid(line.indexOf('=') + 1).trimmed();
+        if (value.size() >= 2 && value.startsWith('"') && value.endsWith('"')) {
+            return value.mid(1, value.size() - 2);
+        }
+        return value;
+    }
+
+    void updateServerSettings(const QString &url, int slid)
+    {
+        if (serverSection < 0) {
+            serverSection = lines.size();
+            lines.append(QStringLiteral("[server]"));
+        }
+
+        QStringList missing;
+        const auto update = [this, &missing](const QString &key, const QString &value) {
+            const int row = entries.value(QStringLiteral("server/") + key, -1);
+            const QString line = key + '=' + value;
+            if (row < 0) {
+                missing.append(line);
+            } else {
+                lines[row] = line;
+            }
+        };
+        update(QStringLiteral("url"), url);
+        update(QStringLiteral("slid"), QString::number(slid));
+        for (const QString &line : missing) {
+            lines.insert(++serverSection, line);
+        }
+    }
+};
+
+bool readServerSettings(const QString &url, const QString &schoolInstance, Config &config, QString &error)
+{
+    const QUrl serverUrl(url, QUrl::StrictMode);
+    const QString scheme = serverUrl.scheme();
+    if (!serverUrl.isValid() || serverUrl.host().isEmpty()
+            || (scheme != QStringLiteral("http") && scheme != QStringLiteral("https"))
+            || !serverUrl.userInfo().isEmpty() || serverUrl.hasQuery() || serverUrl.hasFragment()) {
+        error = QStringLiteral("请输入完整的 HTTP 或 HTTPS 地址，可包含端口和路径。");
+        return false;
+    }
+    const int slid = schoolInstance.toInt();
+    if (slid <= 0) {
+        error = QStringLiteral("学校实例标识须为正整数。");
+        return false;
+    }
+    config.serverUrl = serverUrl;
+    config.slid = slid;
+    return true;
+}
+
 } // namespace
 
 bool Config::load(const QString &path, Config &config, QString &error)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        error = file.errorString();
-        return false;
-    }
-    // Windows INI 中的反斜杠是路径的一部分，按原文读取。
-    QTextStream ini(&file);
-    ini.setCodec("UTF-8");
-    QHash<QString, QString> values;
-    QString section;
-    while (!ini.atEnd()) {
-        const QString line = ini.readLine().trimmed();
-        if (line.isEmpty() || line.startsWith(';') || line.startsWith('#')) {
-            continue;
-        }
-        if (line.startsWith('[') && line.endsWith(']')) {
-            section = line.mid(1, line.size() - 2).trimmed().toLower();
-            continue;
-        }
-        const int separator = line.indexOf('=');
-        if (separator > 0) {
-            const QString key = line.left(separator).trimmed().toLower();
-            QString value = line.mid(separator + 1).trimmed();
-            if (value.size() >= 2 && value.startsWith('"') && value.endsWith('"')) {
-                value = value.mid(1, value.size() - 2);
-            }
-            values.insert(section + '/' + key, value);
-        }
-    }
+    ServiceIni ini;
     Config loaded;
-    loaded.serverUrl = QUrl(values.value(QStringLiteral("server/url")), QUrl::StrictMode);
-    loaded.slid = values.value(QStringLiteral("server/slid")).toInt();
-    loaded.appPath = values.value(QStringLiteral("app/path"));
-    if (ini.status() != QTextStream::Ok || file.error() != QFileDevice::NoError) {
-        error = QStringLiteral("读取 service.ini 失败");
+    if (!ini.load(path, error)
+            || !readServerSettings(ini.value(QStringLiteral("server/url")), ini.value(QStringLiteral("server/slid")), loaded, error)) {
         return false;
     }
-    const QString scheme = loaded.serverUrl.scheme();
-    const bool hasSupportedScheme = scheme.compare(QStringLiteral("http"), Qt::CaseInsensitive) == 0
-            || scheme.compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0;
-    if (!loaded.serverUrl.isValid() || loaded.serverUrl.host().isEmpty()
-            || !hasSupportedScheme || !loaded.serverUrl.userInfo().isEmpty() || loaded.serverUrl.hasQuery()
-            || loaded.serverUrl.hasFragment() || loaded.slid <= 0) {
-        error = QStringLiteral("service.ini 需要有效的 HTTP 或 HTTPS 服务器地址和学校实例标识");
-        return false;
-    }
+    loaded.appPath = ini.value(QStringLiteral("app/path"));
     config = loaded;
+    return true;
+}
+
+bool Config::loadServerSettings(const QString &path, QString &url, QString &schoolInstance, QString &error)
+{
+    ServiceIni ini;
+    if (!ini.load(path, error)) {
+        return false;
+    }
+    url = ini.value(QStringLiteral("server/url"));
+    schoolInstance = ini.value(QStringLiteral("server/slid"));
+    return true;
+}
+
+bool Config::saveServerSettings(const QString &path, const QString &url, const QString &schoolInstance, QString &error)
+{
+    Config config;
+    const QString address = url.trimmed();
+    ServiceIni ini;
+    if (!readServerSettings(address, schoolInstance.trimmed(), config, error) || !ini.load(path, error)) {
+        return false;
+    }
+    ini.updateServerSettings(address, config.slid);
+    const QByteArray bytes = (ini.lines.join(QStringLiteral("\r\n")) + QStringLiteral("\r\n")).toUtf8();
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+        error = QStringLiteral("无法保存 service.ini（%1）。").arg(file.errorString());
+        return false;
+    }
     return true;
 }
 

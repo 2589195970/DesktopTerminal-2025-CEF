@@ -18,6 +18,8 @@ struct Config {
     QString appPath;
 
     static bool load(const QString &path, Config &config, QString &error);
+    static bool loadServerSettings(const QString &path, QString &url, QString &schoolInstance, QString &error);
+    static bool saveServerSettings(const QString &path, const QString &url, const QString &schoolInstance, QString &error);
 };
 
 struct Command {

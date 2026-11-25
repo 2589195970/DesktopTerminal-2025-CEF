@@ -13,11 +13,12 @@ if ($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
     throw "Invalid directory for terminal service data"
 }
 
-# 覆盖安装时清除已有目录上额外的显式访问规则。
+# 服务数据目录由管理员组拥有，仅系统和管理员可访问。
 $acl = $directory.GetAccessControl()
 $acl.SetSecurityDescriptorSddlForm(
-    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
-    [System.Security.AccessControl.AccessControlSections]::Access)
+    "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
+    ([System.Security.AccessControl.AccessControlSections]::Owner -bor
+     [System.Security.AccessControl.AccessControlSections]::Access))
 $directory.SetAccessControl($acl)
 
 $iniPath = Join-Path $DataDirectory "service.ini"

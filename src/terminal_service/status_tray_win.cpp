@@ -1,5 +1,6 @@
 #include "monitor_windows.h"
 #include "registration_monitor.h"
+#include "terminal_core.h"
 #include "win_handle.h"
 #include "../app_version.h"
 
@@ -10,16 +11,20 @@
 #include <QCursor>
 #include <QDateTime>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QFrame>
 #include <QFutureWatcher>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QLockFile>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -354,9 +359,16 @@ const QString &panelStyle()
         QPushButton#closePanel { background: transparent; border-color: transparent; color: #53676a; }
         QPushButton#closePanel:hover { background: #e9f0ed; }
         QPushButton#closePanel:focus { border-color: #247c70; }
-        QPushButton#copyDiagnostic { color: #ffffff; background: #195e53; border-color: #195e53; }
-        QPushButton#copyDiagnostic:hover { background: #114c43; border-color: #114c43; }
-        QPushButton#copyDiagnostic:focus { border-color: #89c9ab; }
+        QPushButton[primary="true"] { color: #ffffff; background: #195e53; border-color: #195e53; }
+        QPushButton[primary="true"]:hover { background: #114c43; border-color: #114c43; }
+        QPushButton[primary="true"]:focus { border-color: #89c9ab; }
+        QDialog#serverSettings { background: #ffffff; }
+        QLineEdit {
+            min-height: 30px; padding: 0 8px; border: 1px solid #cbd9d7;
+            border-radius: 6px; background: #ffffff; color: #17282b;
+        }
+        QLineEdit:focus { border-color: #247c70; }
+        QLabel#settingsError { color: #a1352d; }
         QComboBox { padding-right: 26px; min-width: 84px; }
         QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: 0; }
         QComboBox::down-arrow { width: 0; height: 0; }
@@ -395,6 +407,133 @@ const QString &panelStyle()
         }
     )qss");
     return style;
+}
+
+bool isAdministrator()
+{
+    alignas(DWORD) BYTE sid[SECURITY_MAX_SID_SIZE];
+    DWORD sidSize = sizeof(sid);
+    BOOL member = FALSE;
+    return CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, sid, &sidSize)
+            && CheckTokenMembership(nullptr, sid, &member) && member;
+}
+
+void launchServerSettings(QWidget *parent)
+{
+    const auto executable = QDir::toNativeSeparators(QCoreApplication::applicationFilePath()).toStdWString();
+    const auto directory = QDir::toNativeSeparators(QCoreApplication::applicationDirPath()).toStdWString();
+    SHELLEXECUTEINFOW request{};
+    request.cbSize = sizeof(request);
+    request.fMask = SEE_MASK_FLAG_NO_UI;
+    request.hwnd = parent ? reinterpret_cast<HWND>(parent->winId()) : nullptr;
+    request.lpVerb = L"runas";
+    request.lpFile = executable.c_str();
+    request.lpParameters = L"--configure-service";
+    request.lpDirectory = directory.c_str();
+    request.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&request) && GetLastError() != ERROR_CANCELLED) {
+        QMessageBox::warning(parent, QStringLiteral("无法打开配置"),
+                             QStringLiteral("请使用 Windows 管理员账户打开终端服务配置。"));
+    }
+}
+
+bool isRegularConfigFile(const QString &path)
+{
+    const auto nativePath = QDir::toNativeSeparators(path).toStdWString();
+    const WinHandle file(CreateFileW(nativePath.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    BY_HANDLE_FILE_INFORMATION info{};
+    return file && GetFileInformationByHandle(file.get(), &info) && info.nNumberOfLinks == 1
+            && !(info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT));
+}
+
+int showServerSettings()
+{
+    const QString title = QStringLiteral("终端服务配置");
+    if (!isAdministrator()) {
+        QMessageBox::warning(nullptr, title, QStringLiteral("请在托盘右键菜单中选择「配置参数」，并授权管理员权限。"));
+        return 1;
+    }
+
+    QString dataDirectory;
+    const WinHandle directory = openProtectedServiceDataDirectory(dataDirectory);
+    const QString path = QDir(dataDirectory).filePath(QStringLiteral("service.ini"));
+    if (!directory || !isRegularConfigFile(path)) {
+        QMessageBox::warning(nullptr, title, QStringLiteral("无法访问终端服务配置，请检查安装和数据目录权限。"));
+        return 1;
+    }
+    QLockFile lock(path + QStringLiteral(".edit.lock"));
+    lock.setStaleLockTime(0);
+    if (!lock.tryLock(0)) {
+        QMessageBox::warning(nullptr, title, lock.error() == QLockFile::LockFailedError
+            ? QStringLiteral("配置窗口已打开，请在已打开的窗口中修改。")
+            : QStringLiteral("无法锁定配置文件，请检查数据目录权限。"));
+        return 1;
+    }
+
+    QString serverUrl;
+    QString schoolInstance;
+    QString error;
+    if (!Config::loadServerSettings(path, serverUrl, schoolInstance, error)) {
+        QMessageBox::warning(nullptr, title, QStringLiteral("无法读取 service.ini（%1）。").arg(error));
+        return 1;
+    }
+
+    QDialog dialog;
+    dialog.setWindowTitle(title);
+    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    dialog.setObjectName(QStringLiteral("serverSettings"));
+    dialog.setStyleSheet(panelStyle());
+    auto palette = dialog.palette();
+    palette.setColor(QPalette::HighlightedText, Qt::white);
+    dialog.setPalette(palette);
+    dialog.setMinimumWidth(460);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(20, 20, 20, 16);
+    layout->setSpacing(12);
+
+    auto *form = new QFormLayout;
+    form->setSpacing(10);
+    auto *url = new QLineEdit(serverUrl);
+    auto *school = new QLineEdit(schoolInstance);
+    url->setPlaceholderText(QStringLiteral("https://exam.example.org/um"));
+    form->addRow(QStringLiteral("终端管理地址"), url);
+    form->addRow(QStringLiteral("学校实例标识"), school);
+    layout->addLayout(form);
+
+    auto *hint = plainLabel(QStringLiteral("配置在终端服务下次启动时生效。"));
+    hint->setProperty("muted", true);
+    layout->addWidget(hint);
+    auto *feedback = plainLabel();
+    feedback->setObjectName(QStringLiteral("settingsError"));
+    feedback->setWordWrap(true);
+    feedback->hide();
+    layout->addWidget(feedback);
+
+    auto *buttons = new QDialogButtonBox;
+    auto *save = buttons->addButton(QStringLiteral("保存"), QDialogButtonBox::AcceptRole);
+    save->setProperty("primary", true);
+    save->setDefault(true);
+    buttons->addButton(QStringLiteral("取消"), QDialogButtonBox::RejectRole);
+    layout->addWidget(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+        QString saveError;
+        if (!isRegularConfigFile(path)) {
+            saveError = QStringLiteral("配置文件不可用，请检查安装和数据目录权限。");
+        } else if (Config::saveServerSettings(path, url->text(), school->text(), saveError)) {
+            QMessageBox::information(&dialog, title,
+                QStringLiteral("配置已保存。需要立即生效时，请以管理员身份运行安装目录中的 restart-terminal-service.bat。"));
+            dialog.accept();
+            return;
+        }
+        feedback->setText(saveError);
+        feedback->show();
+    });
+    url->setFocus();
+    dialog.exec();
+    return 0;
 }
 
 class PanelTitleBar : public QFrame
@@ -480,6 +619,8 @@ public:
         auto *menu = new QMenu(this);
         menu->addAction(QStringLiteral("查看状态"), this, [this] { showPanel(0); });
         menu->addAction(QStringLiteral("查看运行日志"), this, [this] { showPanel(1); });
+        menu->addSeparator();
+        menu->addAction(QStringLiteral("配置参数"), this, [] { launchServerSettings(QApplication::activeWindow()); });
         m_tray.setContextMenu(menu);
         connect(&m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger) {
@@ -675,7 +816,7 @@ private:
         m_copyHint = plainLabel();
         m_copyHint->setProperty("muted", true);
         auto *copy = new QPushButton(QStringLiteral("复制诊断信息"));
-        copy->setObjectName(QStringLiteral("copyDiagnostic"));
+        copy->setProperty("primary", true);
         copy->setAutoDefault(false);
         actions->addWidget(m_logHint);
         actions->addWidget(m_copyHint);
@@ -956,6 +1097,9 @@ int main(int argc, char **argv)
     palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#195e53")));
     app.setPalette(palette);
     app.setQuitOnLastWindowClosed(false);
+    if (argc == 2 && std::string_view(argv[1]) == "--configure-service") {
+        return showServerSettings();
+    }
 
     DWORD session = 0;
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
