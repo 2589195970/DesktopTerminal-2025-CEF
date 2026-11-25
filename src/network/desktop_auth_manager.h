@@ -21,6 +21,8 @@ public:
     void startAsyncAuth();
     bool refreshIfNeeded();
     QString buildRequestToken() const;
+    void setExamSeatReleaseId(const QString &releaseId);
+    QString examSeatReleaseId() const;
     bool isReady() const;
     QString allowedHost() const;
     int allowedPort() const;
@@ -52,6 +54,7 @@ private:
     QString m_allowedHost;
     int m_allowedPort;
     QString m_sessionToken;
+    QString m_examSeatReleaseId;
     QDateTime m_expireAt;
     QString m_lastError;
     int m_retryCount;

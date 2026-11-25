@@ -40,6 +40,15 @@ cef_return_value_t CEFResourceRequestHandlerImpl::OnBeforeResourceLoad(
     CefRequest::HeaderMap headers;
     request->GetHeaderMap(headers);
     headers.insert(std::make_pair("X-Desktop-Token", token.toStdString()));
+    const int effectivePort = parsedUrl.port(parsedUrl.scheme() == QStringLiteral("https") ? 443 : 80);
+    if (parsedUrl.path().endsWith(QStringLiteral("/student/ks/strictExamEntry"))
+            && (allowedPort <= 0 || effectivePort == allowedPort)) {
+        headers.erase("X-Exam-Seat-Release");
+        const QString releaseId = DesktopAuthManager::instance().examSeatReleaseId();
+        if (!releaseId.isEmpty()) {
+            headers.insert(std::make_pair("X-Exam-Seat-Release", releaseId.toStdString()));
+        }
+    }
     request->SetHeaderMap(headers);
     return RV_CONTINUE;
 }

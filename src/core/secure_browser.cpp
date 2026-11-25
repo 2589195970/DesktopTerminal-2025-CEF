@@ -2,6 +2,7 @@
 #include "cef_manager.h"
 #include "application.h"
 #include "../logging/logger.h"
+#include "../network/desktop_auth_manager.h"
 #include "../config/config_manager.h"
 #include "../ui/exam_seat_page.h"
 #include "../ui/toolbox_dialog.h"
@@ -205,6 +206,7 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
         m_examSeatResettingId.clear();
     }
     const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatReleaseId == releaseId;
+    DesktopAuthManager::instance().setExamSeatReleaseId(loginOpen ? releaseId : QString());
     const bool managed = !state.isEmpty();
     if (managed && !loginOpen) {
         auto pageState = ExamSeatPage::State::Synchronizing;

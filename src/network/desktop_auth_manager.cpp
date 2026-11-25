@@ -269,6 +269,18 @@ QString DesktopAuthManager::buildRequestToken() const
     return m_sessionToken;
 }
 
+void DesktopAuthManager::setExamSeatReleaseId(const QString &releaseId)
+{
+    QMutexLocker locker(&m_mutex);
+    m_examSeatReleaseId = releaseId;
+}
+
+QString DesktopAuthManager::examSeatReleaseId() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_examSeatReleaseId;
+}
+
 bool DesktopAuthManager::isReady() const
 {
     QMutexLocker locker(&m_mutex);
