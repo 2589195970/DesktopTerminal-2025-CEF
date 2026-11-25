@@ -15,9 +15,11 @@
 
 class QHotkey;
 class QLabel;
+class QStackedLayout;
 class CEFManager;
 class Logger;
 class ConfigManager;
+class ExamSeatPage;
 
 /**
  * @brief 安全浏览器窗口类
@@ -178,6 +180,7 @@ private:
      * 当前setFullscreenMode不再调用此函数，仅保留以备诊断/回滚。
      */
     void enforceWin32Fullscreen();
+    void fitManagedExamWindow();
 
     /**
      * @brief 打印Qt全屏几何诊断：对比Qt geometry vs Win32 GetWindowRect
@@ -224,7 +227,12 @@ private:
     QUrl m_currentUrl;
 #ifdef Q_OS_WIN
     QWidget* m_browserHost = nullptr;
-    QLabel* m_examSeatLabel = nullptr;
+    QStackedLayout* m_examPages = nullptr;
+    QWidget* m_examLoginPage = nullptr;
+    ExamSeatPage* m_examSeatPage = nullptr;
+    QLabel* m_examLoginSeat = nullptr;
+    QLabel* m_examTerminalInfo = nullptr;
+    QTimer* m_examTerminalInfoTimer = nullptr;
     QTimer* m_examSeatLease = nullptr;
     QString m_examSeatReleaseId;
     QString m_examSeatResettingId;

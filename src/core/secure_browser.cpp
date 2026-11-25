@@ -3,6 +3,7 @@
 #include "application.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
+#include "../ui/exam_seat_page.h"
 #include "../ui/toolbox_dialog.h"
 
 #include <QApplication>
@@ -23,9 +24,9 @@
 #include <QHotkey>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLabel>
 #include <QMetaObject>
 #include <QPointer>
+#include <QStackedLayout>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -91,17 +92,41 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    m_examSeatLabel = new QLabel(this);
-    m_examSeatLabel->setTextFormat(Qt::PlainText);
-    m_examSeatLabel->setAlignment(Qt::AlignCenter);
-    m_examSeatLabel->setWordWrap(true);
-    m_examSeatLabel->hide();
-    layout->addWidget(m_examSeatLabel);
-    m_browserHost = new QWidget(this);
+    layout->setSizeConstraint(QLayout::SetNoConstraint);
+    m_examPages = new QStackedLayout;
+    layout->addLayout(m_examPages, 1);
+
+    m_examLoginPage = new QWidget(this);
+    auto* loginLayout = new QVBoxLayout(m_examLoginPage);
+    loginLayout->setContentsMargins(0, 0, 0, 0);
+    loginLayout->setSpacing(0);
+    m_examLoginSeat = new QLabel(m_examLoginPage);
+    m_examLoginSeat->setTextFormat(Qt::PlainText);
+    m_examLoginSeat->setAlignment(Qt::AlignCenter);
+    m_examLoginSeat->setFixedHeight(38);
+    m_examLoginSeat->setStyleSheet(QStringLiteral(
+        "background: #eaf3ff; color: #174f99; font-size: 16px; font-weight: 600;"));
+    m_examLoginSeat->hide();
+    loginLayout->addWidget(m_examLoginSeat);
+    m_browserHost = new QWidget(m_examLoginPage);
+    m_browserHost->setAttribute(Qt::WA_DontCreateNativeAncestors);
     m_browserHost->setAttribute(Qt::WA_NativeWindow);
-    layout->addWidget(m_browserHost, 1);
+    loginLayout->addWidget(m_browserHost, 1);
+    m_examPages->addWidget(m_examLoginPage);
+    m_examSeatPage = new ExamSeatPage(this);
+    m_examPages->addWidget(m_examSeatPage);
+
     m_seatBar->setFixedHeight(SeatBarHeight);
     layout->addWidget(m_seatBar);
+    m_examTerminalInfo = ExamSeatPage::createTerminalInfo(this);
+    m_examTerminalInfo->hide();
+    layout->addWidget(m_examTerminalInfo);
+    m_examTerminalInfoTimer = new QTimer(this);
+    m_examTerminalInfoTimer->setInterval(5000);
+    connect(m_examTerminalInfoTimer, &QTimer::timeout, this, [this] {
+        m_examTerminalInfo->setText(ExamSeatPage::terminalDetails());
+    });
+
     m_examSeatLease = new QTimer(this);
     m_examSeatLease->setSingleShot(true);
     connect(m_examSeatLease, &QTimer::timeout, this, [this] {
@@ -142,7 +167,6 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
     const bool wantsLogin = state == QStringLiteral("LOGIN_OPEN");
     const bool waiting = state == QStringLiteral("WAITING");
     const bool unused = state == QStringLiteral("UNUSED");
-    const bool syncing = state == QStringLiteral("SYNC");
     if (seconds > 0) {
         m_examSeatLease->start(seconds * 1000);
     } else {
@@ -171,29 +195,30 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
             m_examSeatResettingId = releaseId;
         }
     }
-    if (state.isEmpty() || syncing) {
+    if (state.isEmpty() || state == QStringLiteral("SYNC")) {
         m_examSeatReleaseId.clear();
         m_examSeatResettingId.clear();
     }
-    const bool loginOpen = wantsLogin && m_examSeatReleaseId == releaseId;
-
-    m_browserHost->setVisible(state.isEmpty() || loginOpen);
-    m_examSeatLabel->setVisible(!state.isEmpty());
-    if (waiting || unused || syncing || (wantsLogin && !loginOpen)) {
-        m_examSeatLabel->setMinimumHeight(0);
-        m_examSeatLabel->setMaximumHeight(QWIDGETSIZE_MAX);
-        m_examSeatLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        m_examSeatLabel->setStyleSheet(QStringLiteral("background:#f4f7fa;color:#142936;font-size:64px"));
-        if (waiting || wantsLogin) {
-            m_examSeatLabel->setText(QStringLiteral("考试座号 %1\n等待开考").arg(seat));
-        } else {
-            m_examSeatLabel->setText(unused ? QStringLiteral("本场不使用") : QStringLiteral("等待获取考场状态"));
-        }
-    } else if (loginOpen) {
-        m_examSeatLabel->setFixedHeight(44);
-        m_examSeatLabel->setStyleSheet(QStringLiteral("background:#e8f4f3;color:#134e4a;font-size:20px"));
-        m_examSeatLabel->setText(QStringLiteral("考试座号 %1").arg(seat));
+    const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatReleaseId == releaseId;
+    const bool managed = !state.isEmpty();
+    if (managed && !loginOpen) {
+        const auto pageState = unused ? ExamSeatPage::State::Unused
+            : (waiting || wantsLogin) ? ExamSeatPage::State::Waiting : ExamSeatPage::State::Synchronizing;
+        m_examSeatPage->showSession(pageState, seat, display.value(QStringLiteral("sessionName")).toString());
+        m_examPages->setCurrentWidget(m_examSeatPage);
+    } else {
+        m_examLoginSeat->setText(loginOpen ? QStringLiteral("考试座号 %1").arg(seat) : QString());
+        m_examLoginSeat->setVisible(loginOpen);
+        m_examPages->setCurrentWidget(m_examLoginPage);
     }
+    m_examTerminalInfo->setVisible(managed);
+    if (managed && !m_examTerminalInfoTimer->isActive()) {
+        m_examTerminalInfo->setText(ExamSeatPage::terminalDetails());
+        m_examTerminalInfoTimer->start();
+    } else if (!managed) {
+        m_examTerminalInfoTimer->stop();
+    }
+    fitManagedExamWindow();
     refreshSeatDisplay();
     layout()->activate();
     resizeCEFBrowser();
@@ -652,6 +677,9 @@ void SecureBrowser::onMaintenanceTimer()
     if (m_needFullscreenCheck && windowState() != Qt::WindowFullScreen) {
         setFullscreenMode();
     }
+#ifdef Q_OS_WIN
+    fitManagedExamWindow();
+#endif
 }
 
 void SecureBrowser::onCEFMessageLoop()
@@ -974,7 +1002,7 @@ void SecureBrowser::setFullscreenMode()
     // 已能在PerMonitorV2进程里正确铺满物理屏幕（对齐d9e66833路径）。
 
 #ifdef Q_OS_WIN
-    // 仅保留Qt窗口几何诊断，不再强制覆盖
+    fitManagedExamWindow();
     logFullscreenGeometry();
 #endif
 }
@@ -1061,6 +1089,18 @@ void SecureBrowser::enforceWin32Fullscreen()
         .arg(windowDpi)
         .arg(mi.rcMonitor.left).arg(mi.rcMonitor.top).arg(mi.rcMonitor.right).arg(mi.rcMonitor.bottom)
         .arg(mi.rcWork.left).arg(mi.rcWork.top).arg(mi.rcWork.right).arg(mi.rcWork.bottom));
+}
+
+void SecureBrowser::fitManagedExamWindow()
+{
+    if (!m_examTerminalInfo || m_examTerminalInfo->isHidden() || !isVisible() || !isFullScreen()) {
+        return;
+    }
+    const QWindow* window = windowHandle();
+    const QScreen* screen = window ? window->screen() : nullptr;
+    if (screen && geometry() != screen->geometry()) {
+        setGeometry(screen->geometry());
+    }
 }
 
 void SecureBrowser::logFullscreenGeometry()
@@ -1207,7 +1247,7 @@ void SecureBrowser::resizeCEFBrowser()
     if (m_cefBrowserCreated) {
         QSize windowSize = size();
 #ifdef Q_OS_WIN
-        if (m_browserHost->isHidden()) {
+        if (m_examPages->currentWidget() != m_examLoginPage) {
             return;
         }
         windowSize = m_browserHost->size();
