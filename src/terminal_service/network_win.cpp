@@ -93,8 +93,12 @@ NetworkIdentity findNetworkIdentity(const QList<QHostAddress> &serverAddresses)
         SOCKADDR_INET destination{};
         destination.Ipv4.sin_family = AF_INET;
         destination.Ipv4.sin_addr.S_un.S_addr = htonl(server.toIPv4Address());
+        DWORD interfaceIndex = 0;
+        if (GetBestInterface(destination.Ipv4.sin_addr.S_un.S_addr, &interfaceIndex) != NO_ERROR) {
+            continue;
+        }
         SOCKADDR_INET source{};
-        if (GetBestRoute2(nullptr, 0, nullptr, &destination, 0, &route, &source) == NO_ERROR
+        if (GetBestRoute2(nullptr, interfaceIndex, nullptr, &destination, 0, &route, &source) == NO_ERROR
                 && source.si_family == AF_INET) {
             const QHostAddress candidate(ntohl(source.Ipv4.sin_addr.S_un.S_addr));
             if (usableIpv4(candidate)) {

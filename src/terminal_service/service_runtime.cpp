@@ -7,7 +7,7 @@
 #include <QDir>
 #include <QHostInfo>
 #include <QJsonDocument>
-#include <QNetworkReply>
+#include <QMetaEnum>
 #include <QRandomGenerator>
 #include <QSysInfo>
 
@@ -88,6 +88,10 @@ ServiceRuntime::~ServiceRuntime()
 void ServiceRuntime::start()
 {
     log(QStringLiteral("终端服务已启动"));
+    if (m_config.serverUrl.scheme() == QStringLiteral("https")
+            && !m_http.supportedSchemes().contains(QStringLiteral("https"))) {
+        log(QStringLiteral("Qt HTTPS 运行时不可用，请检查安装目录中的 OpenSSL DLL"));
+    }
     if (m_state.regToken.isEmpty()) {
         m_state.ensureRegToken();
         m_stateDirty = true;
@@ -153,10 +157,11 @@ void ServiceRuntime::postRequest(const QList<QHostAddress> &addresses)
         QNetworkReply *reply = m_reply;
         m_reply = nullptr;
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const auto problem = networkProblem(reply->error(), status);
+        const auto error = reply->error();
+        const auto problem = networkProblem(error, status);
         const QByteArray body = reply->readAll();
         reply->deleteLater();
-        finishRequest(status, body, problem);
+        finishRequest(status, body, problem, error);
     });
 }
 
@@ -175,7 +180,8 @@ void ServiceRuntime::requestTimedOut()
     finishRequest(0, {}, RegistrationProblem::Timeout);
 }
 
-void ServiceRuntime::finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem)
+void ServiceRuntime::finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem,
+                                   QNetworkReply::NetworkError networkError)
 {
     m_requestTimeout.stop();
     const Request completed = m_request;
@@ -185,7 +191,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
     if (completed == Request::Register) {
         const RegisterResponse response = Protocol::parseRegister(protocolStatus, body);
         if (!response.valid) {
-            reportRequestFailure(true, problem, status);
+            reportRequestFailure(true, problem, status, networkError);
             scheduleRegisterRetry();
             return;
         }
@@ -217,7 +223,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
     }
     m_sentResults = {};
     if (!response.valid) {
-        reportRequestFailure(false, problem, status);
+        reportRequestFailure(false, problem, status, networkError);
         schedule(HeartbeatIntervalMs);
     } else if (!response.codeValid) {
         publishExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}}, m_waitForStop);
@@ -260,13 +266,20 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
     processQueuedCommands();
 }
 
-void ServiceRuntime::reportRequestFailure(bool registering, RegistrationProblem problem, int status)
+void ServiceRuntime::reportRequestFailure(bool registering, RegistrationProblem problem, int status,
+                                          QNetworkReply::NetworkError networkError)
 {
     const int httpStatus = problem == RegistrationProblem::Http ? status : 0;
     if (m_monitor.failed(registering, problem, httpStatus)) {
+        QString detail = registrationProblemText(problem, httpStatus);
+        if (networkError != QNetworkReply::NoError) {
+            const char *name = QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(networkError);
+            detail += QStringLiteral("（Qt 网络错误 %1 %2）")
+                    .arg(networkError).arg(QString::fromLatin1(name));
+        }
         log(QStringLiteral("%1：%2").arg(
             registering ? QStringLiteral("终端注册失败") : QStringLiteral("心跳失败"),
-            registrationProblemText(problem, httpStatus)));
+            detail));
     }
 }
 

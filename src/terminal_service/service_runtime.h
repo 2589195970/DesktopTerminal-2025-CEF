@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QQueue>
 #include <QThread>
 #include <QTimer>
@@ -29,8 +30,10 @@ private:
     void sendNextRequest();
     void postRequest(const QList<QHostAddress> &addresses);
     void requestTimedOut();
-    void finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem);
-    void reportRequestFailure(bool registering, RegistrationProblem problem, int status = 0);
+    void finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem,
+                       QNetworkReply::NetworkError networkError = QNetworkReply::NoError);
+    void reportRequestFailure(bool registering, RegistrationProblem problem, int status = 0,
+                              QNetworkReply::NetworkError networkError = QNetworkReply::NoError);
     void processQueuedCommands();
     void finishWorker();
     void finishPowerCommand();
