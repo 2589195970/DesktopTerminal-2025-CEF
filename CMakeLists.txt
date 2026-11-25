@@ -282,6 +282,7 @@ set(SOURCES
     src/ui/loading_dialog.cpp
     src/ui/password_dialog.cpp
     src/ui/toolbox_dialog.cpp
+    src/ui/exam_seat_page.cpp
     src/terminal_service/seat_display_store.cpp
     resources/resources.qrc
 )
@@ -309,6 +310,7 @@ set(HEADERS
     src/ui/loading_dialog.h
     src/ui/password_dialog.h
     src/ui/toolbox_dialog.h
+    src/ui/exam_seat_page.h
     src/terminal_service/seat_display_store.h
 )
 
