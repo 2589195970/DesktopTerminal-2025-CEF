@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(DesktopTerminal-CEF)
+
+include(cmake/AppVersion.cmake)
+project(DesktopTerminal-CEF VERSION "${APP_VERSION}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,7 +38,9 @@ if(WIN32)
     # 设置Windows应用程序属性（不显示控制台窗口）
     set(CMAKE_WIN32_EXECUTABLE TRUE)
     # 确保使用UTF-8编码
-    add_compile_options("/utf-8")
+    if(MSVC)
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+    endif()
     # 32位系统内存优化
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         add_compile_definitions(CEF_32BIT_BUILD)
@@ -319,71 +323,70 @@ add_subdirectory(third_party/QHotkey)
 
 # Windows清单文件嵌入支持（用于管理员权限）
 if(WIN32)
-    # 检查是否存在清单文件
-    set(MANIFEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.manifest")
-    if(EXISTS "${MANIFEST_FILE}")
-        message(STATUS "找到Windows清单文件: ${MANIFEST_FILE}")
-        
-        # 根据编译器类型选择嵌入方式
-        if(MSVC)
-            # MSVC编译器：使用资源编译器直接嵌入
-            message(STATUS "使用MSVC资源编译器嵌入清单文件")
-            
+    set(MANIFEST_FILE "${CMAKE_CURRENT_BINARY_DIR}/resources/app.manifest")
+    configure_file(cmake/app.manifest.in "${MANIFEST_FILE}" @ONLY)
+    message(STATUS "找到Windows清单文件: ${MANIFEST_FILE}")
+
+    # 根据编译器类型选择嵌入方式
+    if(MSVC)
+        # MSVC编译器：使用资源编译器直接嵌入
+        message(STATUS "使用MSVC资源编译器嵌入清单文件")
+
+        # 创建资源文件
+        set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+        file(WRITE "${RC_FILE}"
+            "1 24 \"${MANIFEST_FILE}\"\n"
+        )
+
+        # 将资源文件添加到源文件列表
+        list(APPEND SOURCES "${RC_FILE}")
+
+        # 禁用MSVC默认的manifest处理以避免冲突
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
+        message(STATUS "已禁用MSVC默认manifest以避免冲突")
+
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # MinGW编译器：使用windres进行清单嵌入
+        message(STATUS "使用MinGW windres嵌入清单文件")
+
+        # 查找windres工具
+        find_program(WINDRES_EXECUTABLE windres)
+        if(WINDRES_EXECUTABLE)
             # 创建资源文件
             set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
-            file(WRITE "${RC_FILE}" 
+            file(WRITE "${RC_FILE}"
                 "1 24 \"${MANIFEST_FILE}\"\n"
             )
-            
-            # 将资源文件添加到源文件列表
-            list(APPEND SOURCES "${RC_FILE}")
-            
-            # 禁用MSVC默认的manifest处理以避免冲突
-            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
-            message(STATUS "已禁用MSVC默认manifest以避免冲突")
-            
-        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-            # MinGW编译器：使用windres进行清单嵌入
-            message(STATUS "使用MinGW windres嵌入清单文件")
-            
-            # 查找windres工具
-            find_program(WINDRES_EXECUTABLE windres)
-            if(WINDRES_EXECUTABLE)
-                # 创建资源文件
-                set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
-                file(WRITE "${RC_FILE}" 
-                    "1 24 \"${MANIFEST_FILE}\"\n"
-                )
-                
-                # 编译资源文件为对象文件
-                set(RC_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/app.rc.o")
-                add_custom_command(
-                    OUTPUT "${RC_OBJECT}"
-                    COMMAND ${WINDRES_EXECUTABLE} -i "${RC_FILE}" -o "${RC_OBJECT}"
-                    DEPENDS "${RC_FILE}" "${MANIFEST_FILE}"
-                    COMMENT "编译Windows资源文件和清单"
-                )
-                
-                # 将对象文件添加到源文件列表
-                list(APPEND SOURCES "${RC_OBJECT}")
-                
-                message(STATUS "MinGW清单嵌入配置完成")
-            else()
-                message(WARNING "未找到windres工具，将跳过清单文件嵌入")
-            endif()
-            
+
+            # 编译资源文件为对象文件
+            set(RC_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/app.rc.o")
+            add_custom_command(
+                OUTPUT "${RC_OBJECT}"
+                COMMAND ${WINDRES_EXECUTABLE} -i "${RC_FILE}" -o "${RC_OBJECT}"
+                DEPENDS "${RC_FILE}" "${MANIFEST_FILE}"
+                COMMENT "编译Windows资源文件和清单"
+            )
+
+            # 将对象文件添加到源文件列表
+            list(APPEND SOURCES "${RC_OBJECT}")
+
+            message(STATUS "MinGW清单嵌入配置完成")
         else()
-            message(WARNING "未知的Windows编译器，将跳过清单文件嵌入")
+            message(WARNING "未找到windres工具，将跳过清单文件嵌入")
         endif()
-        
+
     else()
-        message(WARNING "Windows清单文件不存在: ${MANIFEST_FILE}")
+        message(WARNING "未知的Windows编译器，将跳过清单文件嵌入")
     endif()
 endif()
 
 # 创建可执行文件
 if(APPLE)
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCES} ${HEADERS})
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    )
 else()
     add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 endif()
@@ -404,6 +407,12 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
     COMMENT "复制resources目录到构建目录"
 )
+if(WIN32)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MANIFEST_FILE}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/app.manifest"
+    )
+endif()
 
 # 验证CEF库并配置链接
 message(STATUS "=== CEF库链接配置 ===")

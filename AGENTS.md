@@ -458,7 +458,12 @@ def main_workflow(user_input):
 - `./scripts/build.sh -t Release -a x64 --cef-version 118` (modern) or `--cef-version 75` (Win7/32-bit): configures CMake, runs build, and copies CEF bits. On Windows use `scripts\build.bat ...`.
 - `./scripts/build.sh -t Debug -a x86 --cef-version 75`: fastest loop for 32-bit compatibility fixes.
 - Run built app: `./build/Release_x64/bin/DesktopTerminal-CEF` (Linux/macOS) or `build\Release_x64\bin\DesktopTerminal-CEF.exe` (Windows).
-- Package artifacts: `./scripts/package.sh -t Release -a x64 -f dmg|zip|nsis --version 1.0.0`.
+- Package artifacts: `./scripts/package.sh -t Release -a x64 -f zip`.
+
+## 产品版本号
+
+- 唯一来源是 [src/app_version.h](src/app_version.h) 中的 `DESKTOP_TERMINAL_VERSION`，格式为 `主版本.次版本.修订号`。发版时修改这一处，再重新构建和打包。
+- 主程序、终端服务、构建生成的应用元数据、Windows 安装器和发布包名都从这里取值。CEF、Qt 和配置文件格式各自使用独立的版本号。
 
 ## Coding Style & Naming Conventions
 - C++17, Qt5-first types (`QString`, `QVector`); prefer RAII and signals/slots over raw pointers.

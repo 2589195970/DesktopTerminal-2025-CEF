@@ -3,6 +3,7 @@
 #ifdef Q_OS_WIN
 
 #include "service_runtime.h"
+#include "../app_version.h"
 #include "seat_display_store.h"
 #include "win_handle.h"
 
@@ -174,7 +175,7 @@ int runTerminal(bool console)
     auto &service = controller();
     QCoreApplication app(service.argc, service.argv);
     QCoreApplication::setApplicationName(QStringLiteral("DesktopTerminalService"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("1.0.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(DESKTOP_TERMINAL_VERSION));
     const QString directory = secureDataDirectory();
     if (directory.isEmpty()) {
         return 1;

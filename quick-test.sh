@@ -20,9 +20,9 @@ echo "🔨 构建项目..."
 
 # 3. 打包
 echo "📦 打包应用..."
-./scripts/package.sh --version 1.0.0-test
+./scripts/package.sh
 
 echo "✅ 验证完成！"
 echo ""
 echo "构建产物: build/Release_x64/bin/DesktopTerminal-CEF"
-echo "打包文件: package/DesktopTerminal-CEF-1.0.0-test-macos-x64.dmg"
+echo "打包目录: package/"

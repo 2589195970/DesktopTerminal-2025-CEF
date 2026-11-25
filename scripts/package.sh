@@ -45,7 +45,6 @@ show_help() {
     echo "  -a, --arch ARCH         目标架构 (x86|x64)"
     echo "  -p, --platform PLATFORM 目标平台 (windows|macos|linux)"
     echo "  -f, --format FORMAT     打包格式 (zip|tar.gz|deb|rpm|dmg|nsis)"
-    echo "  --version VERSION       软件版本号"
     echo "  --clean                 清理打包目录"
     echo ""
 }
@@ -402,7 +401,6 @@ TARGET="Release"
 ARCH=""
 PLATFORM=""
 FORMAT=""
-VERSION="1.0.0"
 CLEAN="false"
 
 # 解析命令行参数
@@ -428,10 +426,6 @@ while [[ $# -gt 0 ]]; do
             FORMAT="$2"
             shift 2
             ;;
-        --version)
-            VERSION="$2"
-            shift 2
-            ;;
         --clean)
             CLEAN="true"
             shift
@@ -446,6 +440,7 @@ done
 
 # 主流程
 main() {
+    VERSION=$(bash "$SCRIPT_DIR/app-version.sh")
     log_info "DesktopTerminal-CEF 打包脚本启动"
     
     detect_system

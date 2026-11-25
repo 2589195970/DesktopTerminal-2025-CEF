@@ -1,7 +1,6 @@
 <RCC>
     <qresource prefix="/resources">
         <file>loading_animation.css</file>
-        <file>app.manifest</file>
         <file>logo-neutral.ico</file>
         <file>logo-neutral.png</file>
         <file>logo.ico</file>

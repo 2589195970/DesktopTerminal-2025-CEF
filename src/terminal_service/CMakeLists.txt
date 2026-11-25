@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(TerminalService LANGUAGES CXX)
+    include(../../cmake/AppVersion.cmake)
+    project(TerminalService VERSION "${APP_VERSION}" LANGUAGES CXX)
 endif()
 
 option(TERMINAL_SERVICE_TESTS "构建终端服务单元测试" OFF)
@@ -12,12 +13,15 @@ if(WIN32 OR TERMINAL_SERVICE_TESTS)
     target_compile_features(terminal_service_core PUBLIC cxx_std_17)
     target_link_libraries(terminal_service_core PUBLIC Qt5::Core Qt5::Network)
     if(MSVC)
-        target_compile_options(terminal_service_core PUBLIC /utf-8)
+        target_compile_options(terminal_service_core PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
     endif()
 endif()
 
 if(WIN32)
-    add_executable(DesktopTerminalService commands_win.cpp main_win.cpp network_win.cpp service_runtime.cpp)
+    enable_language(RC)
+    configure_file(terminal_service_version.rc.in terminal_service_version.rc @ONLY)
+    add_executable(DesktopTerminalService commands_win.cpp main_win.cpp network_win.cpp service_runtime.cpp
+        "${CMAKE_CURRENT_BINARY_DIR}/terminal_service_version.rc")
     set_target_properties(DesktopTerminalService PROPERTIES
         WIN32_EXECUTABLE FALSE
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

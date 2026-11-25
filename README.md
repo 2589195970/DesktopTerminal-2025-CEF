@@ -151,17 +151,18 @@ DesktopTerminal-2025-CEF/
 
 ## 部署打包
 
+产品版本号统一维护在 `src/app_version.h` 的 `DESKTOP_TERMINAL_VERSION`。修改后重新构建，再创建分发包。
+
 ### 创建分发包
 ```bash
 # 创建ZIP包
 ./scripts/package.sh -t Release -a x64 -f zip
 
-# 创建Windows安装包
-./scripts/package.sh -t Release -a x86 -f nsis --version 1.0.0
-
 # 创建macOS DMG
 ./scripts/package.sh -t Release -a x64 -f dmg
 ```
+
+Windows 安装包由 GitHub Actions 调用 `installer.nsi` 生成。
 
 ### 部署检查清单
 - [ ] CEF运行时文件已包含

@@ -1,6 +1,7 @@
 #include "application.h"
 #include "cef_manager.h"
 #include "secure_browser.h"
+#include "../app_version.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../network/network_checker.h"
@@ -55,7 +56,7 @@ Application::Application(int &argc, char **argv, int originalArgc, char **origin
     // 设置应用程序信息
     setApplicationName("DesktopTerminal-CEF");
     setApplicationDisplayName("智多分机考桌面端 (CEF版)");
-    setApplicationVersion("1.0.0");
+    setApplicationVersion(QStringLiteral(DESKTOP_TERMINAL_VERSION));
     setOrganizationName("智多分");
     setOrganizationDomain("sdzdf.com");
 

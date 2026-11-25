@@ -15,9 +15,7 @@ Unicode true
 !define APPNAME        "智多分机考桌面端"
 !define COMPANYNAME    "山东智多分"
 !define DESCRIPTION    "教育考试场景专用安全浏览器"
-!define VERSIONMAJOR   1
-!define VERSIONMINOR   0
-!define VERSIONPATCH   0
+!searchparse /file "src\app_version.h" `#define DESKTOP_TERMINAL_VERSION "` APP_VERSION `"`
 !define TERMINAL_APP   "DesktopTerminal-CEF.exe"
 !define TERMINAL_SERVICE "UMTerminalService"
 !define TERMINAL_SERVICE_EXE "DesktopTerminalService.exe"
@@ -36,10 +34,10 @@ Unicode true
 
 !if "${ARCH}" == "x86"
   !define INSTALL_DIR "$PROGRAMFILES32\${COMPANYNAME}\${APPNAME}"
-  !define OUTPUT_FILE "Output\${APPNAME}-setup-x86-cef${CEF_VERSION}.exe"
+  !define OUTPUT_FILE "Output\DesktopTerminal-CEF-v${APP_VERSION}-${ARCH}-cef${CEF_VERSION}-win7-setup.exe"
 !else
   !define INSTALL_DIR "$PROGRAMFILES64\${COMPANYNAME}\${APPNAME}"
-  !define OUTPUT_FILE "Output\${APPNAME}-setup-cef${CEF_VERSION}.exe"
+  !define OUTPUT_FILE "Output\DesktopTerminal-CEF-v${APP_VERSION}-${ARCH}-cef${CEF_VERSION}-setup.exe"
 !endif
 
 ; ─────────────────────────────────────────────
@@ -683,7 +681,7 @@ Section "主程序" SecMain
     SetOutPath "$INSTDIR\resources"
     File "resources\logo.ico"
     File /nonfatal "resources\logo.png"
-    File /nonfatal "resources\app.manifest"
+    File /nonfatal "artifacts\windows-${ARCH}\resources\app.manifest"
     File /nonfatal "resources\loading_animation.css"
     ${Log} "✓ 应用资源文件已安装"
 
@@ -702,7 +700,7 @@ Section "主程序" SecMain
     WriteRegStr HKLM "Software\${COMPANYNAME}\${APPNAME}" "InstallDir" "$INSTDIR"
     WriteRegStr HKLM "Software\${COMPANYNAME}\${APPNAME}" "CEFVersion" "${CEF_VERSION}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName"       "${APPNAME}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayVersion"    "${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONPATCH}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayVersion"    "${APP_VERSION}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher"         "${COMPANYNAME}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayIcon"       "$INSTDIR\DesktopTerminal-CEF.exe,0"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString"   "$INSTDIR\uninstall.exe"

@@ -1375,6 +1375,7 @@ jobs:
         if (Test-Path "resources") {
           New-Item -ItemType Directory -Force -Path "$artifactPath\resources"
           Copy-Item "resources\*" "$artifactPath\resources\" -Recurse -Force
+          Copy-Item "build\resources\app.manifest" "$artifactPath\resources\" -ErrorAction Stop
           Write-Host "Resource files copied successfully"
         } else {
           Write-Host "resources directory does not exist, skipping resource copy"
@@ -1596,17 +1597,6 @@ jobs:
         
         echo "生成的安装包："
         dir Output\*.exe
-        
-        REM 重命名安装包包含完整版本信息
-        for %%f in (Output\*.exe) do (
-          if "${{ matrix.arch }}"=="x86" (
-            set "new_name=DesktopTerminal-CEF-v1.0.0-${{ matrix.arch }}-cef!cef_major!-win7-setup.exe"
-          ) else (
-            set "new_name=DesktopTerminal-CEF-v1.0.0-${{ matrix.arch }}-cef!cef_major!-setup.exe"
-          )
-          ren "%%f" "!new_name!"
-          echo 重命名: %%f -^> !new_name!
-        )
 
     - name: Upload Windows ${{ matrix.arch }} Artifacts
       uses: actions/upload-artifact@v5
@@ -1989,61 +1979,56 @@ jobs:
 
   # 创建发布包（仅在发布时触发）
   create-release:
-    needs: [build-windows, code-quality]  # 暂时只依赖Windows构建
+    needs: [build-windows, code-quality]
     runs-on: ubuntu-latest
     name: Create Release Packages
     if: github.event_name == 'release'
-    
+
+    permissions:
+      contents: write
+
     steps:
-    - name: Download all artifacts
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Read product version
+      id: version
+      shell: bash
+      run: |
+        version=$(bash scripts/app-version.sh)
+        echo "value=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Download Windows artifacts
       uses: actions/download-artifact@v5
       with:
-        pattern: DesktopTerminal-CEF-*
-        merge-multiple: true
+        pattern: DesktopTerminal-CEF-windows-*
+        path: release-artifacts
 
     - name: Create release packages
+      shell: bash
+      env:
+        APP_VERSION: ${{ steps.version.outputs.value }}
       run: |
-        echo "[PACKAGE] Creating release packages..."
-        
-        # Windows 32-bit package
-        cd DesktopTerminal-CEF-windows-x86
-        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip .
-        cd ..
-        
-        # Windows 64-bit package  
-        cd DesktopTerminal-CEF-windows-x64
-        zip -r ../DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip .
-        cd ..
-        
-        # macOS package
-        cd DesktopTerminal-CEF-macos-x64
-        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz .
-        cd ..
-        
-        # Linux package
-        cd DesktopTerminal-CEF-linux-x64
-        tar -czf ../DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz .
-        cd ..
-        
-        # Show created packages
-        ls -la *.zip *.tar.gz
+        for arch in x86 x64; do
+          (
+            cd "release-artifacts/DesktopTerminal-CEF-windows-$arch"
+            zip -r "${GITHUB_WORKSPACE}/DesktopTerminal-CEF-v${APP_VERSION}-windows-$arch.zip" .
+          )
+        done
 
     - name: Upload release assets
       uses: softprops/action-gh-release@v2
       with:
+        fail_on_unmatched_files: true
         files: |
-          DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x86.zip
-          DesktopTerminal-CEF-v${{ github.ref_name }}-windows-x64.zip
-          DesktopTerminal-CEF-v${{ github.ref_name }}-macos-x64.tar.gz
-          DesktopTerminal-CEF-v${{ github.ref_name }}-linux-x64.tar.gz
+          DesktopTerminal-CEF-v${{ steps.version.outputs.value }}-windows-x86.zip
+          DesktopTerminal-CEF-v${{ steps.version.outputs.value }}-windows-x64.zip
         body: |
-          ## DesktopTerminal-CEF Release ${{ github.ref_name }}
+          ## DesktopTerminal-CEF v${{ steps.version.outputs.value }}
           
           ### [PACKAGE] 包含的平台
           - **Windows 32-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
-          - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)  
-          - **macOS 64-bit**: 支持macOS 10.12及以上系统 (CEF 75 - 最大兼容性)
-          - **Linux 64-bit**: 支持Ubuntu 16.04及以上系统 (CEF 75 - 最大兼容性)
+          - **Windows 64-bit**: 支持Windows 7 SP1及以上系统 (CEF 75 - 最大兼容性)
           
           ### [CHECK] 主要特性
           - Qt5 + CEF集成的安全桌面终端
@@ -2053,8 +2038,6 @@ jobs:
           
           ### [REPORT] 系统要求
           - **Windows**: Windows 7 SP1 或更高版本
-          - **macOS**: macOS 10.12 或更高版本  
-          - **Linux**: Ubuntu 18.04 或等效发行版
           
           ### [LAUNCH] 快速开始
           1. 下载对应平台的包
