@@ -19,6 +19,8 @@ namespace {
 constexpr int PageInset = 32;
 constexpr int CardWidth = 776;
 constexpr int ContentInset = 30;
+constexpr int StatusWithSeatSize = 18;
+constexpr int StatusWithoutSeatSize = 26;
 // 与学生端 PC 登录页 .left-bg 使用同一背景色。
 constexpr char StudentLoginBlue[] = "#4f99fd";
 constexpr char TerminalInfoText[] = "#152b48";
@@ -109,7 +111,7 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
     auto* noticeLayout = new QVBoxLayout(notice);
     noticeLayout->setContentsMargins(12, 11, 12, 11);
     noticeLayout->setSpacing(4);
-    m_status = makeLabel(notice, {}, 18, "#234e86", true);
+    m_status = makeLabel(notice, {}, StatusWithoutSeatSize, "#234e86", true);
     m_status->setWordWrap(true);
     m_message = makeLabel(notice, {}, 14, "#52637a");
     m_message->setWordWrap(true);
@@ -130,16 +132,16 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
 
 void ExamSeatPage::showSession(State state, const QString& seat, const QString& session)
 {
-    m_hasSeat = state == State::Waiting && !seat.isEmpty();
-    m_seatDetails->setVisible(m_hasSeat);
-    m_seatNumber->setText(m_hasSeat ? seat : QString());
+    const bool hasSeat = state == State::Waiting && !seat.isEmpty();
+    m_seatDetails->setVisible(hasSeat);
+    m_seatNumber->setText(hasSeat ? seat : QString());
     const QString sessionName = session.trimmed();
     m_session->setText(sessionName.isEmpty() ? QStringLiteral("待获取") : sessionName);
 
     QString message;
     switch (state) {
     case State::Waiting:
-        m_status->setText(m_hasSeat ? QStringLiteral("等待开考") : QStringLiteral("座号待分配"));
+        m_status->setText(hasSeat ? QStringLiteral("等待开考") : QStringLiteral("座号待分配"));
         break;
     case State::Unused:
         m_status->setText(QStringLiteral("本场不使用"));
@@ -152,6 +154,9 @@ void ExamSeatPage::showSession(State state, const QString& seat, const QString& 
     }
     m_message->setText(message);
     m_message->setVisible(!message.isEmpty());
+    QFont statusFont = m_status->font();
+    statusFont.setPixelSize(hasSeat ? StatusWithSeatSize : StatusWithoutSeatSize);
+    m_status->setFont(statusFont);
     adjustLayout();
 }
 
@@ -189,10 +194,6 @@ void ExamSeatPage::adjustLayout()
         seatFont.setPixelSize(qMax(12, preferred * available / measure));
     }
     m_seatNumber->setFont(seatFont);
-
-    QFont statusFont = m_status->font();
-    statusFont.setPixelSize(m_hasSeat ? 18 : 26);
-    m_status->setFont(statusFont);
 }
 
 QLabel* ExamSeatPage::createTerminalInfo(QWidget* parent)

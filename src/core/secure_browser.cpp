@@ -207,8 +207,12 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
     const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatReleaseId == releaseId;
     const bool managed = !state.isEmpty();
     if (managed && !loginOpen) {
-        const auto pageState = unused ? ExamSeatPage::State::Unused
-            : (waiting || wantsLogin) ? ExamSeatPage::State::Waiting : ExamSeatPage::State::Synchronizing;
+        auto pageState = ExamSeatPage::State::Synchronizing;
+        if (unused) {
+            pageState = ExamSeatPage::State::Unused;
+        } else if (waiting || wantsLogin) {
+            pageState = ExamSeatPage::State::Waiting;
+        }
         m_examSeatPage->showSession(pageState, seat, display.value(QStringLiteral("sessionName")).toString());
         m_examPages->setCurrentWidget(m_examSeatPage);
     } else {

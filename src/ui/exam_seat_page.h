@@ -31,7 +31,6 @@ private:
     QLabel* m_seatNumber = nullptr;
     QLabel* m_status = nullptr;
     QLabel* m_message = nullptr;
-    bool m_hasSeat = false;
 };
 
 #endif
