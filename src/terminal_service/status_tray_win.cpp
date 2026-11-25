@@ -39,7 +39,14 @@
 #include <QWindow>
 #include <QtConcurrentRun>
 
+#include <exdisp.h>
+#include <shellapi.h>
+#include <shldisp.h>
+#include <shlobj.h>
 #include <winsvc.h>
+#include <wrl/client.h>
+
+#include <string_view>
 
 namespace {
 
@@ -48,6 +55,76 @@ using namespace terminal;
 constexpr qint64 Minute = 60 * 1000;
 constexpr qint64 Day = 24 * 60 * Minute;
 constexpr int VisibleLogLimit = 1000;
+
+HRESULT launchTrayFromExplorer()
+{
+    using Microsoft::WRL::ComPtr;
+
+    ComPtr<IShellWindows> windows;
+    HRESULT result = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows));
+    if (FAILED(result)) {
+        return result;
+    }
+
+    VARIANT desktop{};
+    desktop.vt = VT_I4;
+    desktop.lVal = CSIDL_DESKTOP;
+    VARIANT root{};
+    long windowHandle = 0;
+    ComPtr<IDispatch> window;
+    result = windows->FindWindowSW(&desktop, &root, SWC_DESKTOP, &windowHandle, SWFO_NEEDDISPATCH, &window);
+    if (result != S_OK) {
+        return result == S_FALSE ? HRESULT_FROM_WIN32(ERROR_NOT_FOUND) : result;
+    }
+
+    ComPtr<IServiceProvider> services;
+    ComPtr<IShellBrowser> browser;
+    ComPtr<IShellView> view;
+    ComPtr<IDispatch> viewAutomation;
+    ComPtr<IShellFolderViewDual> folder;
+    ComPtr<IDispatch> application;
+    ComPtr<IShellDispatch2> shell;
+    if (FAILED(result = window.As(&services))
+            || FAILED(result = services->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser)))
+            || FAILED(result = browser->QueryActiveShellView(&view))
+            || FAILED(result = view->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&viewAutomation)))
+            || FAILED(result = viewAutomation.As(&folder))
+            || FAILED(result = folder->get_Application(&application))
+            || FAILED(result = application.As(&shell))) {
+        return result;
+    }
+
+    wchar_t executable[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
+    if (!length || length == MAX_PATH) {
+        return HRESULT_FROM_WIN32(length == MAX_PATH ? ERROR_INSUFFICIENT_BUFFER : GetLastError());
+    }
+    const std::unique_ptr<OLECHAR, decltype(&SysFreeString)> path(SysAllocString(executable), SysFreeString);
+    const std::unique_ptr<OLECHAR, decltype(&SysFreeString)> trayArgument(SysAllocString(L"--tray"), SysFreeString);
+    if (!path || !trayArgument) {
+        return E_OUTOFMEMORY;
+    }
+    VARIANT arguments{};
+    arguments.vt = VT_BSTR;
+    arguments.bstrVal = trayArgument.get();
+    VARIANT optional{};
+    return shell->ShellExecute(path.get(), arguments, optional, optional, optional);
+}
+
+int startTrayForDesktopUser()
+{
+    if (!GetShellWindow()) {
+        return ERROR_NOT_LOGGED_ON;
+    }
+    const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(initialized)) {
+        return initialized;
+    }
+    // 让桌面 Explorer 以登录用户的身份启动托盘。
+    const HRESULT result = launchTrayFromExplorer();
+    CoUninitialize();
+    return result;
+}
 
 enum class ServiceState { Running, Starting, Stopping, Stopped, Missing, Unknown };
 
@@ -863,6 +940,10 @@ private:
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--start-for-desktop-user") {
+        return startTrayForDesktopUser();
+    }
+
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("DesktopTerminalStatus"));

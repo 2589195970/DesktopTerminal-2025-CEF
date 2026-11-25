@@ -22,6 +22,7 @@ Unicode true
 !define TERMINAL_SERVICE_EXE "DesktopTerminalService.exe"
 !define TERMINAL_STATUS_EXE "DesktopTerminalStatus.exe"
 !define TERMINAL_STATUS_RUN_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
+!define ERROR_NOT_LOGGED_ON 1245
 !define TERMINAL_SERVICE_DISPLAY "UM 考场终端服务"
 !define TERMINAL_SERVICE_OPTIONS `binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
 
@@ -571,6 +572,10 @@ Section "主程序" SecMain
     File "scripts\start-terminal-service.bat"
     File "scripts\stop-terminal-service.bat"
     File "scripts\restart-terminal-service.bat"
+    File "scripts\start-terminal-status.bat"
+    File "scripts\stop-terminal-status.bat"
+    File "scripts\restart-terminal-status.bat"
+    File "scripts\control-terminal-status.ps1"
     SetOutPath "$INSTDIR"
 
     ; 安装CEF核心库文件
@@ -966,6 +971,16 @@ Section "主程序" SecMain
             MessageBox MB_OK|MB_ICONSTOP "终端服务配置或启动失败。请在安装目录中以管理员身份运行 diagnose-terminal-service.cmd 生成诊断报告。" /SD IDOK
             SetErrorLevel 1
             Abort
+        ${EndIf}
+        ${If} $VCRuntimeRebootRequired == "1"
+            ${Log} "Terminal status tray will start at Windows logon after restart"
+        ${Else}
+            !insertmacro EXEC_TERMINAL_COMMAND `"$INSTDIR\${TERMINAL_STATUS_EXE}" --start-for-desktop-user`
+            ${If} $TerminalServiceResult == ${ERROR_NOT_LOGGED_ON}
+                ${Log} "No desktop in the installer session; terminal status tray will start at Windows logon"
+            ${Else}
+                !insertmacro LOG_TERMINAL_RESULT "Start terminal status tray"
+            ${EndIf}
         ${EndIf}
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端 API 地址留空时，考试端从前端 Config.json 发现 API 地址，终端服务使用备用终端管理地址$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}

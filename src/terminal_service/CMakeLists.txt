@@ -44,7 +44,9 @@ if(WIN32)
     target_link_libraries(DesktopTerminalService PRIVATE
         terminal_service_core wtsapi32 userenv iphlpapi ws2_32 advapi32 shell32
     )
-    target_link_libraries(DesktopTerminalStatus PRIVATE terminal_service_core Qt5::Widgets Qt5::Concurrent advapi32 shell32)
+    target_link_libraries(DesktopTerminalStatus PRIVATE
+        terminal_service_core Qt5::Widgets Qt5::Concurrent advapi32 shell32 ole32 oleaut32 uuid
+    )
     if(MSVC)
         target_link_options(DesktopTerminalStatus PRIVATE /MANIFEST:NO)
     endif()

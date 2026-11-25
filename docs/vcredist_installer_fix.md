@@ -23,6 +23,14 @@ DLL 缺失或版本过低时，安装器静默运行随包提供的 Microsoft �
 
 脚本退出前会保留窗口，方便查看状态和错误。这些 BAT 也可以复制到旧版安装目录使用。
 
+## 手动启动、停止和重启状态托盘
+
+在安装目录的「终端注册」文件夹里双击对应的 BAT。脚本只操作当前登录会话中的状态托盘。
+
+- `start-terminal-status.bat` 启动状态托盘，成功时显示 `RUNNING`。
+- `stop-terminal-status.bat` 停止状态托盘，成功时显示 `STOPPED`。
+- `restart-terminal-status.bat` 重启状态托盘，成功时显示 `RUNNING`。
+
 ## 终端服务诊断
 
 在安装目录里右键单击 `diagnose-terminal-service.cmd`，选择「以管理员身份运行」。窗口会显示报告的位置。报告包含 Windows 服务状态、`DesktopTerminalService.exe` 的文件版本、VC++ DLL 版本、终端服务日志和近期崩溃事件。服务配置文件与状态文件只检查是否存在。
