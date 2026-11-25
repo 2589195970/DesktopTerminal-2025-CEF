@@ -1,5 +1,6 @@
-// Qt Network 的头文件会取消 Windows COM 使用的 interface 宏。
+// 先加载 COM 定义，Qt Network 的头文件会取消 interface 宏。
 #include <windows.h>
+#include <objbase.h>
 #include <exdisp.h>
 #include <shellapi.h>
 #include <shldisp.h>
