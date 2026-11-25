@@ -1,3 +1,12 @@
+// Qt Network 的头文件会取消 Windows COM 使用的 interface 宏。
+#include <windows.h>
+#include <exdisp.h>
+#include <shellapi.h>
+#include <shldisp.h>
+#include <shlobj.h>
+#include <winsvc.h>
+#include <wrl/client.h>
+
 #include "monitor_windows.h"
 #include "registration_monitor.h"
 #include "terminal_core.h"
@@ -43,13 +52,6 @@
 #include <QTreeWidget>
 #include <QWindow>
 #include <QtConcurrentRun>
-
-#include <exdisp.h>
-#include <shellapi.h>
-#include <shldisp.h>
-#include <shlobj.h>
-#include <winsvc.h>
-#include <wrl/client.h>
 
 #include <string_view>
 
