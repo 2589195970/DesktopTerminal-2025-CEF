@@ -194,7 +194,7 @@ Function ConfigPage
     nsDialogs::Create 1018
     Pop $Dialog
 
-    ${NSD_CreateLabel} 0 0 100% 12u "请配置考试系统信息："
+    ${NSD_CreateLabel} 0 0 100% 12u "终端注册优先使用后端 API 地址，留空时使用备用终端管理地址。"
     Pop $0
 
     ${NSD_CreateLabel} 0 18u 35% 12u "考试系统 URL"
@@ -212,7 +212,7 @@ Function ConfigPage
     ${NSD_CreateText} 36% 46u 64% 13u "$ConfigApiBaseUrl"
     Pop $ApiBaseUrlText
 
-    ${NSD_CreateLabel} 0 63u 35% 12u "终端管理地址"
+    ${NSD_CreateLabel} 0 63u 35% 12u "备用终端管理地址"
     Pop $0
     ${NSD_CreateText} 36% 61u 64% 13u "$TerminalURL"
     Pop $TerminalURLText
@@ -253,6 +253,9 @@ Function ConfigPageLeave
     ${NSD_GetText} $URLText $ConfigURL
     ${NSD_GetText} $PasswordText $ConfigPassword
     ${NSD_GetText} $ApiBaseUrlText $ConfigApiBaseUrl
+    Push $ConfigApiBaseUrl
+    Call TrimSchoolConfigValue
+    Pop $ConfigApiBaseUrl
     ${NSD_GetText} $TerminalURLText $TerminalURL
     ${NSD_GetText} $TerminalSlidText $TerminalSlid
     ${NSD_GetState} $SampleModeCheckbox $SampleMode
@@ -472,6 +475,9 @@ Function InstallTerminalService
     File "scripts\write-terminal-service-config.ps1"
     SetOutPath "$INSTDIR"
     StrCpy $0 $TerminalURL
+    ${If} $ConfigApiBaseUrl != ""
+        StrCpy $0 $ConfigApiBaseUrl
+    ${EndIf}
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_URL", w r0)'
     StrCpy $0 $TerminalSlid
     System::Call 'Kernel32::SetEnvironmentVariableW(w "DTCEF_TERMINAL_SLID", w r0)'
@@ -961,7 +967,7 @@ Section "主程序" SecMain
             SetErrorLevel 1
             Abort
         ${EndIf}
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端 API 地址留空时，考试端从前端 Config.json 发现 API 地址，终端服务使用备用终端管理地址$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}
     !insertmacro LOG_CLOSE
     ${If} $VCRuntimeRebootRequired == "1"
