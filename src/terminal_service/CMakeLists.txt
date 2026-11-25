@@ -8,7 +8,7 @@ option(TERMINAL_SERVICE_TESTS "构建终端服务单元测试" OFF)
 
 if(WIN32 OR TERMINAL_SERVICE_TESTS)
     find_package(Qt5 5.15 REQUIRED COMPONENTS Core Network)
-    add_library(terminal_service_core STATIC terminal_core.cpp)
+    add_library(terminal_service_core STATIC terminal_core.cpp seat_display_store.cpp)
     target_compile_features(terminal_service_core PUBLIC cxx_std_17)
     target_link_libraries(terminal_service_core PUBLIC Qt5::Core Qt5::Network)
     if(MSVC)

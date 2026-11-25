@@ -281,6 +281,8 @@ set(SOURCES
     src/network/desktop_auth_manager.cpp
     src/ui/loading_dialog.cpp
     src/ui/password_dialog.cpp
+    src/ui/toolbox_dialog.cpp
+    src/terminal_service/seat_display_store.cpp
     resources/resources.qrc
 )
 
@@ -306,6 +308,8 @@ set(HEADERS
     src/network/desktop_auth_manager.h
     src/ui/loading_dialog.h
     src/ui/password_dialog.h
+    src/ui/toolbox_dialog.h
+    src/terminal_service/seat_display_store.h
 )
 
 # QHotkey子项目

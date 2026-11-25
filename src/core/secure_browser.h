@@ -10,8 +10,10 @@
 #include <QWindowStateChangeEvent>
 
 #include "../security/keyboard_filter.h"
+#include "../terminal_service/seat_display_store.h"
 
 class QHotkey;
+class QLabel;
 class CEFManager;
 class Logger;
 class ConfigManager;
@@ -60,6 +62,7 @@ public:
      * @brief 设置键盘过滤器实例
      */
     void setKeyboardFilter(KeyboardFilter* filter);
+    void openToolbox();
 
 signals:
     /**
@@ -142,6 +145,13 @@ private slots:
 private:
     // 初始化方法
     void initializeWindow();
+    void refreshSeatDisplay();
+    int seatBarHeight() const;
+    void positionSeatBar();
+
+    terminal::SeatDisplayStore m_seatStore{terminal::SeatDisplayStore::dataDirectory()};
+    QLabel *m_seatBar = nullptr;
+    bool m_toolboxActive = false;
     void initializeCEF();
     void initializeHotkeys();
     void initializeMaintenanceTimer();

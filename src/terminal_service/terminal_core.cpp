@@ -328,6 +328,10 @@ HeartbeatResponse Protocol::parseHeartbeat(int httpStatus, const QByteArray &bod
         return {true, false, true, {}, QStringLiteral("心跳响应缺少有效的指令列表")};
     }
     HeartbeatResponse response{true, true, true, {}, {}};
+    const QJsonValue seatNumber = result.value(QStringLiteral("seatNumber"));
+    if (seatNumber.isString()) {
+        response.seatNumber = seatNumber.toString().trimmed();
+    }
     const QJsonArray items = commands.toArray();
     for (const QJsonValue &value : items) {
         const QJsonObject item = value.toObject();

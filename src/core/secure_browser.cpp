@@ -3,6 +3,7 @@
 #include "application.h"
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
+#include "../ui/toolbox_dialog.h"
 
 #include <QApplication>
 #include <QDesktopWidget>
@@ -14,6 +15,8 @@
 #include <QMessageBox>
 #include <QContextMenuEvent>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QScopedValueRollback>
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QHotkey>
@@ -65,6 +68,15 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
 
     // 初始化各个组件
     initializeWindow();
+    m_seatBar = new QLabel(this);
+    m_seatBar->setTextFormat(Qt::PlainText);
+    m_seatBar->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_seatBar->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_seatBar->setStyleSheet(QStringLiteral(
+        "background: #edf3fb; color: #183d6b; border-top: 1px solid #cbd9ec;"
+        "padding: 0 18px; font-size: 14px; font-weight: 600;"));
+    m_seatBar->hide();
+    refreshSeatDisplay();
     initializeCEF();
     initializeHotkeys();
     
@@ -253,6 +265,14 @@ void SecureBrowser::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (event->key() == Qt::Key_F11 && event->modifiers() == Qt::NoModifier) {
+        event->accept();
+        if (!event->isAutoRepeat()) {
+            openToolbox();
+        }
+        return;
+    }
+
     // F12开发者工具（备用方案，当全局热键注册失败时）
     if (event->key() == Qt::Key_F12 && event->modifiers() == Qt::NoModifier) {
         event->accept();
@@ -319,6 +339,7 @@ void SecureBrowser::contextMenuEvent(QContextMenuEvent *event)
 void SecureBrowser::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    positionSeatBar();
     
     // 调整CEF浏览器大小
     if (m_cefBrowserCreated) {
@@ -388,6 +409,68 @@ void SecureBrowser::handleExitHotkey()
     }
 }
 
+void SecureBrowser::openToolbox()
+{
+    if (m_toolboxActive || !isVisible() || QApplication::activeModalWidget()) {
+        return;
+    }
+    QScopedValueRollback<bool> active(m_toolboxActive, true);
+    QScopedValueRollback<bool> focusCheck(m_needFocusCheck, false);
+
+    const QString expected = m_configManager->getExitPassword();
+    if (expected.isEmpty()) {
+        m_logger->showMessage(this, QStringLiteral("管理员工具箱"), QStringLiteral("请先配置考试端密码。"));
+        return;
+    }
+
+    QString password;
+    if (!m_logger->getPassword(this, QStringLiteral("管理员工具箱"), QStringLiteral("请输入考试端密码"), password)) {
+        return;
+    }
+    if (password != expected) {
+        m_logger->hotkeyEvent(QStringLiteral("管理员工具箱密码错误"));
+        m_logger->showMessage(this, QStringLiteral("管理员工具箱"), QStringLiteral("密码错误"));
+        return;
+    }
+
+    ToolboxDialog dialog(m_seatStore, this);
+    connect(&dialog, &ToolboxDialog::seatChanged, this, [this] {
+        m_logger->appEvent(QStringLiteral("管理员已更新本机手动座号"));
+        refreshSeatDisplay();
+    });
+    dialog.exec();
+}
+
+void SecureBrowser::refreshSeatDisplay()
+{
+    terminal::SeatDisplay seat;
+    QString error;
+    if (!m_seatBar || !m_seatStore.read(seat, error)) {
+        return;
+    }
+    const QString number = seat.number();
+    const bool hadSeat = !m_seatBar->isHidden();
+    m_seatBar->setText(number.isEmpty() ? QString() : QStringLiteral("座号  %1").arg(number));
+    m_seatBar->setVisible(!number.isEmpty());
+    positionSeatBar();
+    if (m_cefBrowserCreated && hadSeat != !number.isEmpty()) {
+        resizeCEFBrowser();
+    }
+}
+
+int SecureBrowser::seatBarHeight() const
+{
+    return m_seatBar && !m_seatBar->isHidden() ? 34 : 0;
+}
+
+void SecureBrowser::positionSeatBar()
+{
+    if (m_seatBar && !m_seatBar->isHidden()) {
+        const int barHeight = seatBarHeight();
+        m_seatBar->setGeometry(0, height() - barHeight, width(), barHeight);
+    }
+}
+
 void SecureBrowser::handleDevToolsHotkey()
 {
     m_needFocusCheck = false; // 暂时禁用焦点检查
@@ -440,6 +523,7 @@ void SecureBrowser::handleUrlExit(const QString& url)
 
 void SecureBrowser::onMaintenanceTimer()
 {
+    refreshSeatDisplay();
     // 定期维护任务（与原项目逻辑相同）
     if (m_needFocusCheck && !isActiveWindow()) {
         enforceFocus();
@@ -991,6 +1075,7 @@ void SecureBrowser::resizeCEFBrowser()
 {
     if (m_cefBrowserCreated) {
         QSize windowSize = size();
+        windowSize.rheight() -= seatBarHeight();
 
         if (!windowSize.isValid()) {
             m_logger->errorEvent("调整CEF浏览器大小失败：当前窗口尺寸无效");
@@ -1022,7 +1107,7 @@ void SecureBrowser::resizeCEFBrowser()
         RECT rc;
         if (hwnd && GetClientRect(hwnd, &rc)) {
             physicalWidth  = rc.right  - rc.left;
-            physicalHeight = rc.bottom - rc.top;
+            physicalHeight = rc.bottom - rc.top - qRound(seatBarHeight() * dpr);
         } else {
             // 回退：用Qt size()*DPR换算
             physicalWidth  = static_cast<int>(std::round(windowSize.width()  * dpr));
@@ -1080,7 +1165,7 @@ void SecureBrowser::lockViewportIfNeeded()
         return;
     }
 
-    const QSize currentSize = size();
+    const QSize currentSize(width(), height() - seatBarHeight());
     if (!currentSize.isValid()) {
         return;
     }

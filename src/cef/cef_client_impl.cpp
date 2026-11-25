@@ -3,6 +3,7 @@
 #include "../logging/logger.h"
 #include "../config/config_manager.h"
 #include "../core/application.h"
+#include "../core/secure_browser.h"
 #include "../core/cef_manager.h"
 
 #include <algorithm>
@@ -225,6 +226,26 @@ CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRef
 
 bool CEFClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event, CefEventHandle os_event, bool* is_keyboard_shortcut)
 {
+    constexpr int f11KeyCode = 122;
+    constexpr uint32 shortcutModifiers = EVENTFLAG_SHIFT_DOWN | EVENTFLAG_CONTROL_DOWN |
+        EVENTFLAG_ALT_DOWN | EVENTFLAG_COMMAND_DOWN;
+    if (event.windows_key_code == f11KeyCode && !(event.modifiers & shortcutModifiers) && !browser->IsPopup()) {
+        if (event.type == KEYEVENT_RAWKEYDOWN
+#ifdef Q_OS_WIN
+            && !(event.native_key_code & (1 << 30))
+#endif
+        ) {
+            if (auto *application = qobject_cast<Application *>(QApplication::instance())) {
+                QMetaObject::invokeMethod(application, [application] {
+                    if (auto *window = application->getMainWindow()) {
+                        window->openToolbox();
+                    }
+                }, Qt::QueuedConnection);
+            }
+        }
+        return true;
+    }
+
     if (handleExitHotkeyEvent(event)) {
         if (is_keyboard_shortcut) {
             *is_keyboard_shortcut = true;

@@ -3,6 +3,7 @@
 #ifdef Q_OS_WIN
 
 #include "service_runtime.h"
+#include "seat_display_store.h"
 #include "win_handle.h"
 
 #include <aclapi.h>
@@ -144,12 +145,12 @@ bool isFileOrMissing(const QString &path)
 
 QString secureDataDirectory()
 {
-    const QString programData = qEnvironmentVariable("ProgramData");
-    if (!QDir::isAbsolutePath(programData)) {
+    const QString path = terminal::SeatDisplayStore::dataDirectory();
+    if (path.isEmpty()) {
         qCritical() << "ProgramData 环境变量无效";
         return {};
     }
-    const QDir directory(QDir(programData).filePath(QStringLiteral("UMTerminal")));
+    const QDir directory(path);
     DWORD error = ensureRestrictedDirectory(directory.absolutePath());
     if (error == ERROR_SUCCESS) {
         error = ensureRestrictedDirectory(directory.filePath(QStringLiteral("logs")));

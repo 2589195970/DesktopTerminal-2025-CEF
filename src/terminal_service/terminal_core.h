@@ -8,6 +8,8 @@
 #include <QUrl>
 #include <QVector>
 
+#include <optional>
+
 namespace terminal {
 
 struct Config {
@@ -77,6 +79,7 @@ struct HeartbeatResponse {
     bool codeValid = false;
     QVector<Command> commands;
     QString error;
+    std::optional<QString> seatNumber;
 };
 
 class Protocol {
