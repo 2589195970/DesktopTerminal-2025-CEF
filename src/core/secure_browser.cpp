@@ -101,14 +101,6 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     auto* loginLayout = new QVBoxLayout(m_examLoginPage);
     loginLayout->setContentsMargins(0, 0, 0, 0);
     loginLayout->setSpacing(0);
-    m_examLoginSeat = new QLabel(m_examLoginPage);
-    m_examLoginSeat->setTextFormat(Qt::PlainText);
-    m_examLoginSeat->setAlignment(Qt::AlignCenter);
-    m_examLoginSeat->setFixedHeight(38);
-    m_examLoginSeat->setStyleSheet(QStringLiteral(
-        "background: #eaf3ff; color: #174f99; font-size: 16px; font-weight: 600;"));
-    m_examLoginSeat->hide();
-    loginLayout->addWidget(m_examLoginSeat);
     m_browserHost = new QWidget(m_examLoginPage);
     m_browserHost->setAttribute(Qt::WA_DontCreateNativeAncestors);
     m_browserHost->setAttribute(Qt::WA_NativeWindow);
@@ -125,12 +117,7 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     m_examTerminalInfoTimer = new QTimer(this);
     m_examTerminalInfoTimer->setInterval(5000);
     connect(m_examTerminalInfoTimer, &QTimer::timeout, this, [this] {
-        const QSize previousSize = m_browserHost->size();
         m_examTerminalInfo->setText(ExamSeatPage::terminalDetails());
-        this->layout()->activate();
-        if (m_browserHost->size() != previousSize) {
-            resizeCEFBrowser();
-        }
     });
 
     m_examSeatLease = new QTimer(this);
@@ -207,8 +194,9 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
     }
     const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatReleaseId == releaseId;
     DesktopAuthManager::instance().setExamSeatReleaseId(loginOpen ? releaseId : QString());
-    const bool managed = !state.isEmpty();
-    if (managed && !loginOpen) {
+    m_managedExam = !state.isEmpty();
+    const bool showSeatPage = m_managedExam && !loginOpen;
+    if (showSeatPage) {
         auto pageState = ExamSeatPage::State::Synchronizing;
         if (unused) {
             pageState = ExamSeatPage::State::Unused;
@@ -218,15 +206,13 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
         m_examSeatPage->showSession(pageState, seat, display.value(QStringLiteral("sessionName")).toString());
         m_examPages->setCurrentWidget(m_examSeatPage);
     } else {
-        m_examLoginSeat->setText(loginOpen ? QStringLiteral("考试座号 %1").arg(seat) : QString());
-        m_examLoginSeat->setVisible(loginOpen);
         m_examPages->setCurrentWidget(m_examLoginPage);
     }
-    m_examTerminalInfo->setVisible(managed);
-    if (managed && !m_examTerminalInfoTimer->isActive()) {
+    m_examTerminalInfo->setVisible(showSeatPage);
+    if (showSeatPage && !m_examTerminalInfoTimer->isActive()) {
         m_examTerminalInfo->setText(ExamSeatPage::terminalDetails());
         m_examTerminalInfoTimer->start();
-    } else if (!managed) {
+    } else if (!showSeatPage) {
         m_examTerminalInfoTimer->stop();
     }
     fitManagedExamWindow();
@@ -588,17 +574,22 @@ void SecureBrowser::openToolbox()
 
 void SecureBrowser::refreshSeatDisplay()
 {
-    terminal::SeatDisplay seat;
-    QString error;
-    if (!m_seatBar || !m_seatStore.read(seat, error)) {
+    if (!m_seatBar) {
         return;
     }
-    QString number = seat.number();
+    QString number;
+    terminal::SeatDisplay seat;
+    QString error;
 #ifdef Q_OS_WIN
     const QString state = QJsonDocument::fromJson(m_examSeatPayload).object().value(QStringLiteral("state")).toString();
-    if (!state.isEmpty()) {
-        number = state == QStringLiteral("SYNC") ? seat.manual : QString();
+    if (state == QStringLiteral("SYNC") && m_seatStore.read(seat, error)) {
+        number = seat.manual;
     }
+#else
+    if (!m_seatStore.read(seat, error)) {
+        return;
+    }
+    number = seat.number();
 #endif
     const bool hadSeat = !m_seatBar->isHidden();
     m_seatBar->setText(number.isEmpty() ? QString() : QStringLiteral("座号  %1").arg(number));
@@ -1104,7 +1095,7 @@ void SecureBrowser::enforceWin32Fullscreen()
 
 void SecureBrowser::fitManagedExamWindow()
 {
-    if (!m_examTerminalInfo || m_examTerminalInfo->isHidden() || !isVisible() || !isFullScreen()) {
+    if (!m_managedExam || !isVisible() || !isFullScreen()) {
         return;
     }
     QWindow* window = windowHandle();

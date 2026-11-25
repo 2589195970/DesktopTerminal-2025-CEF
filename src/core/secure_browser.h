@@ -230,7 +230,7 @@ private:
     QStackedLayout* m_examPages = nullptr;
     QWidget* m_examLoginPage = nullptr;
     ExamSeatPage* m_examSeatPage = nullptr;
-    QLabel* m_examLoginSeat = nullptr;
+    bool m_managedExam = false;
     QLabel* m_examTerminalInfo = nullptr;
     QTimer* m_examTerminalInfoTimer = nullptr;
     QTimer* m_examSeatLease = nullptr;
