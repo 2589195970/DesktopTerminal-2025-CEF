@@ -1,6 +1,7 @@
 #pragma once
 
 #include "platform_win.h"
+#include "registration_monitor.h"
 
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
@@ -16,7 +17,8 @@ void writeServiceLog(const QString &directory, const QString &message);
 
 class ServiceRuntime : public QObject {
 public:
-    ServiceRuntime(const QString &directory, const Config &config, const State &state, WaitForStop waitForStop);
+    ServiceRuntime(const QString &directory, const Config &config, const State &state,
+                   RegistrationMonitor &monitor, WaitForStop waitForStop);
     ~ServiceRuntime() override;
 
     void start();
@@ -27,13 +29,15 @@ private:
     void sendNextRequest();
     void postRequest(const QList<QHostAddress> &addresses);
     void requestTimedOut();
-    void finishRequest(int status, const QByteArray &body, const QString &transportError);
+    void finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem);
+    void reportRequestFailure(bool registering, RegistrationProblem problem, int status = 0);
     void processQueuedCommands();
     void finishWorker();
     void finishPowerCommand();
     void updateCommandResult(const CommandResult &result);
     bool saveState();
     void schedule(int intervalMs);
+    void scheduleRegisterRetry();
     void logResult(const CommandResult &result) const;
     void log(const QString &message) const;
 
@@ -41,13 +45,17 @@ private:
     QString m_statePath;
     Config m_config;
     State m_state;
+    RegistrationMonitor &m_monitor;
     WaitForStop m_waitForStop;
     bool m_stateDirty = false;
     QString m_computerName;
     QNetworkAccessManager m_http;
     QTimer m_tick;
     QTimer m_requestTimeout;
+    QTimer m_statusRefresh;
+    QTimer m_logCleanup;
     QElapsedTimer m_requestElapsed;
+    int m_registerRetryMs = 0;
     Request m_request = Request::None;
     int m_lookupId = -1;
     QNetworkReply *m_reply = nullptr;

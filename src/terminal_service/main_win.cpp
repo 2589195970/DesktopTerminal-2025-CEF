@@ -3,9 +3,10 @@
 #ifdef Q_OS_WIN
 
 #include "service_runtime.h"
-#include "../app_version.h"
+#include "monitor_windows.h"
 #include "seat_display_store.h"
 #include "win_handle.h"
+#include "../app_version.h"
 
 #include <aclapi.h>
 #include <sddl.h>
@@ -24,8 +25,9 @@ namespace {
 using terminal::WinHandle;
 using terminal::LocalMemory;
 
-wchar_t ServiceName[] = L"UMTerminalService";
+using terminal::TerminalServiceName;
 constexpr wchar_t DirectoryDacl[] = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+constexpr wchar_t StatusDirectoryDacl[] = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)";
 constexpr DWORD StatusWaitHintMs = 10000;
 
 struct ServiceController {
@@ -66,10 +68,10 @@ ServiceController &controller()
     return service;
 }
 
-DWORD ensureRestrictedDirectory(const QString &path)
+DWORD ensureDirectory(const QString &path, const wchar_t *directoryDacl, bool requireTrustedOwner = false)
 {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(DirectoryDacl, SDDL_REVISION_1, &descriptor, nullptr)) {
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(directoryDacl, SDDL_REVISION_1, &descriptor, nullptr)) {
         return GetLastError();
     }
     const LocalMemory security(descriptor, LocalFree);
@@ -115,6 +117,9 @@ DWORD ensureRestrictedDirectory(const QString &path)
     const LocalMemory existingSecurity(existingDescriptor, LocalFree);
     // 目录所有者可以改写 DACL，确保所有者同样属于允许访问的安全主体。
     if (!owner || (!IsWellKnownSid(owner, WinLocalSystemSid) && !IsWellKnownSid(owner, WinBuiltinAdministratorsSid))) {
+        if (requireTrustedOwner) {
+            return ERROR_ACCESS_DENIED;
+        }
         alignas(DWORD) BYTE adminSid[SECURITY_MAX_SID_SIZE];
         DWORD sidSize = sizeof(adminSid);
         if (!CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adminSid, &sidSize)) {
@@ -152,9 +157,9 @@ QString secureDataDirectory()
         return {};
     }
     const QDir directory(path);
-    DWORD error = ensureRestrictedDirectory(directory.absolutePath());
+    DWORD error = ensureDirectory(directory.absolutePath(), DirectoryDacl);
     if (error == ERROR_SUCCESS) {
-        error = ensureRestrictedDirectory(directory.filePath(QStringLiteral("logs")));
+        error = ensureDirectory(directory.filePath(QStringLiteral("logs")), DirectoryDacl);
     }
     if (error != ERROR_SUCCESS) {
         qCritical().noquote() << terminal::windowsFailure(QStringLiteral("无法保护终端服务目录"), error);
@@ -170,6 +175,44 @@ QString secureDataDirectory()
     return directory.absolutePath();
 }
 
+QString secureStatusDirectory(const QString &directory)
+{
+    const QString path = terminal::registrationStatusDirectory();
+    DWORD error = path.isEmpty() ? ERROR_PATH_NOT_FOUND : ensureDirectory(path, StatusDirectoryDacl, true);
+    if (error == ERROR_SUCCESS) {
+        const QDir status(path);
+        const QStringList files{QStringLiteral("status.json"), QStringLiteral("registration.log"),
+                                QStringLiteral("registration.log.1"), QStringLiteral("registration.log.2"),
+                                QStringLiteral("registration.log.3"), QStringLiteral("registration.log.4")};
+        for (const QString &name : files) {
+            const std::wstring file = QDir::toNativeSeparators(status.filePath(name)).toStdWString();
+            const WinHandle handle(CreateFileW(file.c_str(), FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+            if (!handle) {
+                const DWORD openError = GetLastError();
+                if (openError == ERROR_FILE_NOT_FOUND) {
+                    continue;
+                }
+                error = openError;
+                break;
+            }
+            BY_HANDLE_FILE_INFORMATION info{};
+            if (!GetFileInformationByHandle(handle.get(), &info)
+                    || info.nNumberOfLinks != 1
+                    || (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) {
+                error = ERROR_INVALID_DATA;
+                break;
+            }
+        }
+    }
+    if (error != ERROR_SUCCESS) {
+        terminal::writeServiceLog(directory, terminal::windowsFailure(QStringLiteral("无法保护终端注册状态目录"), error));
+        return {};
+    }
+    return path;
+}
+
 int runTerminal(bool console)
 {
     auto &service = controller();
@@ -181,22 +224,28 @@ int runTerminal(bool console)
         return 1;
     }
     const QDir data(directory);
-    terminal::Config config;
-    terminal::State state;
-    QString error;
-    if (!terminal::Config::load(data.filePath(QStringLiteral("service.ini")), config, error)) {
-        terminal::writeServiceLog(directory, QStringLiteral("读取 service.ini 失败：%1").arg(error));
-        return 1;
-    }
-
     QLockFile lock(data.filePath(QStringLiteral("state.json.lock")));
     lock.setStaleLockTime(0);
     if (!lock.tryLock(0)) {
         terminal::writeServiceLog(directory, QStringLiteral("无法锁定 state.json，检查是否已有服务或控制台实例"));
         return 1;
     }
+
+    terminal::RegistrationMonitor monitor(console ? QString() : secureStatusDirectory(directory));
+    terminal::RegistrationMonitor::pruneServiceLog(directory);
+    monitor.start();
+    terminal::Config config;
+    terminal::State state;
+    QString error;
+    if (!terminal::Config::load(data.filePath(QStringLiteral("service.ini")), config, error)) {
+        terminal::writeServiceLog(directory, QStringLiteral("读取 service.ini 失败：%1").arg(error));
+        monitor.startupFailed(terminal::RegistrationProblem::Configuration);
+        return 1;
+    }
+    monitor.setSchoolInstance(config.slid);
     if (!terminal::State::load(data.filePath(QStringLiteral("state.json")), state, error)) {
         terminal::writeServiceLog(directory, QStringLiteral("读取 state.json 失败：%1").arg(error));
+        monitor.startupFailed(terminal::RegistrationProblem::State);
         return 1;
     }
 
@@ -209,7 +258,7 @@ int runTerminal(bool console)
     stopCheck.start(100);
     int result;
     {
-        terminal::ServiceRuntime runtime(directory, config, state, [&service](int timeout) {
+        terminal::ServiceRuntime runtime(directory, config, state, monitor, [&service](int timeout) {
             return service.waitForStop(timeout);
         });
         runtime.start();
@@ -218,6 +267,7 @@ int runTerminal(bool console)
         }
         result = app.exec();
     }
+    monitor.stop();
     terminal::writeServiceLog(directory, QStringLiteral("终端服务已停止"));
     return result;
 }
@@ -246,7 +296,7 @@ DWORD WINAPI handleServiceControl(DWORD code, DWORD, LPVOID, LPVOID context)
 void WINAPI serviceMain(DWORD, LPWSTR *)
 {
     auto &service = controller();
-    const SERVICE_STATUS_HANDLE handle = RegisterServiceCtrlHandlerExW(ServiceName, handleServiceControl, &service);
+    const SERVICE_STATUS_HANDLE handle = RegisterServiceCtrlHandlerExW(TerminalServiceName, handleServiceControl, &service);
     if (!handle) {
         return;
     }
@@ -288,7 +338,7 @@ int main(int argc, char **argv)
             return result;
         }
     }
-    const SERVICE_TABLE_ENTRYW services[] = {{ServiceName, serviceMain}, {nullptr, nullptr}};
+    const SERVICE_TABLE_ENTRYW services[] = {{const_cast<wchar_t *>(TerminalServiceName), serviceMain}, {nullptr, nullptr}};
     return StartServiceCtrlDispatcherW(services) ? 0 : 1;
 }
 

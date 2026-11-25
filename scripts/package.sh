@@ -109,7 +109,12 @@ copy_application() {
     
     # 复制主执行文件
     if [[ "$PLATFORM" == "windows" ]]; then
-        cp "$BUILD_SUBDIR/bin/DesktopTerminal-CEF.exe" "$PACKAGE_PATH/bin/"
+        local runtime_dir="$BUILD_SUBDIR/bin"
+        if [[ -f "$runtime_dir/$TARGET/DesktopTerminal-CEF.exe" ]]; then
+            runtime_dir="$runtime_dir/$TARGET"
+        fi
+        cp "$runtime_dir/DesktopTerminal-CEF.exe" "$runtime_dir/DesktopTerminalService.exe" \
+           "$runtime_dir/DesktopTerminalStatus.exe" "$PACKAGE_PATH/bin/"
     else
         cp "$BUILD_SUBDIR/bin/DesktopTerminal-CEF" "$PACKAGE_PATH/bin/"
         chmod +x "$PACKAGE_PATH/bin/DesktopTerminal-CEF"

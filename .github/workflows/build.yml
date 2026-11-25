@@ -1584,6 +1584,13 @@ jobs:
           exit /b 1
         )
         
+        for %%f in (DesktopTerminalService.exe DesktopTerminalStatus.exe) do (
+          if not exist "artifacts\windows-${{ matrix.arch }}\%%f" (
+            echo "[ERROR] Missing %%f in Windows artifacts"
+            exit /b 1
+          )
+        )
+
         REM 提取CEF主版本号
         set "cef_version_full=${{ matrix.cef_version }}"
         for /f "tokens=1 delims=." %%a in ("!cef_version_full!") do set "cef_major=%%a"

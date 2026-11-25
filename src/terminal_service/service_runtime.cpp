@@ -5,7 +5,6 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
-#include <QFile>
 #include <QHostInfo>
 #include <QJsonDocument>
 #include <QNetworkReply>
@@ -18,29 +17,47 @@
 namespace terminal {
 namespace {
 
-constexpr int RegisterIntervalMs = 5 * 60 * 1000;
+constexpr int RegisterIntervalMinMs = 20 * 1000;
+constexpr int RegisterJitterMs = 5 * 1000;
+constexpr int RegisterRetryMinMs = 30 * 1000;
+constexpr int RegisterRetryMaxMs = 60 * 1000;
 constexpr int HeartbeatIntervalMs = 30 * 1000;
 constexpr int RequestTimeoutMs = 10 * 1000;
+constexpr int StatusRefreshMs = 15 * 1000;
+constexpr int ServiceLogCleanupMs = 60 * 60 * 1000;
+
+RegistrationProblem networkProblem(QNetworkReply::NetworkError error, int status)
+{
+    if (status >= 100 && status <= 599 && status != 200) {
+        return RegistrationProblem::Http;
+    }
+    switch (error) {
+    case QNetworkReply::NoError: return RegistrationProblem::None;
+    case QNetworkReply::HostNotFoundError: return RegistrationProblem::Dns;
+    case QNetworkReply::TimeoutError: return RegistrationProblem::Timeout;
+    case QNetworkReply::SslHandshakeFailedError: return RegistrationProblem::Tls;
+    default: return RegistrationProblem::Connection;
+    }
+}
 
 } // namespace
 
 void writeServiceLog(const QString &directory, const QString &message)
 {
-    QString line = message;
+    QString line = message.left(2048);
     line.replace('\r', ' ');
     line.replace('\n', ' ');
-    QFile file(QDir(directory).filePath(QStringLiteral("logs/terminal-service.log")));
-    if (file.open(QIODevice::WriteOnly | QIODevice::Append)) {
-        file.write((QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs) + ' ' + line + '\n').toUtf8());
-    }
+    RegistrationMonitor::appendServiceLog(directory,
+        (QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs) + ' ' + line + '\n').toUtf8());
     if (QCoreApplication::arguments().contains(QStringLiteral("--console"))) {
         qInfo().noquote() << line;
     }
 }
 
-ServiceRuntime::ServiceRuntime(const QString &directory, const Config &config, const State &state, WaitForStop waitForStop)
+ServiceRuntime::ServiceRuntime(const QString &directory, const Config &config, const State &state,
+                               RegistrationMonitor &monitor, WaitForStop waitForStop)
     : m_directory(directory), m_statePath(QDir(directory).filePath(QStringLiteral("state.json"))), m_config(config),
-      m_state(state), m_waitForStop(std::move(waitForStop)), m_computerName(QSysInfo::machineHostName())
+      m_state(state), m_monitor(monitor), m_waitForStop(std::move(waitForStop)), m_computerName(QSysInfo::machineHostName())
 {
     m_tick.setSingleShot(true);
     m_tick.setTimerType(Qt::PreciseTimer);
@@ -48,6 +65,8 @@ ServiceRuntime::ServiceRuntime(const QString &directory, const Config &config, c
     m_requestTimeout.setTimerType(Qt::PreciseTimer);
     connect(&m_tick, &QTimer::timeout, this, &ServiceRuntime::sendNextRequest);
     connect(&m_requestTimeout, &QTimer::timeout, this, &ServiceRuntime::requestTimedOut);
+    connect(&m_statusRefresh, &QTimer::timeout, this, [this] { m_monitor.publish(); });
+    connect(&m_logCleanup, &QTimer::timeout, this, [this] { RegistrationMonitor::pruneServiceLog(m_directory); });
 }
 
 ServiceRuntime::~ServiceRuntime()
@@ -73,6 +92,8 @@ void ServiceRuntime::start()
         m_state.ensureRegToken();
         m_stateDirty = true;
     }
+    m_statusRefresh.start(StatusRefreshMs);
+    m_logCleanup.start(ServiceLogCleanupMs);
     m_tick.start(0);
 }
 
@@ -82,12 +103,15 @@ void ServiceRuntime::sendNextRequest()
         return;
     }
     m_requestElapsed.start();
-    if (!saveState() && m_state.terminalCode.isEmpty()) {
-        schedule(RegisterIntervalMs);
+    const bool registering = m_state.terminalCode.isEmpty();
+    m_monitor.beginRequest(registering);
+    if (!saveState() && registering) {
+        reportRequestFailure(true, RegistrationProblem::State);
+        scheduleRegisterRetry();
         return;
     }
 
-    m_request = m_state.terminalCode.isEmpty() ? Request::Register : Request::Heartbeat;
+    m_request = registering ? Request::Register : Request::Heartbeat;
     m_requestTimeout.start(RequestTimeoutMs);
     const QString host = m_config.serverUrl.host();
     const QHostAddress literal(host);
@@ -101,7 +125,7 @@ void ServiceRuntime::sendNextRequest()
         }
         m_lookupId = -1;
         if (info.error() != QHostInfo::NoError) {
-            finishRequest(0, {}, info.errorString());
+            finishRequest(0, {}, RegistrationProblem::Dns);
             return;
         }
         postRequest(info.addresses());
@@ -111,6 +135,7 @@ void ServiceRuntime::sendNextRequest()
 void ServiceRuntime::postRequest(const QList<QHostAddress> &addresses)
 {
     m_network = findNetworkIdentity(addresses);
+    m_monitor.setLocalIp(m_network.localIp.toString());
     const bool registering = m_request == Request::Register;
     const QUrl url = registering ? Protocol::registerUrl(m_config.serverUrl) : Protocol::heartbeatUrl(m_config.serverUrl);
     m_sentResults = registering ? QJsonArray() : m_state.resultsForHeartbeat(m_activeCommandId);
@@ -128,10 +153,10 @@ void ServiceRuntime::postRequest(const QList<QHostAddress> &addresses)
         QNetworkReply *reply = m_reply;
         m_reply = nullptr;
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QString transportError = reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
+        const auto problem = networkProblem(reply->error(), status);
         const QByteArray body = reply->readAll();
         reply->deleteLater();
-        finishRequest(transportError.isEmpty() ? status : 0, body, transportError);
+        finishRequest(status, body, problem);
     });
 }
 
@@ -147,43 +172,52 @@ void ServiceRuntime::requestTimedOut()
         m_reply->deleteLater();
         m_reply = nullptr;
     }
-    finishRequest(0, {}, QStringLiteral("请求超时"));
+    finishRequest(0, {}, RegistrationProblem::Timeout);
 }
 
-void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QString &transportError)
+void ServiceRuntime::finishRequest(int status, const QByteArray &body, RegistrationProblem transportProblem)
 {
     m_requestTimeout.stop();
     const Request completed = m_request;
     m_request = Request::None;
+    const int protocolStatus = transportProblem == RegistrationProblem::None ? status : 0;
+    const auto problem = transportProblem == RegistrationProblem::None ? RegistrationProblem::Response : transportProblem;
     if (completed == Request::Register) {
-        const RegisterResponse response = Protocol::parseRegister(status, body);
+        const RegisterResponse response = Protocol::parseRegister(protocolStatus, body);
         if (!response.valid) {
-            log(QStringLiteral("终端注册失败：%1").arg(transportError.isEmpty() ? response.error : transportError));
+            reportRequestFailure(true, problem, status);
+            scheduleRegisterRetry();
+            return;
         }
         if (response.terminalCode.isEmpty()) {
-            schedule(RegisterIntervalMs);
+            m_monitor.registered(false);
+            m_registerRetryMs = 0;
+            schedule(RegisterIntervalMinMs + QRandomGenerator::global()->bounded(RegisterJitterMs + 1));
             return;
         }
         m_state.terminalCode = response.terminalCode;
         m_stateDirty = true;
         if (!saveState()) {
             m_state.terminalCode.clear();
-            schedule(RegisterIntervalMs);
+            reportRequestFailure(true, RegistrationProblem::State);
+            scheduleRegisterRetry();
             return;
         }
+        m_registerRetryMs = 0;
         log(QStringLiteral("已保存终端码，开始发送心跳"));
-        m_tick.start(0);
+        m_monitor.registered(true);
+        schedule(0);
         return;
     }
 
-    const HeartbeatResponse response = Protocol::parseHeartbeat(status, body);
+    const HeartbeatResponse response = Protocol::parseHeartbeat(protocolStatus, body);
     if (response.confirmed && !m_sentResults.isEmpty()) {
         m_state.acknowledge(m_sentResults, true);
         m_stateDirty = true;
     }
     m_sentResults = {};
     if (!response.valid) {
-        log(QStringLiteral("心跳失败：%1").arg(transportError.isEmpty() ? response.error : transportError));
+        reportRequestFailure(false, problem, status);
         schedule(HeartbeatIntervalMs);
     } else if (!response.codeValid) {
         publishExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}}, m_waitForStop);
@@ -191,6 +225,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QSt
         QString error;
         if (!SeatDisplayStore(m_directory).clearAssignment(error)) {
             log(error);
+            reportRequestFailure(false, RegistrationProblem::State);
             saveState();
             schedule(HeartbeatIntervalMs);
             return;
@@ -198,7 +233,8 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QSt
         m_state.terminalCode.clear();
         m_stateDirty = true;
         log(QStringLiteral("终端码已失效，重新注册"));
-        m_tick.start(0);
+        m_monitor.codeInvalid();
+        schedule(0);
     } else {
         if (response.seatNumber) {
             QString error;
@@ -206,6 +242,11 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QSt
                 log(error);
             }
         }
+        auto seat = response.seatNumber;
+        if (seat && (seat->contains(m_state.terminalCode) || seat->contains(m_state.regToken))) {
+            seat = QString();
+        }
+        m_monitor.heartbeatReceived(seat);
         publishExamSeatDisplay(response.examSeatDisplay, m_waitForStop);
         for (const Command &command : response.commands) {
             m_commands.enqueue(command);
@@ -217,6 +258,16 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, const QSt
         finishPowerCommand();
     }
     processQueuedCommands();
+}
+
+void ServiceRuntime::reportRequestFailure(bool registering, RegistrationProblem problem, int status)
+{
+    const int httpStatus = problem == RegistrationProblem::Http ? status : 0;
+    if (m_monitor.failed(registering, problem, httpStatus)) {
+        log(QStringLiteral("%1：%2").arg(
+            registering ? QStringLiteral("终端注册失败") : QStringLiteral("心跳失败"),
+            registrationProblemText(problem, httpStatus)));
+    }
 }
 
 void ServiceRuntime::processQueuedCommands()
@@ -321,7 +372,15 @@ bool ServiceRuntime::saveState()
 
 void ServiceRuntime::schedule(int intervalMs)
 {
-    m_tick.start(static_cast<int>(std::max<qint64>(0, intervalMs - m_requestElapsed.elapsed())));
+    const int delay = static_cast<int>(std::max<qint64>(0, intervalMs - m_requestElapsed.elapsed()));
+    m_tick.start(delay);
+    m_monitor.setNextAttempt(delay);
+}
+
+void ServiceRuntime::scheduleRegisterRetry()
+{
+    m_registerRetryMs = std::clamp(m_registerRetryMs * 2, RegisterRetryMinMs, RegisterRetryMaxMs);
+    schedule(m_registerRetryMs - QRandomGenerator::global()->bounded(RegisterJitterMs + 1));
 }
 
 void ServiceRuntime::logResult(const CommandResult &result) const
@@ -332,7 +391,13 @@ void ServiceRuntime::logResult(const CommandResult &result) const
 
 void ServiceRuntime::log(const QString &message) const
 {
-    writeServiceLog(m_directory, message);
+    QString safe = message;
+    for (const QString &credential : {m_state.regToken, m_state.terminalCode}) {
+        if (!credential.isEmpty()) {
+            safe.replace(credential, QStringLiteral("[已隐藏]"));
+        }
+    }
+    writeServiceLog(m_directory, safe);
 }
 
 } // namespace terminal

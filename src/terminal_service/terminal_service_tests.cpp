@@ -1,6 +1,10 @@
 #include "terminal_core.h"
+#include "registration_monitor.h"
 
+#include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -23,6 +27,9 @@ private slots:
     void validateServerUrl_data();
     void validateServerUrl();
     void persistState();
+    void monitorRegistrationLifecycle();
+    void monitorPreservesFailureAfterRestart();
+    void monitorRotatesAndExpiresLogs();
 };
 
 void TerminalServiceTests::requestsUseContract()
@@ -276,6 +283,154 @@ void TerminalServiceTests::persistState()
     QVERIFY(loaded.terminalCode.isEmpty());
     QVERIFY(loaded.pendingResults.isEmpty());
     QCOMPARE(loaded.processedCommandIds.size(), 1);
+}
+
+void TerminalServiceTests::monitorRegistrationLifecycle()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    RegistrationMonitor monitor(directory.path());
+    monitor.start();
+    monitor.setSchoolInstance(12);
+    monitor.setLocalIp(QStringLiteral("192.168.1.23"));
+    monitor.beginRequest(true);
+    const auto registering = RegistrationMonitor::readStatus(directory.path());
+    QVERIFY(registering);
+    QCOMPARE(registering->phase, RegistrationPhase::Registering);
+    QCOMPARE(registering->schoolInstance, 12);
+    QCOMPARE(registering->localIp, QStringLiteral("192.168.1.23"));
+
+    monitor.registered(false);
+    monitor.setNextAttempt(20000);
+    QCOMPARE(RegistrationMonitor::readStatus(directory.path())->phase, RegistrationPhase::WaitingForBinding);
+    monitor.registered(false);
+    monitor.registered(true);
+    monitor.setNextAttempt(0);
+    const auto bound = RegistrationMonitor::readStatus(directory.path());
+    QVERIFY(bound);
+    QCOMPARE(bound->phase, RegistrationPhase::WaitingForHeartbeat);
+    QVERIFY(!bound->heartbeatIsCurrent(QDateTime::currentMSecsSinceEpoch()));
+
+    monitor.heartbeatReceived(QStringLiteral("023"));
+    monitor.setNextAttempt(30000);
+    const auto online = RegistrationMonitor::readStatus(directory.path());
+    QVERIFY(online);
+    QCOMPARE(online->phase, RegistrationPhase::Online);
+    QCOMPARE(online->seat, QStringLiteral("023"));
+    QVERIFY(online->isCurrent(online->pid, online->updatedAt));
+    QVERIFY(!online->isCurrent(online->pid + 1, online->updatedAt));
+    QVERIFY(!online->isCurrent(online->pid, online->updatedAt + 46000));
+    QVERIFY(online->heartbeatIsCurrent(online->lastHeartbeat + 90000));
+    QVERIFY(!online->heartbeatIsCurrent(online->lastHeartbeat + 90001));
+
+    QVERIFY(monitor.failed(false, RegistrationProblem::Timeout));
+    QVERIFY(!monitor.failed(false, RegistrationProblem::Timeout));
+    monitor.setNextAttempt(30000);
+    const auto failed = RegistrationMonitor::readStatus(directory.path());
+    QVERIFY(failed && failed->recentFailure);
+    QCOMPARE(failed->phase, RegistrationPhase::HeartbeatFailed);
+    QCOMPARE(failed->recentFailure->count, 2);
+    QVERIFY(failed->nextAttempt > failed->updatedAt);
+
+    monitor.heartbeatReceived(std::nullopt);
+    monitor.publish();
+    monitor.codeInvalid();
+    monitor.publish();
+    const auto unbound = RegistrationMonitor::readStatus(directory.path());
+    QVERIFY(unbound);
+    QCOMPARE(unbound->phase, RegistrationPhase::Registering);
+    QVERIFY(unbound->seat.isEmpty());
+
+    const auto logs = RegistrationMonitor::readLogs(directory.path(), 0);
+    QCOMPARE(logs.size(), 7);
+    int failures = 0;
+    int recoveries = 0;
+    for (const auto &event : logs) {
+        if (event.event == RegistrationEvent::HeartbeatFailed) {
+            QCOMPARE(event.count, 2);
+            ++failures;
+        }
+        if (event.event == RegistrationEvent::HeartbeatRecovered) {
+            QCOMPARE(event.count, 2);
+            ++recoveries;
+        }
+    }
+    QCOMPARE(failures, 1);
+    QCOMPARE(recoveries, 1);
+
+    QFile snapshot(directory.filePath(QStringLiteral("status.json")));
+    QVERIFY(snapshot.open(QIODevice::ReadOnly));
+    const auto fields = QJsonDocument::fromJson(snapshot.readAll()).object();
+    QVERIFY(!fields.contains(QStringLiteral("regToken")));
+    QVERIFY(!fields.contains(QStringLiteral("terminalCode")));
+}
+
+void TerminalServiceTests::monitorPreservesFailureAfterRestart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    {
+        RegistrationMonitor monitor(directory.path());
+        monitor.start();
+        monitor.beginRequest(true);
+        QVERIFY(monitor.failed(true, RegistrationProblem::Dns));
+        QVERIFY(!monitor.failed(true, RegistrationProblem::Dns));
+        monitor.setNextAttempt(30000);
+    }
+    QFile interrupted(directory.filePath(QStringLiteral("registration.log")));
+    QVERIFY(interrupted.open(QIODevice::WriteOnly | QIODevice::Append));
+    QCOMPARE(interrupted.write("{\"id\":"), qint64(6));
+    interrupted.close();
+
+    RegistrationMonitor monitor(directory.path());
+    monitor.start();
+    monitor.startupFailed(RegistrationProblem::Configuration);
+    const auto logs = RegistrationMonitor::readLogs(directory.path(), 0);
+    QCOMPARE(logs.size(), 4);
+    for (const auto &event : logs) {
+        if (event.event == RegistrationEvent::RegistrationFailed) {
+            QCOMPARE(event.problem, RegistrationProblem::Dns);
+            QCOMPARE(event.count, 2);
+        }
+    }
+}
+
+void TerminalServiceTests::monitorRotatesAndExpiresLogs()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString logPath = directory.filePath(QStringLiteral("registration.log"));
+    QFile oldLog(logPath + QStringLiteral(".1"));
+    QVERIFY(oldLog.open(QIODevice::WriteOnly));
+    QVERIFY(oldLog.setFileTime(QDateTime::currentDateTimeUtc().addDays(-8), QFileDevice::FileModificationTime));
+    oldLog.close();
+
+    RegistrationMonitor monitor(directory.path());
+    monitor.start();
+    QVERIFY(!oldLog.exists());
+
+    QFile active(logPath);
+    QVERIFY(active.open(QIODevice::ReadWrite));
+    QVERIFY(active.setFileTime(QDateTime::currentDateTimeUtc().addDays(-1), QFileDevice::FileModificationTime));
+    active.close();
+    monitor.stop();
+    QVERIFY(oldLog.exists());
+
+    QVERIFY(active.open(QIODevice::ReadWrite));
+    QVERIFY(active.resize(5 * 1024 * 1024));
+    active.close();
+    for (int index = 0; index < 5; ++index) {
+        monitor.stop();
+        if (index < 4) {
+            QVERIFY(active.open(QIODevice::ReadWrite));
+            QVERIFY(active.resize(5 * 1024 * 1024));
+            active.close();
+        }
+    }
+    QCOMPARE(QDir(directory.path()).entryList({QStringLiteral("registration.log*")}, QDir::Files).size(), 5);
+    QVERIFY(QFileInfo(logPath).size() < 5 * 1024 * 1024);
+    QVERIFY(!QFile::exists(logPath + QStringLiteral(".5")));
+    QVERIFY(RegistrationMonitor::readLogs(directory.path(), QDateTime::currentMSecsSinceEpoch() + 60000).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TerminalServiceTests)

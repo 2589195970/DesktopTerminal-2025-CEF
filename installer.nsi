@@ -20,6 +20,8 @@ Unicode true
 !define TERMINAL_APP   "DesktopTerminal-CEF.exe"
 !define TERMINAL_SERVICE "UMTerminalService"
 !define TERMINAL_SERVICE_EXE "DesktopTerminalService.exe"
+!define TERMINAL_STATUS_EXE "DesktopTerminalStatus.exe"
+!define TERMINAL_STATUS_RUN_KEY "Software\Microsoft\Windows\CurrentVersion\Run"
 !define TERMINAL_SERVICE_DISPLAY "UM 考场终端服务"
 !define TERMINAL_SERVICE_OPTIONS `binPath= "\$\"$INSTDIR\${TERMINAL_SERVICE_EXE}\$\"" start= auto obj= LocalSystem DisplayName= "${TERMINAL_SERVICE_DISPLAY}"`
 
@@ -84,6 +86,7 @@ Var /GLOBAL TerminalSlid
 Var /GLOBAL SampleMode
 Var /GLOBAL TerminalDataDir
 Var /GLOBAL TerminalServiceResult
+Var /GLOBAL TerminalServiceReady
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
@@ -318,6 +321,10 @@ Var /GLOBAL InstallLogHandle
 
 !define TerminalCommand "!insertmacro TERMINAL_COMMAND"
 
+!macro WAIT_TERMINAL_SERVICE _ACTION _STATUS _SECONDS
+    ${TerminalCommand} "wait for ${TERMINAL_SERVICE} to ${_ACTION}" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; (Get-Service -Name '${TERMINAL_SERVICE}').WaitForStatus('${_STATUS}', [TimeSpan]::FromSeconds(${_SECONDS}))"`
+!macroend
+
 !macro STOP_TERMINAL_SERVICE
     !insertmacro EXEC_TERMINAL_COMMAND `"$SYSDIR\sc.exe" stop ${TERMINAL_SERVICE}`
     ${If} $TerminalServiceResult == 1060
@@ -326,7 +333,7 @@ Var /GLOBAL InstallLogHandle
         ${Log} "sc stop: service is already stopped (1062)"
     ${Else}
         !insertmacro LOG_TERMINAL_RESULT "sc stop"
-        ${TerminalCommand} "wait for ${TERMINAL_SERVICE} to stop" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; (Get-Service -Name '${TERMINAL_SERVICE}').WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))"`
+        !insertmacro WAIT_TERMINAL_SERVICE "stop" "Stopped" 30
     ${EndIf}
 !macroend
 
@@ -425,7 +432,21 @@ Function EnsureVCRuntime
     Abort
 FunctionEnd
 
+!macro TERMINAL_STATUS_AUTOSTART _ACTION
+    ${If} ${RunningX64}
+        SetRegView 64
+    ${EndIf}
+    ClearErrors
+    !if "${_ACTION}" == "install"
+        WriteRegStr HKLM "${TERMINAL_STATUS_RUN_KEY}" "UMTerminalStatus" '"$INSTDIR\${TERMINAL_STATUS_EXE}" --tray'
+    !else
+        DeleteRegValue HKLM "${TERMINAL_STATUS_RUN_KEY}" "UMTerminalStatus"
+    !endif
+    SetRegView 32
+!macroend
+
 Function InstallTerminalService
+    StrCpy $TerminalServiceReady "0"
     !insertmacro GET_TERMINAL_DATA_DIR
     ClearErrors
     CreateDirectory "$TerminalDataDir"
@@ -483,11 +504,20 @@ Function InstallTerminalService
 
     ${TerminalCommand} "sc failure" `"$SYSDIR\sc.exe" failure ${TERMINAL_SERVICE} reset= 86400 actions= restart/60000/restart/60000/restart/300000`
     ${TerminalCommand} "sc description" `"$SYSDIR\sc.exe" description ${TERMINAL_SERVICE} "考场终端注册、状态上报及考试端管理"`
-    ${If} $VCRuntimeRebootRequired == "1"
+    ${If} $SampleMode == "1"
+        ${Log} "Terminal service start skipped in sample mode"
+    ${ElseIf} $VCRuntimeRebootRequired == "1"
         ${Log} "Terminal service will start after Windows restart"
-    ${ElseIf} $SampleMode != "1"
+    ${Else}
         ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
+        ${If} $TerminalServiceResult == 0
+            !insertmacro WAIT_TERMINAL_SERVICE "run" "Running" 10
+        ${EndIf}
+        ${If} $TerminalServiceResult != 0
+            Return
+        ${EndIf}
     ${EndIf}
+    StrCpy $TerminalServiceReady "1"
 FunctionEnd
 
 ; ─────────────────────────────────────────────
@@ -496,6 +526,7 @@ FunctionEnd
 Section "主程序" SecMain
     SetOutPath "$INSTDIR"
     !insertmacro LOG_INIT
+    StrCpy $VerificationErrors ""
 
     Call EnsureVCRuntime
     SetOutPath "$INSTDIR"
@@ -504,6 +535,8 @@ Section "主程序" SecMain
     !insertmacro STOP_TERMINAL_SERVICE
     
     ; 直接安装程序文件 - 使用正确的编译时源路径
+    ExecWait '"$SYSDIR\taskkill.exe" /F /IM ${TERMINAL_STATUS_EXE}' $R0
+
     ; GitHub Actions构建文件位于artifacts\windows-${ARCH}\目录
     ${Log} "正在安装DesktopTerminal-CEF应用程序..."
     
@@ -519,6 +552,21 @@ Section "主程序" SecMain
         ${Log} "Failed to replace ${TERMINAL_SERVICE_EXE}"
     ${EndIf}
     
+    ClearErrors
+    File "artifacts\windows-${ARCH}\${TERMINAL_STATUS_EXE}"
+    ${If} ${Errors}
+        ${Log} "Failed to replace ${TERMINAL_STATUS_EXE}"
+        StrCpy $VerificationErrors "$VerificationErrors- ${TERMINAL_STATUS_EXE} 安装失败$\n"
+    ${EndIf}
+
+    File "scripts\diagnose-terminal-service.cmd"
+    File "scripts\diagnose-terminal-service.ps1"
+    SetOutPath "$INSTDIR\终端注册"
+    File "scripts\start-terminal-service.bat"
+    File "scripts\stop-terminal-service.bat"
+    File "scripts\restart-terminal-service.bat"
+    SetOutPath "$INSTDIR"
+
     ; 安装CEF核心库文件
     File /nonfatal "artifacts\windows-${ARCH}\libcef.dll"
     File /nonfatal "artifacts\windows-${ARCH}\chrome_elf.dll" 
@@ -574,9 +622,6 @@ Section "主程序" SecMain
 
     ; 安装后验证逻辑 - 检查实际安装到目标目录的文件
     ${Log} "正在验证安装结果..."
-    
-    ; 初始化验证错误变量
-    StrCpy $VerificationErrors ""
     
     ; 检查主程序文件是否成功安装
     ${If} ${FileExists} "$INSTDIR\DesktopTerminal-CEF.exe"
@@ -888,7 +933,34 @@ Section "主程序" SecMain
     ${Else}
         ${Log} "✅ 所有验证检查通过"
         
+        !insertmacro TERMINAL_STATUS_AUTOSTART "install"
+        ${If} ${Errors}
+            ${Log} "Failed to configure terminal status autostart"
+            FileClose $InstallLogHandle
+            MessageBox MB_OK|MB_ICONSTOP "无法配置终端注册状态登录启动项。" /SD IDOK
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
+        SetShellVarContext all
+        ClearErrors
+        CreateDirectory "$SMPROGRAMS\${APPNAME}"
+        CreateShortcut "$SMPROGRAMS\${APPNAME}\终端注册状态.lnk" "$INSTDIR\${TERMINAL_STATUS_EXE}" "" "$INSTDIR\resources\logo.ico" 0
+        SetShellVarContext current
+        ${If} ${Errors}
+            ${Log} "Failed to create terminal status Start menu shortcut"
+            FileClose $InstallLogHandle
+            MessageBox MB_OK|MB_ICONSTOP "无法创建「终端注册状态」开始菜单入口。" /SD IDOK
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
         Call InstallTerminalService
+        ${If} $TerminalServiceReady != "1"
+            ${Log} "Terminal service setup failed"
+            FileClose $InstallLogHandle
+            MessageBox MB_OK|MB_ICONSTOP "终端服务配置或启动失败。请在安装目录中以管理员身份运行 diagnose-terminal-service.cmd 生成诊断报告。" /SD IDOK
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
         MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端API地址留空时将自动从前端Config.json发现$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}
     !insertmacro LOG_CLOSE
@@ -915,7 +987,27 @@ Section "Uninstall"
         RMDir "$TerminalDataDir"
     ${EndIf}
 
-    ; 删除文件与目录(包括VC++运行库标记文件)
+    !insertmacro TERMINAL_STATUS_AUTOSTART "uninstall"
+    ExecWait '"$SYSDIR\taskkill.exe" /F /IM ${TERMINAL_STATUS_EXE}' $R0
+    SetShellVarContext all
+    Delete "$SMPROGRAMS\${APPNAME}\终端注册状态.lnk"
+    RMDir "$SMPROGRAMS\${APPNAME}"
+    StrCpy $0 "$APPDATA\UMTerminalStatus"
+    SetShellVarContext current
+    System::Call 'Kernel32::GetFileAttributesW(w "$0") i.r1'
+    IntOp $1 $1 & 0x400
+    ${If} $1 == 0
+        Delete "$0\status.json"
+        Delete "$0\registration.log"
+        Delete "$0\registration.log.1"
+        Delete "$0\registration.log.2"
+        Delete "$0\registration.log.3"
+        Delete "$0\registration.log.4"
+        RMDir "$0"
+    ${EndIf}
+
+    ; 删除安装目录
+    Delete /REBOOTOK "$INSTDIR\${TERMINAL_STATUS_EXE}"
     Delete /REBOOTOK "$INSTDIR\${TERMINAL_SERVICE_EXE}"
     RMDir /r "$INSTDIR"
 
