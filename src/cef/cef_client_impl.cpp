@@ -327,11 +327,12 @@ bool CEFClient::OnJSDialog(CefRefPtr<CefBrowser> browser, const CefString& origi
     QString message = QString::fromStdString(message_text.ToString());
     QString origin = QString::fromStdString(origin_url.ToString());
     
-    // 在严格模式下禁用JavaScript对话框
+    // 严格模式下不显示原生对话框。必须按 CEF 约定以 suppress_message=true 且返回 false 的方式抑制，
+    // 由 CEF 立即应答页面（confirm 视为取消）；返回 true 而不执行 callback 会让页面永久等待应答而卡死。
     if (m_strictSecurityMode) {
         logSecurityEvent("JavaScript对话框被阻止", QString("来源: %1, 消息: %2").arg(origin).arg(message));
         suppress_message = true;
-        return true; // 阻止对话框
+        return false;
     }
     
     return false; // 允许对话框
@@ -339,10 +340,13 @@ bool CEFClient::OnJSDialog(CefRefPtr<CefBrowser> browser, const CefString& origi
 
 bool CEFClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser, const CefString& message_text, bool is_reload, CefRefPtr<CefJSDialogCallback> callback)
 {
-    // 在严格模式下禁用卸载确认对话框
+    // 严格模式下不显示离开确认框，直接允许离开（刷新、重置登录等导航由本程序或监考发起）。
+    // 返回 true 时必须执行 callback，否则页面会一直等待确认结果，所有按钮无法点击且无法刷新。
     if (m_strictSecurityMode) {
-        logSecurityEvent("页面卸载对话框被阻止", QString::fromStdString(message_text.ToString()));
-        return true; // 阻止对话框
+        logSecurityEvent("页面卸载对话框被跳过并允许离开",
+            QString("%1%2").arg(is_reload ? "刷新: " : "").arg(QString::fromStdString(message_text.ToString())));
+        callback->Continue(true, CefString());
+        return true;
     }
     
     return false;
