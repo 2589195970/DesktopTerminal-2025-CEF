@@ -18,6 +18,7 @@
 #include "cef_frame.h"
 #include "cef_request_context.h"
 #include "wrapper/cef_helpers.h"
+#include <QElapsedTimer>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -26,6 +27,8 @@
 #endif
 
 namespace {
+
+constexpr qint64 BrowserCloseTimeoutMs = 3000;
 
 class ManagedStudentLoginReset final : public CefDeleteCookiesCallback {
 public:
@@ -201,32 +204,52 @@ void CEFManager::shutdown()
 
     m_shutdownRequested = true;
     m_logger->appEvent("开始关闭CEF...");
+    // 关闭期间浏览器可能刚创建完成，不再通知界面，避免已隐藏的考试窗口被重新显示。
+    blockSignals(true);
 
     if (m_initialized) {
         // 第一步：先通过CEF API正式关闭浏览器，再调CefShutdown()
         // 跳过此步直接调CefShutdown()会导致GPU子进程被强杀，
         // GPU驱动状态损坏后可能触发TDR失败→BSOD→系统重启
         if (m_cefClient) {
-            CefRefPtr<CefBrowser> browser = m_cefClient->getBrowser();
-            if (browser) {
-                m_logger->appEvent("正在通过CEF API关闭浏览器...");
-                browser->GetHost()->CloseBrowser(true);
-                // 驱动CEF消息循环处理关闭流程，最多等待3秒
-                const int maxIterations = 300;
-                for (int i = 0; i < maxIterations; ++i) {
+            // Qt 事件循环已退出，由这里驱动 CEF 并分发浏览器窗口的 WM_CLOSE 等消息。
+            const auto pumpUntil = [](const std::function<bool()>& done, qint64 timeoutMs) {
+                QElapsedTimer elapsed;
+                elapsed.start();
+                while (!done() && elapsed.elapsed() < timeoutMs) {
                     CefDoMessageLoopWork();
-                    if (!m_cefClient->getBrowser()) {
-                        m_logger->appEvent("CEF浏览器已正常关闭");
-                        break;
-                    }
 #ifdef Q_OS_WIN
+                    MSG message;
+                    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&message);
+                        DispatchMessageW(&message);
+                    }
                     Sleep(10);
 #else
                     usleep(10000);
 #endif
                 }
-                if (m_cefClient->getBrowser()) {
-                    m_logger->appEvent("CEF浏览器关闭等待超时，继续执行CefShutdown");
+                return done();
+            };
+
+            // 浏览器已提交创建但尚未完成时，先等它创建出来再关闭。
+            if (!m_cefClient->getBrowser()) {
+                m_logger->appEvent("浏览器仍在创建，等待创建完成后关闭");
+                if (!pumpUntil([this] { return m_cefClient->getBrowser() != nullptr; }, BrowserCloseTimeoutMs)) {
+                    m_logger->appEvent("等待浏览器创建超时，继续执行CefShutdown");
+                }
+            }
+
+            CefRefPtr<CefBrowser> browser = m_cefClient->getBrowser();
+            if (browser) {
+                m_logger->appEvent("正在通过CEF API关闭浏览器...");
+                browser->GetHost()->CloseDevTools();
+                browser->GetHost()->CloseBrowser(true);
+                if (pumpUntil([this] { return m_cefClient->browserCount() == 0; }, BrowserCloseTimeoutMs)) {
+                    m_logger->appEvent("CEF浏览器已正常关闭");
+                } else {
+                    m_logger->appEvent(QString("CEF浏览器关闭等待超时，剩余 %1 个，继续执行CefShutdown")
+                        .arg(m_cefClient->browserCount()));
                 }
             }
         }
@@ -330,6 +353,8 @@ int CEFManager::createBrowser(void* parentWidget, const QString& url)
             return 1; // 返回简单的成功标识
         } else {
             m_logger->errorEvent("浏览器创建失败");
+            // 关闭流程以“有客户端但无浏览器”判断创建尚未完成，创建失败时不保留客户端。
+            m_cefClient = nullptr;
             return 0;
         }
 

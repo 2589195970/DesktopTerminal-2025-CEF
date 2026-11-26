@@ -42,6 +42,7 @@ public:
 
     // 获取当前浏览器实例（供 CEFManager 关闭时使用）
     CefRefPtr<CefBrowser> getBrowser() const { return m_browser; }
+    int browserCount() const { return m_browserCount; }
 
     // CefClient接口
     virtual CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }

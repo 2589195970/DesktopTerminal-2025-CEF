@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QDateTime>
+#include <QWidget>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -277,6 +278,32 @@ void Application::requestControlledExit()
     m_logger->appEvent(QStringLiteral("收到服务关闭请求，来源: UMTerminalService"));
     quitAfterExitRequest();
 }
+
+namespace {
+
+constexpr DWORD ExitWatchdogTimeoutMs = 15000;
+constexpr UINT ExitWatchdogExitCode = 1;
+
+DWORD WINAPI terminateAfterExitTimeout(LPVOID)
+{
+    Sleep(ExitWatchdogTimeoutMs);
+    TerminateProcess(GetCurrentProcess(), ExitWatchdogExitCode);
+    return 0;
+}
+
+} // namespace
+
+void Application::startExitWatchdog()
+{
+    // CEF 关闭或进程退出阶段一旦卡住，进程会继续占用单实例互斥体，考试端无法再次启动。
+    // 超时后直接结束进程，由系统回收互斥体和 CEF 子进程。
+    const HANDLE watchdog = CreateThread(nullptr, 0, terminateAfterExitTimeout, nullptr, 0, nullptr);
+    if (watchdog) {
+        CloseHandle(watchdog);
+    } else if (m_logger) {
+        m_logger->errorEvent(QString("启动退出超时保护失败，错误码: %1").arg(GetLastError()));
+    }
+}
 #endif
 
 void Application::quitAfterExitRequest()
@@ -293,6 +320,21 @@ void Application::shutdown()
 
     m_shutdownRequested = true;
     m_shuttingDown = true;
+
+#ifdef Q_OS_WIN
+    startExitWatchdog();
+#endif
+
+    // 先撤下考试窗口和加载框等置顶窗口，关闭过程中桌面和任务管理器立即可用。
+    // 关闭 CEF 时仍会分发 Qt 定时器，先停掉窗口的维护定时器，避免强制全屏把窗口重新显示。
+    const QWidgetList windows = QApplication::topLevelWidgets();
+    for (QWidget* window : windows) {
+        const QList<QTimer*> timers = window->findChildren<QTimer*>();
+        for (QTimer* timer : timers) {
+            timer->stop();
+        }
+        window->hide();
+    }
 
 #ifdef Q_OS_WIN
     m_controlPipe.stop();
@@ -329,6 +371,11 @@ void Application::shutdown()
         m_cefManager->shutdown();
         delete m_cefManager;
         m_cefManager = nullptr;
+    }
+
+    // Qt 事件循环已退出，定时刷盘不再执行；立即写盘，关闭后续步骤卡住时仍能定位。
+    if (m_logger) {
+        m_logger->flushAllLogBuffers();
     }
 
     // CEF关闭后再销毁主窗口

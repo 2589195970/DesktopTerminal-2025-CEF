@@ -109,7 +109,10 @@ bool CEFClient::OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>
 
 void CEFClient::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 {
-    m_browser = browser;
+    // DevTools 窗口也使用本客户端，只记录最先创建的考试主浏览器。
+    if (!m_browser) {
+        m_browser = browser;
+    }
     m_browserCount++;
     
     m_logger->appEvent(QString("浏览器创建完成，ID: %1").arg(browser->GetIdentifier()));
@@ -127,6 +130,16 @@ void CEFClient::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 bool CEFClient::DoClose(CefRefPtr<CefBrowser> browser)
 {
     m_logger->appEvent(QString("浏览器关闭请求，ID: %1").arg(browser->GetIdentifier()));
+#ifdef Q_OS_WIN
+    // 返回 false 后 CEF 会向浏览器窗口的根窗口发送 WM_CLOSE。考试主窗口拒绝关闭，
+    // 浏览器因此无法销毁，随后 CefShutdown 会卡住进程。先让浏览器窗口脱离宿主，
+    // WM_CLOSE 就会发给浏览器窗口自身并完成销毁。
+    const HWND browserWindow = browser->GetHost()->GetWindowHandle();
+    if (browserWindow && GetAncestor(browserWindow, GA_ROOT) != browserWindow) {
+        ShowWindow(browserWindow, SW_HIDE);
+        SetParent(browserWindow, nullptr);
+    }
+#endif
     return false; // 允许关闭
 }
 

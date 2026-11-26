@@ -139,6 +139,7 @@ private:
     void quitAfterExitRequest();
 #ifdef Q_OS_WIN
     void requestControlledExit();
+    void startExitWatchdog();
 #endif
 
     // 系统检测
