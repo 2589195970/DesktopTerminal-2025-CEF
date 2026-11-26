@@ -44,12 +44,16 @@ FileWrite $0 '  "appName": "智多分机考桌面端-CEF",$\r$\n'
 2. **字段补丁**：仅对用户可改字段（`url`、`exitPassword`、`apiBaseUrl` 等）调用 PowerShell 脚本更新：
    - 脚本：`scripts/patch-install-config.ps1`
    - 安装器通过进程环境变量把用户输入传给补丁脚本，避免命令行转义问题。
-   - 补丁脚本会直接更新 `resources\config.json`，并同步生成 `resources\config.override.ini` 作为运行时兜底覆盖文件。
+   - 补丁脚本先写入 `resources\config.override.ini`，再更新 `resources\config.json`。若覆盖文件已保存但 JSON 更新失败，安装继续，程序启动时读取覆盖文件。若覆盖文件未能保存，安装报错并停止。
    - 安装器中的调用见 `installer.nsi` 中「更新配置文件」段落。
 3. **输出编码**：补丁脚本使用 `UTF8Encoding(false)` 写出，**无 BOM**（与仓库模板一致）；程序侧已支持跳过 BOM 读取。
 4. **程序侧兜底**：`ConfigManager::loadConfig` 在 Windows 上若 UTF-8 解析失败，会尝试 GB18030 解码（兼容历史错误安装包生成的文件）。
 
 安装器调用系统自带的 Windows PowerShell。遇到配置写入失败时，`install.log` 记录补丁返回值，`resources/install-config-patch.log` 记录脚本启动后的执行结果和出错位置。
+
+Windows PowerShell 脚本含中文等非 ASCII 字符时，源码使用带 BOM 的 UTF-8。服务配置脚本采用此格式，生成的 `service.ini` 使用无 BOM 的 UTF-8。
+
+含中文的 `.bat` 文件使用无 BOM 的 UTF-8 和 CRLF 换行。脚本先用 `chcp 65001` 切换到 UTF-8 代码页，再读取包含中文的命令。
 
 ### 修改安装器配置时的检查清单
 

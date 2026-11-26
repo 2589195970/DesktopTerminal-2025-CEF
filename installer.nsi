@@ -1,4 +1,4 @@
-﻿; NSIS 安装脚本 - DesktopTerminal-CEF版本（请以 UTF-8 无 BOM 保存）
+﻿; NSIS 安装脚本 - DesktopTerminal-CEF版本（请以带 BOM 的 UTF-8 保存）
 Unicode true
 
 ; 包含必要的头文件
@@ -59,7 +59,9 @@ RequestExecutionLevel admin
 !define MUI_ICON    "resources\logo.ico"
 !define MUI_UNICON  "resources\logo.ico"
 
-!insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW InstallDirectoryShow
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE InstallDirectoryLeave
+!define MUI_DIRECTORYPAGE_TEXT_TOP "选择安装位置，然后点击安装。如需修改考试或终端注册配置，请勾选高级。"
 !insertmacro MUI_PAGE_DIRECTORY
 Page custom ConfigPage ConfigPageLeave
 !insertmacro MUI_PAGE_INSTFILES
@@ -88,6 +90,8 @@ Var /GLOBAL SampleMode
 Var /GLOBAL TerminalDataDir
 Var /GLOBAL TerminalServiceResult
 Var /GLOBAL TerminalServiceReady
+Var /GLOBAL AdvancedCheckbox
+Var /GLOBAL ShowAdvanced
 Var /GLOBAL Dialog
 Var /GLOBAL URLText
 Var /GLOBAL PasswordText
@@ -191,9 +195,41 @@ FunctionEnd
 ; ─────────────────────────────────────────────
 ; 配置输入页面
 ; ─────────────────────────────────────────────
+Function InstallDirectoryShow
+    ; 保留目录页原有的路径和磁盘空间检查，在目录页底部添加选项。
+    System::Call '*(&i4 0, &i4 108, &i4 285, &i4 14) p.r0'
+    System::Call 'user32::MapDialogRect(p $mui.DirectoryPage, p r0)'
+    System::Call '*$0(&i4 .r1, &i4 .r2, &i4 .r3, &i4 .r4)'
+    System::Free $0
+    IntOp $5 ${WS_CHILD} | ${WS_VISIBLE}
+    IntOp $5 $5 | ${WS_TABSTOP}
+    IntOp $5 $5 | ${BS_AUTOCHECKBOX}
+    System::Call 'user32::CreateWindowExW(i 0, w "Button", w "高级（修改考试和终端注册配置）", i r5, i r1, i r2, i r3, i r4, p $mui.DirectoryPage, p 0, p 0, p 0) p.s'
+    Pop $AdvancedCheckbox
+    SendMessage $mui.DirectoryPage.Text ${WM_GETFONT} 0 0 $0
+    SendMessage $AdvancedCheckbox ${WM_SETFONT} $0 1
+    ${NSD_SetState} $AdvancedCheckbox $ShowAdvanced
+    GetDlgItem $0 $HWNDPARENT 1
+    ${NSD_SetText} $0 "$(^InstallBtn)"
+FunctionEnd
+
+Function InstallDirectoryLeave
+    ${NSD_GetState} $AdvancedCheckbox $ShowAdvanced
+FunctionEnd
+
 Function ConfigPage
+    ${If} $ShowAdvanced != ${BST_CHECKED}
+        Abort
+    ${EndIf}
     nsDialogs::Create 1018
     Pop $Dialog
+    ${If} $Dialog == error
+        Abort
+    ${EndIf}
+
+    !insertmacro MUI_HEADER_TEXT "高级配置" "设置考试入口和终端注册参数。"
+    GetDlgItem $0 $HWNDPARENT 1
+    ${NSD_SetText} $0 "$(^InstallBtn)"
 
     ${NSD_CreateLabel} 0 0 100% 12u "终端注册优先使用后端 API 地址，留空时使用备用终端管理地址。"
     Pop $0
@@ -515,6 +551,11 @@ Function InstallTerminalService
         ${Log} "Terminal service start skipped in sample mode"
     ${ElseIf} $VCRuntimeRebootRequired == "1"
         ${Log} "Terminal service will start after Windows restart"
+    ${ElseIf} $TerminalSlid == ""
+        ${Log} "Terminal service start deferred until the school instance is configured"
+    ${ElseIf} $ConfigApiBaseUrl == ""
+    ${AndIf} $TerminalURL == ""
+        ${Log} "Terminal service start deferred until the server address is configured"
     ${Else}
         ${TerminalCommand} "sc start" `"$SYSDIR\sc.exe" start ${TERMINAL_SERVICE}`
         ${If} $TerminalServiceResult == 0
@@ -541,8 +582,14 @@ Section "主程序" SecMain
     ; 覆盖安装先停止服务，以便替换服务程序并保留终端状态。
     !insertmacro STOP_TERMINAL_SERVICE
     
-    ; 直接安装程序文件 - 使用正确的编译时源路径
-    ExecWait '"$SYSDIR\taskkill.exe" /F /IM ${TERMINAL_STATUS_EXE}' $R0
+    ; 等待托盘退出并释放 Qt 运行库后再覆盖文件。
+    ${TerminalCommand} "stop terminal status tray" `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; $$trays = [Diagnostics.Process]::GetProcessesByName('DesktopTerminalStatus'); if ($$trays) { & '$SYSDIR\taskkill.exe' /F /IM ${TERMINAL_STATUS_EXE}; $$trays | Wait-Process -Timeout 10 }; exit 0"`
+    ${If} $TerminalServiceResult != 0
+        !insertmacro LOG_CLOSE
+        MessageBox MB_OK|MB_ICONSTOP "终端注册状态仍在运行。请退出托盘后重新安装。" /SD IDOK
+        SetErrorLevel 1
+        Abort
+    ${EndIf}
 
     ; GitHub Actions构建文件位于artifacts\windows-${ARCH}\目录
     ${Log} "正在安装DesktopTerminal-CEF应用程序..."
@@ -763,8 +810,7 @@ Section "主程序" SecMain
     File /oname=config.json "resources\config.json"
     ${Log} "config.json template copied"
 
-    ; 先用 PowerShell 直接补丁 config.json，保证安装后可见配置与运行配置一致。
-    ; 同时由脚本生成 config.override.ini，继续保留程序启动阶段的覆盖兜底逻辑。
+    ; PowerShell 先生成 UTF-8 覆盖配置，再更新 config.json。
     ${If} $RequirePassword == 1
         StrCpy $R9 "true"
     ${Else}
@@ -796,20 +842,15 @@ Section "主程序" SecMain
 
     ${If} $ConfigPatchResult == 0
         ${Log} "config.json patched and config.override.ini written"
+    ${ElseIf} $ConfigPatchResult == 2
+        ${Log} "WARNING: config.json patch failed; UTF-8 config.override.ini written"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "安装器已将配置保存到 config.override.ini。请查看安装目录中的 resources\install-config-patch.log 了解 config.json 更新失败的原因。" /SD IDOK
     ${Else}
-        ${Log} "WARNING: config.json patch failed ($ConfigPatchResult), writing config.override.ini fallback"
-        FileOpen $0 "$INSTDIR\resources\config.override.ini" w
-        FileWrite $0 "[override]$\r$\n"
-        FileWrite $0 "url=$ConfigURL$\r$\n"
-        FileWrite $0 "exitPassword=$ConfigPassword$\r$\n"
-        FileWrite $0 "apiBaseUrl=$ConfigApiBaseUrl$\r$\n"
-        FileWrite $0 "sensitiveOperationRequirePassword=$R9$\r$\n"
-        ${If} $CefProcessMode != "auto"
-            FileWrite $0 "cefProcessMode=$CefProcessMode$\r$\n"
-        ${EndIf}
-        FileClose $0
-        ${Log} "config.override.ini fallback written: url=$ConfigURL, api=$ConfigApiBaseUrl, cefProcessMode=$CefProcessMode"
-        MessageBox MB_OK|MB_ICONEXCLAMATION "安装器未能直接更新 config.json，已写入 config.override.ini 兜底配置。程序启动仍会按安装页填写的配置运行。请查看安装目录中的 install.log 和 resources\install-config-patch.log（补丁脚本启动后生成）。" /SD IDOK
+        ${Log} "ERROR: Installation configuration could not be written ($ConfigPatchResult)"
+        MessageBox MB_OK|MB_ICONSTOP "无法保存安装配置。请查看安装目录中的 install.log 和 resources\install-config-patch.log。" /SD IDOK
+        !insertmacro LOG_CLOSE
+        SetErrorLevel 1
+        Abort
     ${EndIf}
     
     ; 复制资源文件到resources目录
@@ -972,23 +1013,37 @@ Section "主程序" SecMain
             SetErrorLevel 1
             Abort
         ${EndIf}
-        ${If} $VCRuntimeRebootRequired == "1"
-            ${Log} "Terminal status tray will start at Windows logon after restart"
+        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端 API 地址留空时，考试端从前端 Config.json 发现 API 地址，终端服务使用备用终端管理地址$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
+    ${EndIf}
+SectionEnd
+
+Function .onInstSuccess
+    ${If} $VCRuntimeRebootRequired == "1"
+        ${Log} "Terminal status tray will start at Windows logon after restart"
+    ${Else}
+        StrCpy $0 ""
+        ${If} ${Silent}
+            StrCpy $0 " --tray"
+        ${EndIf}
+        ClearErrors
+        ExecWait '"$INSTDIR\${TERMINAL_STATUS_EXE}" --start-for-desktop-user$0' $TerminalServiceResult
+        ${If} ${Errors}
+            StrCpy $TerminalServiceResult "launch failed"
+        ${EndIf}
+        ${If} $TerminalServiceResult == ${ERROR_NOT_LOGGED_ON}
+            ${Log} "No desktop in the installer session; terminal status tray will start at Windows logon"
         ${Else}
-            !insertmacro EXEC_TERMINAL_COMMAND `"$INSTDIR\${TERMINAL_STATUS_EXE}" --start-for-desktop-user`
-            ${If} $TerminalServiceResult == ${ERROR_NOT_LOGGED_ON}
-                ${Log} "No desktop in the installer session; terminal status tray will start at Windows logon"
-            ${Else}
-                !insertmacro LOG_TERMINAL_RESULT "Start terminal status tray"
+            !insertmacro LOG_TERMINAL_RESULT "Start terminal status tray"
+            ${If} $TerminalServiceResult != 0
+                MessageBox MB_OK|MB_ICONEXCLAMATION "无法自动打开「终端注册状态」（$TerminalServiceResult）。可从开始菜单打开，详情见安装目录中的 install.log。" /SD IDOK
             ${EndIf}
         ${EndIf}
-        MessageBox MB_OK "$(MSG_InstallDone)$\n$\n安装摘要：$\n- 文件数量：$R2 个$\n- 安装大小：$R1 KB$\n- CEF版本：${CEF_VERSION}$\n$\n权限配置：$\n- 程序已配置为自动请求管理员权限$\n- 首次运行时可能会出现UAC提示，请选择'是'$\n- 如有权限问题，可使用开始菜单中的'管理员模式'快捷方式$\n$\n配置说明：$\n- 考试URL与退出密码可在安装时修改$\n- 后端 API 地址留空时，考试端从前端 Config.json 发现 API 地址，终端服务使用备用终端管理地址$\n- 桌面端认证密钥已预置，需与后端TD_XTCS.DESKTOP_AUTH_KEY一致" /SD IDOK
     ${EndIf}
     !insertmacro LOG_CLOSE
     ${If} $VCRuntimeRebootRequired == "1"
         SetErrorLevel 3010
     ${EndIf}
-SectionEnd
+FunctionEnd
 
 ; ─────────────────────────────────────────────
 ; 卸载部分

@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QLockFile>
 
+#include <atomic>
 #include <mutex>
 #include <string_view>
 
@@ -26,6 +27,7 @@ using terminal::WinHandle;
 using terminal::LocalMemory;
 
 using terminal::TerminalServiceName;
+using terminal::TerminalRefreshControl;
 constexpr wchar_t DirectoryDacl[] = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
 constexpr wchar_t StatusDirectoryDacl[] = L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)";
 constexpr DWORD StatusWaitHintMs = 10000;
@@ -35,6 +37,7 @@ struct ServiceController {
     SERVICE_STATUS_HANDLE handle = nullptr;
     SERVICE_STATUS status{};
     std::mutex statusMutex;
+    std::atomic_bool refreshRequested{false};
     int argc = 0;
     char **argv = nullptr;
 
@@ -249,10 +252,15 @@ int runTerminal(bool console)
         return 1;
     }
 
+    terminal::ServiceRuntime *activeRuntime = nullptr;
     QTimer stopCheck;
-    QObject::connect(&stopCheck, &QTimer::timeout, &app, [&app, &service] {
+    QObject::connect(&stopCheck, &QTimer::timeout, &app, [&app, &service, &activeRuntime] {
         if (service.waitForStop(0)) {
             app.quit();
+            return;
+        }
+        if (service.refreshRequested.exchange(false) && activeRuntime) {
+            activeRuntime->refreshNow();
         }
     });
     stopCheck.start(100);
@@ -262,10 +270,13 @@ int runTerminal(bool console)
             return service.waitForStop(timeout);
         });
         runtime.start();
+        service.refreshRequested = false;
+        activeRuntime = &runtime;
         if (!console) {
             service.report(SERVICE_RUNNING);
         }
         result = app.exec();
+        activeRuntime = nullptr;
     }
     monitor.stop();
     terminal::writeServiceLog(directory, QStringLiteral("终端服务已停止"));
@@ -288,6 +299,9 @@ DWORD WINAPI handleServiceControl(DWORD code, DWORD, LPVOID, LPVOID context)
         }
         return NO_ERROR;
     }
+    case TerminalRefreshControl:
+        service.refreshRequested = true;
+        return NO_ERROR;
     default:
         return ERROR_CALL_NOT_IMPLEMENTED;
     }

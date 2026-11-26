@@ -267,11 +267,6 @@ function Write-OverrideConfig {
         [string]$ProcessMode
     )
 
-    $overrideDir = [System.IO.Path]::GetDirectoryName($OverridePath)
-    if ($overrideDir -and -not [System.IO.Directory]::Exists($overrideDir)) {
-        [System.IO.Directory]::CreateDirectory($overrideDir) | Out-Null
-    }
-
     $requirePasswordText = "false"
     if ($RequirePassword) {
         $requirePasswordText = "true"
@@ -288,13 +283,14 @@ function Write-OverrideConfig {
         $lines.Add("cefProcessMode=$ProcessMode")
     }
 
-    [System.IO.File]::WriteAllLines($OverridePath, [string[]]$lines.ToArray(), (Get-Utf8NoBomEncoding))
+    Write-TextFileUtf8Safely $OverridePath (($lines -join [Environment]::NewLine) + [Environment]::NewLine)
 }
 
+$overrideWritten = $false
 try {
     Write-InstallLog "config patch started"
 
-    $url = Get-RequiredEnv "DTCEF_CONFIG_URL" "Config URL"
+    $url = Get-OptionalEnv "DTCEF_CONFIG_URL"
     $exitPassword = Get-RequiredEnv "DTCEF_CONFIG_PASSWORD" "Config password"
     $apiBaseUrl = Get-OptionalEnv "DTCEF_CONFIG_API_BASE_URL"
     $requirePassword = Convert-ToBooleanValue (Get-OptionalEnv "DTCEF_CONFIG_REQUIRE_PASSWORD")
@@ -310,6 +306,12 @@ try {
         throw "Config root must be a JSON object"
     }
 
+    if ([string]::IsNullOrWhiteSpace($url)) {
+        $url = [string]$config["url"]
+    }
+    Write-OverrideConfig $url $exitPassword $apiBaseUrl $requirePassword $processMode
+    $overrideWritten = $true
+
     $config["url"] = $url
     $config["exitPassword"] = $exitPassword
     $config["sensitiveOperationRequirePassword"] = $requirePassword
@@ -320,7 +322,6 @@ try {
 
     $patchedJson = Format-JsonText ($serializer.Serialize($config))
     Write-TextFileUtf8Safely $ConfigPath ($patchedJson + [Environment]::NewLine)
-    Write-OverrideConfig $url $exitPassword $apiBaseUrl $requirePassword $processMode
 
     $verifyText = Read-TextFileUtf8 $ConfigPath
     $verifyConfig = $serializer.DeserializeObject($verifyText)
@@ -343,16 +344,15 @@ try {
         throw "CEF process mode verification failed"
     }
 
-    if (-not [System.IO.File]::Exists($OverridePath)) {
-        throw "Override config was not written"
-    }
-
     Write-InstallLog "config patch completed"
     exit 0
 } catch {
     try {
         Write-InstallLog ("config patch failed at script line {0}: {1}" -f $_.InvocationInfo.ScriptLineNumber, $_.Exception.Message)
     } catch {
+    }
+    if ($overrideWritten) {
+        exit 2
     }
     exit 1
 }

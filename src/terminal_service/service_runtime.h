@@ -23,6 +23,7 @@ public:
     ~ServiceRuntime() override;
 
     void start();
+    void refreshNow();
 
 private:
     enum class Request { None, Register, Heartbeat };

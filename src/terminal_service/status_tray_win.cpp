@@ -5,6 +5,8 @@
 #include <shellapi.h>
 #include <shldisp.h>
 #include <shlobj.h>
+#include <sddl.h>
+#include <tlhelp32.h>
 #include <winsvc.h>
 #include <wrl/client.h>
 
@@ -39,6 +41,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QProcess>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QScreen>
@@ -54,6 +57,7 @@
 #include <QWindow>
 #include <QtConcurrentRun>
 
+#include <memory>
 #include <string_view>
 
 namespace {
@@ -63,8 +67,9 @@ using namespace terminal;
 constexpr qint64 Minute = 60 * 1000;
 constexpr qint64 Day = 24 * 60 * Minute;
 constexpr int VisibleLogLimit = 1000;
+constexpr qint64 RefreshTimeoutMs = 15 * 1000;
 
-HRESULT launchTrayFromExplorer()
+HRESULT launchTrayFromExplorer(bool quiet)
 {
     using Microsoft::WRL::ComPtr;
 
@@ -108,7 +113,8 @@ HRESULT launchTrayFromExplorer()
         return HRESULT_FROM_WIN32(length == MAX_PATH ? ERROR_INSUFFICIENT_BUFFER : GetLastError());
     }
     const std::unique_ptr<OLECHAR, decltype(&SysFreeString)> path(SysAllocString(executable), SysFreeString);
-    const std::unique_ptr<OLECHAR, decltype(&SysFreeString)> trayArgument(SysAllocString(L"--tray"), SysFreeString);
+    const std::unique_ptr<OLECHAR, decltype(&SysFreeString)> trayArgument(
+        SysAllocString(quiet ? L"--tray" : L""), SysFreeString);
     if (!path || !trayArgument) {
         return E_OUTOFMEMORY;
     }
@@ -116,10 +122,13 @@ HRESULT launchTrayFromExplorer()
     arguments.vt = VT_BSTR;
     arguments.bstrVal = trayArgument.get();
     VARIANT optional{};
-    return shell->ShellExecute(path.get(), arguments, optional, optional, optional);
+    VARIANT show{};
+    show.vt = VT_I4;
+    show.lVal = SW_SHOWNORMAL;
+    return shell->ShellExecute(path.get(), arguments, optional, optional, show);
 }
 
-int startTrayForDesktopUser()
+int startTrayForDesktopUser(bool quiet)
 {
     if (!GetShellWindow()) {
         return ERROR_NOT_LOGGED_ON;
@@ -129,7 +138,7 @@ int startTrayForDesktopUser()
         return initialized;
     }
     // 让桌面 Explorer 以登录用户的身份启动托盘。
-    const HRESULT result = launchTrayFromExplorer();
+    const HRESULT result = launchTrayFromExplorer(quiet);
     CoUninitialize();
     return result;
 }
@@ -172,6 +181,26 @@ ServiceInfo queryService()
     case SERVICE_STOPPED: state = ServiceState::Stopped; break;
     }
     return {state, status.dwProcessId, status.dwWin32ExitCode, status.dwServiceSpecificExitCode};
+}
+
+DWORD requestServiceRefresh()
+{
+    SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!manager) {
+        return GetLastError();
+    }
+    SC_HANDLE service = OpenServiceW(manager, TerminalServiceName, SERVICE_USER_DEFINED_CONTROL);
+    DWORD error = service ? ERROR_SUCCESS : GetLastError();
+    CloseServiceHandle(manager);
+    if (!service) {
+        return error;
+    }
+    SERVICE_STATUS status{};
+    if (!ControlService(service, TerminalRefreshControl, &status)) {
+        error = GetLastError();
+    }
+    CloseServiceHandle(service);
+    return error;
 }
 
 QString localTime(qint64 milliseconds, bool full = false)
@@ -421,23 +450,255 @@ bool isAdministrator()
             && CheckTokenMembership(nullptr, sid, &member) && member;
 }
 
-void launchServerSettings(QWidget *parent)
+bool launchElevated(QWidget *parent, const QString &parameters)
 {
     const auto executable = QDir::toNativeSeparators(QCoreApplication::applicationFilePath()).toStdWString();
     const auto directory = QDir::toNativeSeparators(QCoreApplication::applicationDirPath()).toStdWString();
+    const auto arguments = parameters.toStdWString();
     SHELLEXECUTEINFOW request{};
     request.cbSize = sizeof(request);
     request.fMask = SEE_MASK_FLAG_NO_UI;
     request.hwnd = parent ? reinterpret_cast<HWND>(parent->winId()) : nullptr;
     request.lpVerb = L"runas";
     request.lpFile = executable.c_str();
-    request.lpParameters = L"--configure-service";
+    request.lpParameters = arguments.c_str();
     request.lpDirectory = directory.c_str();
     request.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&request) && GetLastError() != ERROR_CANCELLED) {
+    return ShellExecuteExW(&request) || GetLastError() == ERROR_CANCELLED;
+}
+
+using ServiceHandle = std::unique_ptr<SC_HANDLE__, decltype(&CloseServiceHandle)>;
+
+void launchServiceControl(QWidget *parent, const QString &action)
+{
+    if (!launchElevated(parent, QStringLiteral("--service-control %1").arg(action))) {
+        QMessageBox::warning(parent, QStringLiteral("终端服务"), QStringLiteral("请使用 Windows 管理员账户授权。"));
+    }
+}
+
+// 等待服务进入目标状态。服务启动途中退出时返回其退出码。
+DWORD waitForServiceState(SC_HANDLE service, DWORD target)
+{
+    for (int elapsed = 0; elapsed <= 30000; elapsed += 250) {
+        SERVICE_STATUS status{};
+        if (!QueryServiceStatus(service, &status)) {
+            return GetLastError();
+        }
+        if (status.dwCurrentState == target) {
+            return ERROR_SUCCESS;
+        }
+        if (target == SERVICE_RUNNING && status.dwCurrentState == SERVICE_STOPPED && elapsed > 0) {
+            return status.dwWin32ExitCode == ERROR_SERVICE_SPECIFIC_ERROR ? status.dwServiceSpecificExitCode
+                    : status.dwWin32ExitCode ? status.dwWin32ExitCode : ERROR_SERVICE_NOT_ACTIVE;
+        }
+        Sleep(250);
+    }
+    return ERROR_TIMEOUT;
+}
+
+int controlTerminalService(const QString &action)
+{
+    const QString title = QStringLiteral("终端服务");
+    const bool stop = action == QStringLiteral("stop") || action == QStringLiteral("restart");
+    const bool start = action == QStringLiteral("start") || action == QStringLiteral("restart");
+    if (!isAdministrator() || (!stop && !start)) {
+        QMessageBox::warning(nullptr, title, QStringLiteral("请在托盘右键菜单中选择服务操作，并授权管理员权限。"));
+        return 1;
+    }
+    const ServiceHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT), CloseServiceHandle);
+    const ServiceHandle service(manager ? OpenServiceW(manager.get(), TerminalServiceName,
+                                                       SERVICE_START | SERVICE_STOP | SERVICE_QUERY_STATUS)
+                                        : nullptr, CloseServiceHandle);
+    DWORD error = service ? ERROR_SUCCESS : GetLastError();
+    if (!error && stop) {
+        SERVICE_STATUS status{};
+        if (!ControlService(service.get(), SERVICE_CONTROL_STOP, &status) && GetLastError() != ERROR_SERVICE_NOT_ACTIVE) {
+            error = GetLastError();
+        } else {
+            error = waitForServiceState(service.get(), SERVICE_STOPPED);
+        }
+    }
+    if (!error && start) {
+        if (!StartServiceW(service.get(), 0, nullptr) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING) {
+            error = GetLastError();
+        } else {
+            error = waitForServiceState(service.get(), SERVICE_RUNNING);
+        }
+    }
+    if (error) {
+        const QString name = action == QStringLiteral("start") ? QStringLiteral("启动")
+                : action == QStringLiteral("stop") ? QStringLiteral("停止") : QStringLiteral("重启");
+        QMessageBox::warning(nullptr, title, QStringLiteral("终端服务%1失败（Windows 错误 %2）。").arg(name).arg(error));
+        return 1;
+    }
+    return 0;
+}
+
+void launchServerSettings(QWidget *parent)
+{
+    if (!launchElevated(parent, QStringLiteral("--configure-service"))) {
         QMessageBox::warning(parent, QStringLiteral("无法打开配置"),
                              QStringLiteral("请使用 Windows 管理员账户打开终端服务配置。"));
     }
+}
+
+QString currentUserSid()
+{
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return {};
+    }
+    const WinHandle tokenHandle(token);
+    alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    LPWSTR text = nullptr;
+    if (!GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size)
+            || !ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER *>(buffer)->User.Sid, &text)) {
+        return {};
+    }
+    const QString sid = QString::fromWCharArray(text);
+    LocalFree(text);
+    return sid;
+}
+
+void launchDesktopUnlock(QWidget *parent)
+{
+    // 管理员授权可能换成其他账户，传入当前用户 SID 以清除该用户自己的策略。
+    const QString sid = currentUserSid();
+    if (sid.isEmpty() || !launchElevated(parent, QStringLiteral("--unlock-desktop %1").arg(sid))) {
+        QMessageBox::warning(parent, QStringLiteral("无法解除锁定"),
+                             QStringLiteral("请使用 Windows 管理员账户授权。"));
+    }
+}
+
+QString canonicalSid(const QString &text)
+{
+    PSID sid = nullptr;
+    if (!ConvertStringSidToSidW(reinterpret_cast<const wchar_t *>(text.utf16()), &sid)) {
+        return {};
+    }
+    LPWSTR canonical = nullptr;
+    QString result;
+    if (IsValidSid(sid) && ConvertSidToStringSidW(sid, &canonical)) {
+        result = QString::fromWCharArray(canonical);
+        LocalFree(canonical);
+    }
+    LocalFree(sid);
+    return result;
+}
+
+QList<DWORD> examProcesses()
+{
+    QList<DWORD> processes;
+    const WinHandle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+    if (!snapshot) {
+        return processes;
+    }
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    for (BOOL more = Process32FirstW(snapshot.get(), &entry); more; more = Process32NextW(snapshot.get(), &entry)) {
+        if (_wcsicmp(entry.szExeFile, ExamAppExecutable) == 0) {
+            processes.append(entry.th32ProcessID);
+        }
+    }
+    return processes;
+}
+
+struct PolicyValue
+{
+    HKEY root;
+    QString key;
+    const wchar_t *name;
+    const char *label;
+};
+
+int unlockDesktop(const QString &userSid)
+{
+    const QString title = QStringLiteral("解除锁定");
+    const QString sid = canonicalSid(userSid);
+    if (!isAdministrator() || sid.isEmpty()) {
+        QMessageBox::warning(nullptr, title, QStringLiteral("请在托盘右键菜单中选择「解除锁定」，并授权管理员权限。"));
+        return 1;
+    }
+
+    QStringList done;
+    QStringList failed;
+    const auto running = examProcesses();
+    if (!running.isEmpty()) {
+        const auto answer = QMessageBox::question(nullptr, title,
+            QStringLiteral("考试端仍在运行，解除锁定会结束考试端。"),
+            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+        if (answer != QMessageBox::Yes) {
+            return 0;
+        }
+        bool ended = true;
+        for (const DWORD pid : running) {
+            const WinHandle process(OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid));
+            if (!process) {
+                // 进程已自行退出时 OpenProcess 返回 ERROR_INVALID_PARAMETER。
+                ended = ended && GetLastError() == ERROR_INVALID_PARAMETER;
+                continue;
+            }
+            TerminateProcess(process.get(), 1);
+            ended = ended && WaitForSingleObject(process.get(), 3000) == WAIT_OBJECT_0;
+        }
+        (ended ? done : failed).append(QStringLiteral("考试端键盘拦截"));
+    }
+
+    const QString user = sid + QStringLiteral("\\");
+    const QString system = QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System");
+    const QString explorer = QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer");
+    const QString command = QStringLiteral("Software\\Policies\\Microsoft\\Windows\\System");
+    const PolicyValue policies[] = {
+        {HKEY_LOCAL_MACHINE, system, L"DisableTaskMgr", "任务管理器禁用"},
+        {HKEY_USERS, user + system, L"DisableTaskMgr", "任务管理器禁用"},
+        {HKEY_LOCAL_MACHINE, command, L"DisableCMD", "命令提示符禁用"},
+        {HKEY_USERS, user + command, L"DisableCMD", "命令提示符禁用"},
+        {HKEY_LOCAL_MACHINE, explorer, L"NoWinKeys", "Win 键禁用"},
+        {HKEY_USERS, user + explorer, L"NoWinKeys", "Win 键禁用"},
+    };
+    bool winKeys = false;
+    for (const auto &policy : policies) {
+        HKEY key = nullptr;
+        LSTATUS result = RegOpenKeyExW(policy.root, reinterpret_cast<const wchar_t *>(policy.key.utf16()), 0,
+                                       KEY_SET_VALUE | KEY_WOW64_64KEY, &key);
+        if (result == ERROR_SUCCESS) {
+            result = RegDeleteValueW(key, policy.name);
+            RegCloseKey(key);
+        }
+        const QString label = QString::fromUtf8(policy.label);
+        if (result == ERROR_SUCCESS) {
+            if (!done.contains(label)) {
+                done.append(label);
+            }
+            winKeys = winKeys || std::wstring_view(policy.name) == L"NoWinKeys";
+        } else if (result != ERROR_FILE_NOT_FOUND && !failed.contains(label)) {
+            failed.append(QStringLiteral("%1（Windows 错误 %2）").arg(label).arg(result));
+        }
+    }
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, reinterpret_cast<LPARAM>(L"Policy"),
+                        SMTO_ABORTIFHUNG, 2000, &ignored);
+
+    if (done.isEmpty() && failed.isEmpty()) {
+        QMessageBox::information(nullptr, title, QStringLiteral("未发现考试端进程或系统锁定设置。"));
+        return 0;
+    }
+    QString message;
+    if (!done.isEmpty()) {
+        message = QStringLiteral("已解除：%1。").arg(done.join(QStringLiteral("、")));
+        if (winKeys) {
+            message += QStringLiteral("\nWin 键在注销并重新登录后恢复。");
+        }
+    }
+    if (!failed.isEmpty()) {
+        message += (message.isEmpty() ? QString() : QStringLiteral("\n"))
+                + QStringLiteral("未能解除：%1。").arg(failed.join(QStringLiteral("、")));
+        QMessageBox::warning(nullptr, title, message);
+        return 1;
+    }
+    QMessageBox::information(nullptr, title, message);
+    return 0;
 }
 
 bool isRegularConfigFile(const QString &path)
@@ -527,7 +788,7 @@ int showServerSettings()
             saveError = QStringLiteral("配置文件不可用，请检查安装和数据目录权限。");
         } else if (Config::saveServerSettings(path, url->text(), school->text(), saveError)) {
             QMessageBox::information(&dialog, title,
-                QStringLiteral("配置已保存。需要立即生效时，请以管理员身份运行安装目录中的 restart-terminal-service.bat。"));
+                QStringLiteral("配置已保存。需要立即生效时，请在托盘右键菜单中选择「重启服务」。"));
             dialog.accept();
             return;
         }
@@ -623,7 +884,28 @@ public:
         menu->addAction(QStringLiteral("查看状态"), this, [this] { showPanel(0); });
         menu->addAction(QStringLiteral("查看运行日志"), this, [this] { showPanel(1); });
         menu->addSeparator();
+        auto *startService = menu->addAction(QStringLiteral("启动服务"), this, [this] { controlService(QStringLiteral("start")); });
+        auto *stopService = menu->addAction(QStringLiteral("停止服务"), this, [this] { controlService(QStringLiteral("stop")); });
+        auto *restartService = menu->addAction(QStringLiteral("重启服务"), this, [this] { controlService(QStringLiteral("restart")); });
+        menu->addSeparator();
         menu->addAction(QStringLiteral("配置参数"), this, [] { launchServerSettings(QApplication::activeWindow()); });
+        menu->addAction(QStringLiteral("解除锁定"), this, [] { launchDesktopUnlock(QApplication::activeWindow()); });
+        menu->addSeparator();
+        menu->addAction(QStringLiteral("重启托盘"), this, [this] {
+            m_restartRequested = true;
+            m_tray.hide();
+            QApplication::quit();
+        });
+        menu->addAction(QStringLiteral("退出托盘"), this, [this] {
+            m_tray.hide();
+            QApplication::quit();
+        });
+        connect(menu, &QMenu::aboutToShow, this, [this, startService, stopService, restartService] {
+            const auto state = queryService().state;
+            startService->setEnabled(state == ServiceState::Stopped);
+            stopService->setEnabled(state == ServiceState::Running);
+            restartService->setEnabled(state == ServiceState::Running);
+        });
         m_tray.setContextMenu(menu);
         connect(&m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger) {
@@ -641,6 +923,11 @@ public:
         m_tray.show();
         m_refresh.start(2000);
         m_logRefresh.start(6000);
+    }
+
+    bool restartRequested() const
+    {
+        return m_restartRequested;
     }
 
     void showPanel(int tab = -1)
@@ -664,6 +951,12 @@ public:
     }
 
 private:
+    void controlService(const QString &action)
+    {
+        showPanel(0);
+        launchServiceControl(this, action);
+    }
+
     void buildUi()
     {
         setWindowTitle(QStringLiteral("终端注册状态"));
@@ -818,12 +1111,15 @@ private:
         m_logHint->setProperty("muted", true);
         m_copyHint = plainLabel();
         m_copyHint->setProperty("muted", true);
+        m_refreshNow = new QPushButton(QStringLiteral("立即刷新"));
+        m_refreshNow->setAutoDefault(false);
         auto *copy = new QPushButton(QStringLiteral("复制诊断信息"));
         copy->setProperty("primary", true);
         copy->setAutoDefault(false);
         actions->addWidget(m_logHint);
         actions->addWidget(m_copyHint);
         actions->addStretch();
+        actions->addWidget(m_refreshNow);
         actions->addWidget(copy);
         panelLayout->addWidget(footer);
 
@@ -840,6 +1136,7 @@ private:
         connect(m_onlyErrors, &QCheckBox::toggled, this, [this] { renderLogs(); });
         connect(m_export, &QPushButton::clicked, this, [this] { exportLogs(); });
         connect(close, &QPushButton::clicked, this, &QWidget::hide);
+        connect(m_refreshNow, &QPushButton::clicked, this, [this] { requestRefresh(); });
         connect(copy, &QPushButton::clicked, this, [this] {
             QApplication::clipboard()->setText(diagnosticHeader());
             m_copyHint->setText(QStringLiteral("诊断信息已复制"));
@@ -920,6 +1217,30 @@ private:
         m_version->setText(displayValue(m_status.version));
         m_advice->setText(view.nextStep);
         m_attempt->setText(next);
+
+        // 服务发布了刷新之后的状态或请求已超时，结束本次刷新。
+        if (m_refreshRequestedAt > 0 && (m_service.state != ServiceState::Running
+                || m_status.updatedAt > m_refreshRequestedAt || now - m_refreshRequestedAt > RefreshTimeoutMs)) {
+            m_refreshRequestedAt = 0;
+            m_refresh.start(2000);
+            refreshLogs();
+        }
+        const bool refreshing = m_refreshRequestedAt > 0;
+        m_refreshNow->setText(refreshing ? QStringLiteral("正在刷新…") : QStringLiteral("立即刷新"));
+        m_refreshNow->setEnabled(!refreshing && m_service.state == ServiceState::Running);
+    }
+
+    void requestRefresh()
+    {
+        const DWORD error = requestServiceRefresh();
+        if (error != ERROR_SUCCESS) {
+            m_copyHint->setText(QStringLiteral("刷新失败（Windows 错误 %1）").arg(error));
+            return;
+        }
+        m_copyHint->clear();
+        m_refreshRequestedAt = QDateTime::currentMSecsSinceEpoch();
+        refreshStatus();
+        m_refresh.start(500);
     }
 
     void refreshLogs()
@@ -1077,15 +1398,18 @@ private:
     QCheckBox *m_onlyErrors = nullptr;
     QTreeWidget *m_tree = nullptr;
     QPushButton *m_export = nullptr;
+    QPushButton *m_refreshNow = nullptr;
+    qint64 m_refreshRequestedAt = 0;
     bool m_logsLoaded = false;
+    bool m_restartRequested = false;
 };
 
 } // namespace
 
 int main(int argc, char **argv)
 {
-    if (argc == 2 && std::string_view(argv[1]) == "--start-for-desktop-user") {
-        return startTrayForDesktopUser();
+    if (argc >= 2 && std::string_view(argv[1]) == "--start-for-desktop-user") {
+        return startTrayForDesktopUser(argc == 3 && std::string_view(argv[2]) == "--tray");
     }
 
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
@@ -1103,13 +1427,19 @@ int main(int argc, char **argv)
     if (argc == 2 && std::string_view(argv[1]) == "--configure-service") {
         return showServerSettings();
     }
+    if (argc == 3 && std::string_view(argv[1]) == "--service-control") {
+        return controlTerminalService(QString::fromLatin1(argv[2]));
+    }
+    if (argc == 3 && std::string_view(argv[1]) == "--unlock-desktop") {
+        return unlockDesktop(QString::fromLocal8Bit(argv[2]));
+    }
 
     DWORD session = 0;
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
         return 1;
     }
     const QString endpoint = QStringLiteral("UMTerminalStatus-%1").arg(session);
-    const WinHandle instance(CreateMutexW(nullptr, FALSE, L"Local\\UMTerminalStatus"));
+    WinHandle instance(CreateMutexW(nullptr, FALSE, L"Local\\UMTerminalStatus"));
     const DWORD mutexResult = GetLastError();
     if (!instance) {
         return 1;
@@ -1143,5 +1473,12 @@ int main(int argc, char **argv)
     if (!quiet) {
         window.showPanel();
     }
-    return app.exec();
+    const int result = app.exec();
+    if (window.restartRequested()) {
+        // 先释放单实例互斥体和激活端点，新实例才能接管。
+        activation.close();
+        instance.reset();
+        QProcess::startDetached(QApplication::applicationFilePath(), {}, QApplication::applicationDirPath());
+    }
+    return result;
 }

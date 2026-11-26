@@ -1,5 +1,11 @@
 $ErrorActionPreference = "Stop"
 
+$serviceConfigScript = Join-Path $PSScriptRoot "write-terminal-service-config.ps1"
+$serviceConfigBytes = [IO.File]::ReadAllBytes($serviceConfigScript)
+if ($serviceConfigBytes.Length -lt 3 -or [BitConverter]::ToString($serviceConfigBytes, 0, 3) -ne "EF-BB-BF") {
+    throw "write-terminal-service-config.ps1 requires a UTF-8 BOM for Windows PowerShell."
+}
+
 $testDir = Join-Path ([IO.Path]::GetTempPath()) ("dtcef install config " + [Guid]::NewGuid())
 [void][IO.Directory]::CreateDirectory($testDir)
 
@@ -31,7 +37,7 @@ try {
 
         & "$PSScriptRoot\patch-install-config.ps1" -ConfigPath $configPath -OverridePath $overridePath -LogPath $logPath
         if ($LASTEXITCODE -ne 0) {
-            throw "Config patch failed for mode ${mode}: $(Get-Content -LiteralPath $logPath -Tail 1)"
+            throw "Config patch failed for mode ${mode}: $(Get-Content -LiteralPath $logPath -Encoding UTF8 -Tail 1)"
         }
 
         $encoding = New-Object System.Text.UTF8Encoding -ArgumentList $false, $true
@@ -59,6 +65,31 @@ try {
         }
         Write-Host "Config patch passed for mode $mode"
     }
+
+    $env:DTCEF_CONFIG_URL = ""
+    Copy-Item -LiteralPath $templatePath -Destination $configPath -Force
+    & "$PSScriptRoot\patch-install-config.ps1" -ConfigPath $configPath -OverridePath $overridePath -LogPath $logPath
+    $json = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($configPath))
+    if ($LASTEXITCODE -ne 0 -or $json.url -cne $template.url) {
+        throw "Installation without an exam URL must use the template URL."
+    }
+    Write-Host "Config patch passed with the template URL"
+
+    $env:DTCEF_CONFIG_PASSWORD = -join [char[]](0x8003, 0x8BD5, 0x5BC6, 0x7801)
+    $configLock = [IO.File]::Open($configPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        & "$PSScriptRoot\patch-install-config.ps1" -ConfigPath $configPath -OverridePath $overridePath -LogPath $logPath
+        if ($LASTEXITCODE -ne 2) {
+            throw "A blocked JSON update must report that the override was saved"
+        }
+    } finally {
+        $configLock.Dispose()
+    }
+    $overrideLines = ($encoding.GetString([IO.File]::ReadAllBytes($overridePath))) -split '\r?\n'
+    if ($overrideLines -cnotcontains "exitPassword=$($env:DTCEF_CONFIG_PASSWORD)") {
+        throw "The override must preserve the Unicode password as UTF-8"
+    }
+    Write-Host "UTF-8 override passed with a blocked JSON update"
 } finally {
     Remove-Item -LiteralPath $testDir -Recurse -Force
 }

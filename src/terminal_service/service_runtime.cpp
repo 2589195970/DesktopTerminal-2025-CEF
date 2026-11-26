@@ -22,6 +22,7 @@ constexpr int RegisterJitterMs = 5 * 1000;
 constexpr int RegisterRetryMinMs = 30 * 1000;
 constexpr int RegisterRetryMaxMs = 60 * 1000;
 constexpr int HeartbeatIntervalMs = 30 * 1000;
+constexpr int ActiveHeartbeatIntervalMs = 5 * 1000;
 constexpr int RequestTimeoutMs = 10 * 1000;
 constexpr int StatusRefreshMs = 15 * 1000;
 constexpr int ServiceLogCleanupMs = 60 * 60 * 1000;
@@ -98,6 +99,15 @@ void ServiceRuntime::start()
     }
     m_statusRefresh.start(StatusRefreshMs);
     m_logCleanup.start(ServiceLogCleanupMs);
+    m_tick.start(0);
+}
+
+void ServiceRuntime::refreshNow()
+{
+    if (m_request != Request::None || m_powerCommand || m_powerInitiated) {
+        return;
+    }
+    log(QStringLiteral("状态托盘请求立即刷新"));
     m_tick.start(0);
 }
 
@@ -224,7 +234,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
     m_sentResults = {};
     if (!response.valid) {
         reportRequestFailure(false, problem, status, networkError);
-        schedule(HeartbeatIntervalMs);
+        schedule(appIsRunning() ? ActiveHeartbeatIntervalMs : HeartbeatIntervalMs);
     } else if (!response.codeValid) {
         publishExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}}, m_waitForStop);
         m_commands.clear();
@@ -257,7 +267,8 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
         for (const Command &command : response.commands) {
             m_commands.enqueue(command);
         }
-        schedule(appIsRunning() ? 5000 : HeartbeatIntervalMs + QRandomGenerator::global()->bounded(5001));
+        schedule(appIsRunning() ? ActiveHeartbeatIntervalMs
+                                : HeartbeatIntervalMs + QRandomGenerator::global()->bounded(5001));
     }
     saveState();
     if (m_powerCommand) {
