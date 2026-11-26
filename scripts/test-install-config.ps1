@@ -93,3 +93,6 @@ try {
 } finally {
     Remove-Item -LiteralPath $testDir -Recurse -Force
 }
+
+# 锁定 JSON 的测试预期补丁脚本返回 2，所有断言通过后单独返回测试结果。
+exit 0
