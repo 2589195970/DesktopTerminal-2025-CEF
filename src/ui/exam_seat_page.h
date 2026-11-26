@@ -11,7 +11,7 @@ class QResizeEvent;
 class ExamSeatPage final : public QWidget
 {
 public:
-    enum class State { Waiting, Unused, Synchronizing };
+    enum class State { Waiting, PreparingLogin, Unused, Synchronizing };
 
     explicit ExamSeatPage(QWidget* parent = nullptr);
     void showSession(State state, const QString& seat, const QString& session);

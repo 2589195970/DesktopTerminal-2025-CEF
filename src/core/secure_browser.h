@@ -3,6 +3,9 @@
 
 #include <QWidget>
 #include <QByteArray>
+#include <QJsonObject>
+#include <QPointer>
+#include <QRect>
 #include <QTimer>
 #include <QKeyEvent>
 #include <QCloseEvent>
@@ -15,6 +18,7 @@
 
 class QHotkey;
 class QLabel;
+class QScreen;
 class QStackedLayout;
 class CEFManager;
 class Logger;
@@ -175,12 +179,16 @@ private:
     void setAlwaysOnTop();
     void disableWindowControls();
 #ifdef Q_OS_WIN
+    void updateExamSeatPage();
+    void prepareExamSeatLogin();
+    void cancelExamSeatLoginPreparation();
+
     /**
      * @brief 用Win32 API强制窗口占满当前监视器（物理像素，保留未启用）
      * 当前setFullscreenMode不再调用此函数，仅保留以备诊断/回滚。
      */
     void enforceWin32Fullscreen();
-    void fitManagedExamWindow();
+    void fitWindowToScreen();
 
     /**
      * @brief 打印Qt全屏几何诊断：对比Qt geometry vs Win32 GetWindowRect
@@ -194,6 +202,9 @@ private:
     void destroyCEFBrowser();
     void resizeCEFBrowser();
     void lockViewportIfNeeded();
+    bool windowCoversScreen() const;
+    void watchScreen(QScreen* screen);
+    void handleScreenGeometryChanged();
     double calculateZoomLevelForSize(const QSize& currentSize) const;
 
     // 开发者工具管理
@@ -230,13 +241,13 @@ private:
     QStackedLayout* m_examPages = nullptr;
     QWidget* m_examLoginPage = nullptr;
     ExamSeatPage* m_examSeatPage = nullptr;
-    bool m_managedExam = false;
+    QRect m_lastMisfitGeometry;
     QLabel* m_examTerminalInfo = nullptr;
     QTimer* m_examTerminalInfoTimer = nullptr;
     QTimer* m_examSeatLease = nullptr;
-    QString m_examSeatReleaseId;
-    QString m_examSeatResettingId;
-    QByteArray m_examSeatPayload;
+    QString m_examSeatPreparedId;
+    QString m_examSeatPreparingId;
+    QJsonObject m_examSeatDisplay;
 #endif
     QString m_windowTitle;
 
@@ -251,8 +262,9 @@ private:
     // 窗口句柄（用于CEF集成）
     void* m_windowHandle;
 
-    // 视口锁定状态：首次全屏创建后固定网页基准宽度，避免后续分辨率变化触发布局重排
+    // 视口锁定状态：窗口实际铺满屏幕后固定网页基准宽度；屏幕分辨率或缩放变化时按新屏幕重新锁定
     QSize m_lockedViewportSize;
+    QPointer<QScreen> m_watchedScreen;
     bool m_viewportLocked;
     double m_lastAppliedZoomLevel;
     

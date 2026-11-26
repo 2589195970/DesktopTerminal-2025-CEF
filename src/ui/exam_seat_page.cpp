@@ -16,11 +16,13 @@
 
 namespace {
 
-constexpr int PageInset = 32;
-constexpr int CardWidth = 776;
-constexpr int ContentInset = 30;
-constexpr int StatusWithSeatSize = 18;
-constexpr int StatusWithoutSeatSize = 26;
+constexpr int PageInset = 24;
+constexpr int CardWidth = 1040;
+constexpr int ContentInset = 38;
+constexpr int SeatNumberSize = 184;
+constexpr int MinimumSeatNumberSize = 12;
+constexpr int StatusWithSeatSize = 20;
+constexpr int StatusWithoutSeatSize = 32;
 // 与学生端 PC 登录页 .left-bg 使用同一背景色。
 constexpr char StudentLoginBlue[] = "#4f99fd";
 constexpr char TerminalInfoText[] = "#152b48";
@@ -49,10 +51,10 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
     setAttribute(Qt::WA_StyledBackground);
     setStyleSheet(QStringLiteral(
         "QWidget#examSeatPage { background: %1; }"
-        "QFrame#examSeatCard { background: #ffffff; border-radius: 22px; }"
+        "QFrame#examSeatCard { background: #ffffff; border-radius: 26px; }"
         "QFrame#examSeatSessionMark { background: %1; border-radius: 1px; }"
         "QFrame#examSeatDivider { background: #e9eef5; }"
-        "QFrame#examSeatNotice { background: #eff5ff; border-radius: 10px; }")
+        "QFrame#examSeatNotice { background: #eff5ff; border-radius: 12px; }")
         .arg(QLatin1String(StudentLoginBlue)));
     auto* pageLayout = new QVBoxLayout(this);
     pageLayout->setContentsMargins(PageInset, 16, PageInset, 16);
@@ -62,9 +64,9 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
     m_card->setObjectName(QStringLiteral("examSeatCard"));
     m_card->setMaximumWidth(CardWidth);
     auto* shadow = new QGraphicsDropShadowEffect(m_card);
-    shadow->setColor(QColor(19, 52, 111, 52));
+    shadow->setColor(QColor(19, 52, 111, 42));
     shadow->setBlurRadius(48);
-    shadow->setOffset(0, 14);
+    shadow->setOffset(0, 10);
     m_card->setGraphicsEffect(shadow);
     auto* cardLayout = new QVBoxLayout(m_card);
     cardLayout->setContentsMargins(ContentInset, 0, ContentInset, 0);
@@ -77,15 +79,15 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
     pageLayout->addStretch();
 
     auto* sessionLayout = new QHBoxLayout;
-    sessionLayout->setContentsMargins(0, 20, 0, 20);
+    sessionLayout->setContentsMargins(0, 24, 0, 24);
     sessionLayout->setSpacing(12);
     auto* sessionMark = new QFrame(m_card);
     sessionMark->setObjectName(QStringLiteral("examSeatSessionMark"));
-    sessionMark->setFixedSize(3, 17);
+    sessionMark->setFixedSize(4, 22);
     sessionLayout->addWidget(sessionMark);
-    auto* sessionLabel = makeLabel(m_card, QStringLiteral("考试场次"), 14, "#52637a");
+    auto* sessionLabel = makeLabel(m_card, QStringLiteral("考试场次"), 18, "#52637a");
     sessionLayout->addWidget(sessionLabel);
-    m_session = makeLabel(m_card, {}, 21, "#182943", true);
+    m_session = makeLabel(m_card, {}, 26, "#182943", true);
     m_session->setWordWrap(true);
     m_session->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     sessionLayout->addWidget(m_session, 1);
@@ -96,43 +98,47 @@ ExamSeatPage::ExamSeatPage(QWidget* parent)
     cardLayout->addWidget(divider);
 
     auto* contentLayout = new QVBoxLayout;
-    contentLayout->setContentsMargins(0, 16, 0, 24);
+    contentLayout->setContentsMargins(0, 24, 0, 24);
     contentLayout->setSpacing(8);
     m_seatDetails = new QWidget(m_card);
     auto* seatLayout = new QVBoxLayout(m_seatDetails);
     seatLayout->setContentsMargins(0, 0, 0, 0);
     seatLayout->setSpacing(0);
-    auto* seatLabel = makeLabel(m_seatDetails, QStringLiteral("考试座号"), 16, "#52637a");
-    m_seatNumber = makeLabel(m_seatDetails, {}, 128, "#10294d", true);
+    auto* seatLabel = makeLabel(m_seatDetails, QStringLiteral("考试座号"), 30, "#52637a", true);
+    m_seatNumber = makeLabel(m_seatDetails, {}, SeatNumberSize, "#10294d", true);
     m_seatNumber->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
     auto* notice = new QFrame(m_card);
     notice->setObjectName(QStringLiteral("examSeatNotice"));
     auto* noticeLayout = new QVBoxLayout(notice);
-    noticeLayout->setContentsMargins(12, 11, 12, 11);
-    noticeLayout->setSpacing(4);
+    noticeLayout->setContentsMargins(24, 10, 24, 10);
+    noticeLayout->setSpacing(6);
     m_status = makeLabel(notice, {}, StatusWithoutSeatSize, "#234e86", true);
     m_status->setWordWrap(true);
-    m_message = makeLabel(notice, {}, 14, "#52637a");
+    m_message = makeLabel(notice, {}, 18, "#52637a");
     m_message->setWordWrap(true);
     for (auto* label : {seatLabel, m_seatNumber, m_status, m_message}) {
         label->setAlignment(Qt::AlignCenter);
     }
-    seatLayout->addStretch();
     seatLayout->addWidget(seatLabel);
     seatLayout->addWidget(m_seatNumber);
-    seatLayout->addStretch();
     noticeLayout->addWidget(m_status);
     noticeLayout->addWidget(m_message);
-    contentLayout->addWidget(m_seatDetails, 1);
-    contentLayout->addWidget(notice, 0, Qt::AlignVCenter);
+    auto* noticeRow = new QHBoxLayout;
+    noticeRow->addStretch();
+    noticeRow->addWidget(notice);
+    noticeRow->addStretch();
+    contentLayout->addStretch();
+    contentLayout->addWidget(m_seatDetails);
+    contentLayout->addLayout(noticeRow);
+    contentLayout->addStretch();
     cardLayout->addLayout(contentLayout, 1);
     adjustLayout();
 }
 
 void ExamSeatPage::showSession(State state, const QString& seat, const QString& session)
 {
-    const bool hasSeat = state == State::Waiting && !seat.isEmpty();
+    const bool hasSeat = (state == State::Waiting || state == State::PreparingLogin) && !seat.isEmpty();
     m_seatDetails->setVisible(hasSeat);
     m_seatNumber->setText(hasSeat ? seat : QString());
     const QString sessionName = session.trimmed();
@@ -142,6 +148,9 @@ void ExamSeatPage::showSession(State state, const QString& seat, const QString& 
     switch (state) {
     case State::Waiting:
         m_status->setText(hasSeat ? QStringLiteral("等待开考") : QStringLiteral("座号待分配"));
+        break;
+    case State::PreparingLogin:
+        m_status->setText(QStringLiteral("正在加载登录页"));
         break;
     case State::Unused:
         m_status->setText(QStringLiteral("本场不使用"));
@@ -171,27 +180,35 @@ void ExamSeatPage::paintEvent(QPaintEvent* event)
     QWidget::paintEvent(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const qreal spacing = qBound<qreal>(12, width() * 0.015, 22);
+    const qreal spacing = qBound<qreal>(16, width() * 0.026, 38);
     for (int line = 0; line < 4; ++line) {
         const qreal offset = line * spacing;
-        QPainterPath path(QPointF(-1, height() * 0.71 + offset));
-        path.cubicTo(width() * 0.42, height() * 0.71 + offset, width() * 0.58,
-                     height() * 0.13 + offset, width() + 1, height() * 0.13 + offset);
-        painter.setPen(QPen(QColor(255, 255, 255, 96 - line * 13), 1.4));
+        const qreal leftY = height() * 0.78 + offset;
+        const qreal rightY = height() * 0.08 + offset;
+        QPainterPath path(QPointF(-1, leftY));
+        path.cubicTo(width() * 0.42, leftY, width() * 0.58, rightY, width() + 1, rightY);
+        painter.setPen(QPen(QColor(255, 255, 255, 72 - line * 10), 2.0));
         painter.drawPath(path);
     }
 }
 
 void ExamSeatPage::adjustLayout()
 {
-    m_card->setMinimumHeight(qBound(320, height() * 55 / 100, 434));
+    m_card->setMinimumHeight(qBound(320, height() * 64 / 100, 560));
+    const int inset = qBound(16, width() / 20, ContentInset);
+    m_card->layout()->setContentsMargins(inset, 0, inset, 0);
     QFont seatFont = m_seatNumber->font();
-    const int preferred = qBound(64, height() / 5, 128);
+    const int preferred = qBound(64, qMin(width() / 3, height() / 4), SeatNumberSize);
     seatFont.setPixelSize(preferred);
     const int measure = QFontMetrics(seatFont).horizontalAdvance(m_seatNumber->text());
-    const int available = qMax(1, qMin(width() - 2 * PageInset, CardWidth) - 2 * ContentInset);
+    const int available = qMax(1, qMin(width() - 2 * PageInset, CardWidth) - 2 * inset);
     if (measure > available) {
-        seatFont.setPixelSize(qMax(12, preferred * available / measure));
+        int fitted = qMax(MinimumSeatNumberSize, preferred * available / measure);
+        seatFont.setPixelSize(fitted);
+        while (fitted > MinimumSeatNumberSize
+               && QFontMetrics(seatFont).horizontalAdvance(m_seatNumber->text()) > available) {
+            seatFont.setPixelSize(--fitted);
+        }
     }
     m_seatNumber->setFont(seatFont);
 }

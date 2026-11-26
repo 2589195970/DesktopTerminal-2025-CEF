@@ -9,6 +9,9 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QPointer>
+#include <QTimer>
+#include <QUrl>
 #include <QWidget>
 #include <utility>
 
@@ -30,33 +33,26 @@ namespace {
 
 constexpr qint64 BrowserCloseTimeoutMs = 3000;
 
-class ManagedStudentLoginReset final : public CefDeleteCookiesCallback {
+class ManagedStudentCookieDeleted final : public CefDeleteCookiesCallback {
 public:
-    ManagedStudentLoginReset(CefRefPtr<CefCookieManager> cookies, CefRefPtr<CefFrame> frame,
-                             const CefString& url, std::function<void(bool)> completion)
-        : m_cookies(cookies), m_frame(frame), m_url(url), m_completion(std::move(completion)) {}
+    explicit ManagedStudentCookieDeleted(std::function<void()> completion)
+        : m_completion(std::move(completion)) {}
 
     void OnComplete(int /*numDeleted*/) override
     {
-        if (!m_refreshRequested) {
-            m_refreshRequested = true;
-            if (!m_cookies->DeleteCookies(m_url, "xsRefreshToken", this)) {
-                m_completion(false);
-            }
-            return;
-        }
-        m_frame->LoadURL(m_url);
-        m_completion(true);
+        m_completion();
     }
 
 private:
-    CefRefPtr<CefCookieManager> m_cookies;
-    CefRefPtr<CefFrame> m_frame;
-    CefString m_url;
-    std::function<void(bool)> m_completion;
-    bool m_refreshRequested = false;
-    IMPLEMENT_REFCOUNTING(ManagedStudentLoginReset);
+    std::function<void()> m_completion;
+    IMPLEMENT_REFCOUNTING(ManagedStudentCookieDeleted);
 };
+
+bool isWebPage(const QString& url)
+{
+    const QString scheme = QUrl(url).scheme();
+    return scheme == QStringLiteral("https") || scheme == QStringLiteral("http");
+}
 
 } // namespace
 
@@ -203,6 +199,7 @@ void CEFManager::shutdown()
     }
 
     m_shutdownRequested = true;
+    cancelManagedStudentLoginPreparation();
     m_logger->appEvent("开始关闭CEF...");
     // 关闭期间浏览器可能刚创建完成，不再通知界面，避免已隐藏的考试窗口被重新显示。
     blockSignals(true);
@@ -397,22 +394,88 @@ bool CEFManager::resizeBrowser(int browserId, int width, int height)
     return true;
 }
 
-bool CEFManager::resetManagedStudentLogin(const QString& url, std::function<void(bool)> completion)
+bool CEFManager::prepareManagedStudentLogin(const QString& url, std::function<void(bool)> completion)
 {
-    CefRefPtr<CefBrowser> browser = m_cefClient ? m_cefClient->getBrowser() : CefRefPtr<CefBrowser>();
-    if (!browser || url.isEmpty()) {
+    const auto browser = m_cefClient ? m_cefClient->getBrowser() : CefRefPtr<CefBrowser>();
+    const auto frame = browser ? browser->GetMainFrame() : CefRefPtr<CefFrame>();
+    if (!frame || !isWebPage(url)) {
         return false;
     }
-    auto frame = browser->GetMainFrame();
-    auto context = browser->GetHost()->GetRequestContext();
-    CefRefPtr<CefCookieManager> cookies = context ? context->GetCookieManager(nullptr) : CefRefPtr<CefCookieManager>();
-    if (!frame || !cookies) {
-        return false;
+    cancelManagedStudentLoginPreparation();
+    m_managedLoginCompletion = std::move(completion);
+    m_managedLoginUrl = url;
+    m_managedLoginPhase = ManagedLoginPhase::Blanking;
+    const quint64 attempt = m_managedLoginAttempt;
+    const int timeoutMs = Application::is32BitSystem() ? 60000 : 30000;
+    QTimer::singleShot(timeoutMs, this, [this, attempt] {
+        if (m_managedLoginAttempt == attempt) {
+            m_logger->errorEvent(QStringLiteral("准备考试登录页超时，将在后续心跳重试"));
+            finishManagedStudentLoginPreparation(false);
+        }
+    });
+    // 旧页面停止运行后再清登录凭据，防止旧页面续签登录。
+    if (!browser->IsLoading() && frame->GetURL() == "about:blank") {
+        clearManagedStudentLoginCookies();
+    } else {
+        frame->LoadURL("about:blank");
     }
-    frame->LoadURL("about:blank");
-    const CefString examUrl(url.toStdString());
-    return cookies->DeleteCookies(examUrl, "xsToken",
-            new ManagedStudentLoginReset(cookies, frame, examUrl, std::move(completion)));
+    return true;
+}
+
+void CEFManager::cancelManagedStudentLoginPreparation()
+{
+    ++m_managedLoginAttempt;
+    m_managedLoginPhase = ManagedLoginPhase::Idle;
+    m_managedLoginUrl.clear();
+    m_managedLoginCompletion = {};
+}
+
+void CEFManager::clearManagedStudentLoginCookies()
+{
+    const auto browser = m_cefClient->getBrowser();
+    const auto context = browser ? browser->GetHost()->GetRequestContext() : CefRefPtr<CefRequestContext>();
+    const auto cookies = context ? context->GetCookieManager(nullptr) : CefRefPtr<CefCookieManager>();
+    if (!cookies) {
+        finishManagedStudentLoginPreparation(false);
+        return;
+    }
+
+    m_managedLoginPhase = ManagedLoginPhase::ClearingCookies;
+    const quint64 attempt = m_managedLoginAttempt;
+    const QPointer<CEFManager> manager(this);
+    const CefString url(m_managedLoginUrl.toStdString());
+    auto refreshDeleted = [manager, attempt, url] {
+        if (!manager || manager->m_managedLoginAttempt != attempt) {
+            return;
+        }
+        const auto browser = manager->m_cefClient->getBrowser();
+        const auto frame = browser ? browser->GetMainFrame() : CefRefPtr<CefFrame>();
+        if (!frame) {
+            manager->finishManagedStudentLoginPreparation(false);
+            return;
+        }
+        manager->m_managedLoginPhase = ManagedLoginPhase::Loading;
+        frame->LoadURL(url);
+    };
+    auto tokenDeleted = [manager, attempt, cookies, url, refreshDeleted = std::move(refreshDeleted)]() mutable {
+        if (manager && manager->m_managedLoginAttempt == attempt
+                && !cookies->DeleteCookies(url, "xsRefreshToken",
+                                           new ManagedStudentCookieDeleted(std::move(refreshDeleted)))) {
+            manager->finishManagedStudentLoginPreparation(false);
+        }
+    };
+    if (!cookies->DeleteCookies(url, "xsToken", new ManagedStudentCookieDeleted(std::move(tokenDeleted)))) {
+        finishManagedStudentLoginPreparation(false);
+    }
+}
+
+void CEFManager::finishManagedStudentLoginPreparation(bool success)
+{
+    auto completion = std::move(m_managedLoginCompletion);
+    cancelManagedStudentLoginPreparation();
+    if (completion) {
+        completion(success);
+    }
 }
 
 bool CEFManager::setBrowserZoomLevel(int browserId, double zoomLevel)
@@ -838,10 +901,24 @@ void CEFManager::notifyUrlExitTriggered(const QString& url)
     emit urlExitTriggered(url);
 }
 
-void CEFManager::notifyMainFrameLoadEnd(int httpStatusCode)
+void CEFManager::notifyMainFrameLoadEnd(const QString& url, int httpStatusCode)
 {
     m_logger->appEvent(QString("主框架页面加载完成，HTTP状态码: %1").arg(httpStatusCode));
     emit mainFrameLoadEnd(httpStatusCode);
+    if (m_managedLoginPhase == ManagedLoginPhase::Blanking && url == QStringLiteral("about:blank")) {
+        clearManagedStudentLoginCookies();
+    } else if (m_managedLoginPhase == ManagedLoginPhase::Loading && isWebPage(url)) {
+        finishManagedStudentLoginPreparation((httpStatusCode >= 200 && httpStatusCode < 300)
+                                             || httpStatusCode == 304);
+    }
+}
+
+void CEFManager::notifyMainFrameLoadError(const QString& url)
+{
+    if ((m_managedLoginPhase == ManagedLoginPhase::Blanking && url == QStringLiteral("about:blank"))
+            || (m_managedLoginPhase == ManagedLoginPhase::Loading && isWebPage(url))) {
+        finishManagedStudentLoginPreparation(false);
+    }
 }
 
 void CEFManager::notifyBrowserCreated(int browserId)

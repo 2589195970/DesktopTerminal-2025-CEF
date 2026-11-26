@@ -90,7 +90,8 @@ public:
      * @return 成功返回true
      */
     bool resizeBrowser(int browserId, int width, int height);
-    bool resetManagedStudentLogin(const QString& url, std::function<void(bool)> completion);
+    bool prepareManagedStudentLogin(const QString& url, std::function<void(bool)> completion);
+    void cancelManagedStudentLoginPreparation();
 
     /**
      * @brief 设置浏览器页面缩放级别
@@ -110,7 +111,8 @@ public:
      * @brief 通知主框架页面加载完成（由CEFClient::OnLoadEnd调用）
      * @param httpStatusCode HTTP状态码
      */
-    void notifyMainFrameLoadEnd(int httpStatusCode);
+    void notifyMainFrameLoadEnd(const QString& url, int httpStatusCode);
+    void notifyMainFrameLoadError(const QString& url);
 
     /**
      * @brief 通知浏览器创建完成（由CEFClient::OnAfterCreated调用）
@@ -219,6 +221,15 @@ private slots:
     void onApplicationShutdown();
 
 private:
+    enum class ManagedLoginPhase { Idle, Blanking, ClearingCookies, Loading };
+    void clearManagedStudentLoginCookies();
+    void finishManagedStudentLoginPreparation(bool success);
+
+    ManagedLoginPhase m_managedLoginPhase = ManagedLoginPhase::Idle;
+    quint64 m_managedLoginAttempt = 0;
+    QString m_managedLoginUrl;
+    std::function<void(bool)> m_managedLoginCompletion;
+
     Application* m_application;
     Logger* m_logger;
     ConfigManager* m_configManager;

@@ -170,8 +170,8 @@ void CEFClient::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> fra
         m_logger->appEvent(QString("页面加载完成: %1 (状态码: %2)").arg(url).arg(httpStatusCode));
         
         // 通知CEFManager主框架加载完成，用于替代固定延时的白屏修复
-        if (m_cefManager) {
-            m_cefManager->notifyMainFrameLoadEnd(httpStatusCode);
+        if (m_cefManager && m_browser && browser->IsSame(m_browser)) {
+            m_cefManager->notifyMainFrameLoadEnd(url, httpStatusCode);
         }
         
         if (m_lowMemoryMode) {
@@ -188,6 +188,9 @@ void CEFClient::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> f
         
         m_logger->errorEvent(QString("页面加载失败: %1 - 错误: %2 (代码: %3)")
             .arg(url).arg(error).arg(static_cast<int>(errorCode)));
+        if (m_cefManager && m_browser && browser->IsSame(m_browser) && errorCode != ERR_ABORTED) {
+            m_cefManager->notifyMainFrameLoadError(url);
+        }
     }
 }
 

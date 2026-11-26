@@ -123,7 +123,10 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
     m_examSeatLease = new QTimer(this);
     m_examSeatLease->setSingleShot(true);
     connect(m_examSeatLease, &QTimer::timeout, this, [this] {
-        setExamSeatDisplay(R"({"state":"SYNC"})");
+        // 暂停放行。同一场次恢复时保留已准备好的网页和登录状态。
+        m_examSeatDisplay = {{QStringLiteral("state"), QStringLiteral("SYNC")}};
+        cancelExamSeatLoginPreparation();
+        updateExamSeatPage();
     });
     if (QCoreApplication::arguments().contains(QStringLiteral("--managed-exam-seat"))) {
         setExamSeatDisplay(R"({"state":"SYNC"})");
@@ -151,59 +154,85 @@ SecureBrowser::SecureBrowser(CEFManager* cefManager, QWidget *parent)
 void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
 {
 #ifdef Q_OS_WIN
-    const QJsonObject display = QJsonDocument::fromJson(payload).object();
-    const QString state = display.value(QStringLiteral("state")).toString();
-    const QString seat = display.value(QStringLiteral("seatNumber")).toString();
-    const QString releaseId = display.value(QStringLiteral("releaseId")).toString();
-    const int seconds = display.value(QStringLiteral("validForSeconds")).toInt();
-    m_examSeatPayload = payload;
-    const bool wantsLogin = state == QStringLiteral("LOGIN_OPEN");
-    const bool waiting = state == QStringLiteral("WAITING");
-    const bool unused = state == QStringLiteral("UNUSED");
+    m_examSeatDisplay = QJsonDocument::fromJson(payload).object();
+    const QString state = m_examSeatDisplay.value(QStringLiteral("state")).toString();
+    const QString releaseId = state == QStringLiteral("WAITING") || state == QStringLiteral("LOGIN_OPEN")
+            ? m_examSeatDisplay.value(QStringLiteral("releaseId")).toString() : QString();
+    const int seconds = m_examSeatDisplay.value(QStringLiteral("validForSeconds")).toInt();
     if (seconds > 0) {
         m_examSeatLease->start(seconds * 1000);
     } else {
         m_examSeatLease->stop();
     }
 
-    if (!releaseId.isEmpty() && m_examSeatReleaseId != releaseId && m_examSeatResettingId != releaseId
-            && m_cefBrowserCreated && m_cefManager && !unused) {
-        const QPointer<SecureBrowser> window(this);
-        auto complete = [window, releaseId](bool success) {
-            if (window) {
-                QMetaObject::invokeMethod(window.data(), [window, releaseId, success] {
-                    if (window && window->m_examSeatResettingId == releaseId) {
-                        window->m_examSeatResettingId.clear();
-                        if (success) {
-                            window->m_examSeatReleaseId = releaseId;
-                            const QByteArray latest = window->m_examSeatPayload;
-                            window->setExamSeatDisplay(latest);
-                        }
-                    }
-                }, Qt::QueuedConnection);
+    if (m_examSeatPreparedId != releaseId) {
+        m_examSeatPreparedId.clear();
+    }
+    if (m_examSeatPreparingId != releaseId) {
+        cancelExamSeatLoginPreparation();
+    }
+    updateExamSeatPage();
+    prepareExamSeatLogin();
+#else
+    Q_UNUSED(payload);
+#endif
+}
+
+#ifdef Q_OS_WIN
+void SecureBrowser::prepareExamSeatLogin()
+{
+    const QString state = m_examSeatDisplay.value(QStringLiteral("state")).toString();
+    const QString releaseId = m_examSeatDisplay.value(QStringLiteral("releaseId")).toString();
+    if ((state != QStringLiteral("WAITING") && state != QStringLiteral("LOGIN_OPEN")) || releaseId.isEmpty()
+            || m_examSeatPreparedId == releaseId || !m_examSeatPreparingId.isEmpty()
+            || !m_cefBrowserCreated || !m_cefManager) {
+        return;
+    }
+
+    const QPointer<SecureBrowser> window(this);
+    m_examSeatPreparingId = releaseId;
+    const bool started = m_cefManager->prepareManagedStudentLogin(m_currentUrl.isEmpty()
+            ? m_configManager->getUrl() : m_currentUrl.toString(), [window, releaseId](bool success) {
+        if (window && window->m_examSeatPreparingId == releaseId) {
+            window->m_examSeatPreparingId.clear();
+            if (success) {
+                window->m_examSeatPreparedId = releaseId;
+                window->updateExamSeatPage();
             }
-        };
-        if (m_cefManager->resetManagedStudentLogin(m_currentUrl.isEmpty()
-                ? m_configManager->getUrl() : m_currentUrl.toString(), complete)) {
-            m_examSeatResettingId = releaseId;
         }
+    });
+    if (!started) {
+        m_examSeatPreparingId.clear();
     }
-    if (state.isEmpty() || state == QStringLiteral("SYNC")) {
-        m_examSeatReleaseId.clear();
-        m_examSeatResettingId.clear();
+}
+
+void SecureBrowser::cancelExamSeatLoginPreparation()
+{
+    if (!m_examSeatPreparingId.isEmpty()) {
+        m_examSeatPreparingId.clear();
+        m_cefManager->cancelManagedStudentLoginPreparation();
     }
-    const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatReleaseId == releaseId;
+}
+
+void SecureBrowser::updateExamSeatPage()
+{
+    const QString state = m_examSeatDisplay.value(QStringLiteral("state")).toString();
+    const QString seat = m_examSeatDisplay.value(QStringLiteral("seatNumber")).toString();
+    const QString releaseId = m_examSeatDisplay.value(QStringLiteral("releaseId")).toString();
+    const bool wantsLogin = state == QStringLiteral("LOGIN_OPEN");
+    const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatPreparedId == releaseId;
     DesktopAuthManager::instance().setExamSeatReleaseId(loginOpen ? releaseId : QString());
-    m_managedExam = !state.isEmpty();
-    const bool showSeatPage = m_managedExam && !loginOpen;
+    const bool showSeatPage = !state.isEmpty() && !loginOpen;
     if (showSeatPage) {
         auto pageState = ExamSeatPage::State::Synchronizing;
-        if (unused) {
+        if (state == QStringLiteral("UNUSED")) {
             pageState = ExamSeatPage::State::Unused;
-        } else if (waiting || wantsLogin) {
+        } else if (wantsLogin) {
+            pageState = ExamSeatPage::State::PreparingLogin;
+        } else if (state == QStringLiteral("WAITING")) {
             pageState = ExamSeatPage::State::Waiting;
         }
-        m_examSeatPage->showSession(pageState, seat, display.value(QStringLiteral("sessionName")).toString());
+        m_examSeatPage->showSession(pageState, seat, m_examSeatDisplay.value(QStringLiteral("sessionName")).toString());
         m_examPages->setCurrentWidget(m_examSeatPage);
     } else {
         m_examPages->setCurrentWidget(m_examLoginPage);
@@ -215,14 +244,12 @@ void SecureBrowser::setExamSeatDisplay(const QByteArray &payload)
     } else if (!showSeatPage) {
         m_examTerminalInfoTimer->stop();
     }
-    fitManagedExamWindow();
+    fitWindowToScreen();
     refreshSeatDisplay();
     layout()->activate();
     resizeCEFBrowser();
-#else
-    Q_UNUSED(payload);
-#endif
 }
+#endif
 
 SecureBrowser::~SecureBrowser()
 {
@@ -481,6 +508,11 @@ void SecureBrowser::showEvent(QShowEvent *event)
     
     // 确保全屏模式
     setFullscreenMode();
+
+    if (QWindow* window = windowHandle()) {
+        connect(window, &QWindow::screenChanged, this, &SecureBrowser::watchScreen, Qt::UniqueConnection);
+        watchScreen(window->screen());
+    }
     
     // 只有在窗口句柄无效时才重新获取（避免重复调用冲突）
     if (!m_cefBrowserCreated && !m_windowHandle) {
@@ -586,7 +618,7 @@ void SecureBrowser::refreshSeatDisplay()
     terminal::SeatDisplay seat;
     QString error;
 #ifdef Q_OS_WIN
-    const QString state = QJsonDocument::fromJson(m_examSeatPayload).object().value(QStringLiteral("state")).toString();
+    const QString state = m_examSeatDisplay.value(QStringLiteral("state")).toString();
     if (state == QStringLiteral("SYNC") && m_seatStore.read(seat, error)) {
         number = seat.manual;
     }
@@ -685,7 +717,7 @@ void SecureBrowser::onMaintenanceTimer()
         setFullscreenMode();
     }
 #ifdef Q_OS_WIN
-    fitManagedExamWindow();
+    fitWindowToScreen();
 #endif
 }
 
@@ -734,10 +766,7 @@ void SecureBrowser::onBrowserCreated(int browserId)
     m_logger->appEvent("CEF浏览器创建完成，页面继续加载");
 
 #ifdef Q_OS_WIN
-    if (!m_examSeatPayload.isEmpty()) {
-        const QByteArray latest = m_examSeatPayload;
-        setExamSeatDisplay(latest);
-    }
+    prepareExamSeatLogin();
 #endif
     resizeCEFBrowser();
     m_cefMessageLoopLogCounter = 0;
@@ -796,6 +825,10 @@ void SecureBrowser::initializeWindow()
 {
     // 设置窗口属性（与原项目相同）
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    // 首次显示前给定屏幕尺寸，否则 Qt 会按内容建议尺寸（几百像素）显示窗口，网页只画在左上角
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        setGeometry(screen->geometry());
+    }
     setWindowState(Qt::WindowFullScreen);
 
     // 最小尺寸由WindowManager统一管理，此处不再硬编码
@@ -927,6 +960,10 @@ void SecureBrowser::enforceFullscreen()
 
 void SecureBrowser::enforceFocus()
 {
+    // 密码框、提示框等模态窗口打开时由它们持有焦点，否则两者会反复抢焦点。
+    if (QApplication::activeModalWidget()) {
+        return;
+    }
     if (!isActiveWindow()) {
         raise();
         activateWindow();
@@ -1009,7 +1046,7 @@ void SecureBrowser::setFullscreenMode()
     // 已能在PerMonitorV2进程里正确铺满物理屏幕（对齐d9e66833路径）。
 
 #ifdef Q_OS_WIN
-    fitManagedExamWindow();
+    fitWindowToScreen();
     logFullscreenGeometry();
 #endif
 }
@@ -1098,17 +1135,32 @@ void SecureBrowser::enforceWin32Fullscreen()
         .arg(mi.rcWork.left).arg(mi.rcWork.top).arg(mi.rcWork.right).arg(mi.rcWork.bottom));
 }
 
-void SecureBrowser::fitManagedExamWindow()
+void SecureBrowser::fitWindowToScreen()
 {
-    if (!m_managedExam || !isVisible() || !isFullScreen()) {
+    if (!isVisible() || !isFullScreen()) {
         return;
     }
+    // Qt 全屏状态不保证窗口实际铺满屏幕：窗口可能停留在内容建议尺寸或旧分辨率尺寸，
+    // 需要按当前屏幕重新设置。
     QWindow* window = windowHandle();
     const QScreen* screen = window ? window->screen() : nullptr;
-    if (screen && window->geometry() != screen->geometry()) {
-        // QWidget::setGeometry 会清除 Qt 的全屏状态。
-        window->setGeometry(screen->geometry());
+    if (!screen) {
+        return;
     }
+    if (windowCoversScreen()) {
+        m_lastMisfitGeometry = QRect();
+        return;
+    }
+    if (geometry() != m_lastMisfitGeometry) {
+        m_lastMisfitGeometry = geometry();
+        m_logger->appEvent(QString("窗口未铺满屏幕，按屏幕重设: 窗口=%1x%2@(%3,%4) 屏幕=%5x%6@(%7,%8)")
+            .arg(m_lastMisfitGeometry.width()).arg(m_lastMisfitGeometry.height())
+            .arg(m_lastMisfitGeometry.x()).arg(m_lastMisfitGeometry.y())
+            .arg(screen->geometry().width()).arg(screen->geometry().height())
+            .arg(screen->geometry().x()).arg(screen->geometry().y()));
+    }
+    // QWidget::setGeometry 会清除 Qt 的全屏状态。
+    window->setGeometry(screen->geometry());
 }
 
 void SecureBrowser::logFullscreenGeometry()
@@ -1273,8 +1325,8 @@ void SecureBrowser::resizeCEFBrowser()
             return;
         }
 
-        // 只在窗口真正全屏时才锁定视口
-        const bool isFullScreen = (windowState() & Qt::WindowFullScreen) != 0;
+        // 只在窗口实际铺满屏幕时才锁定视口
+        const bool isFullScreen = windowCoversScreen();
         if (isFullScreen && !m_viewportLocked) {
             lockViewportIfNeeded();
         }
@@ -1344,10 +1396,9 @@ void SecureBrowser::lockViewportIfNeeded()
         return;
     }
 
-    // 必须在全屏状态下才锁定视口
-    const bool isFullScreen = (windowState() & Qt::WindowFullScreen) != 0;
-    if (!isFullScreen) {
-        m_logger->appEvent("跳过视口锁定：窗口尚未全屏");
+    // 窗口实际铺满屏幕后才锁定视口，避免把启动过渡期的窗口尺寸当作基准
+    if (!windowCoversScreen()) {
+        m_logger->appEvent("跳过视口锁定：窗口尚未铺满屏幕");
         return;
     }
 
@@ -1367,6 +1418,47 @@ void SecureBrowser::lockViewportIfNeeded()
     m_logger->appEvent(QString("锁定网页基准视口: %1x%2 (全屏状态)")
         .arg(m_lockedViewportSize.width())
         .arg(m_lockedViewportSize.height()));
+}
+
+bool SecureBrowser::windowCoversScreen() const
+{
+    if (!(windowState() & Qt::WindowFullScreen)) {
+        return false;
+    }
+#ifdef Q_OS_WIN
+    const QWindow* window = windowHandle();
+    const QScreen* screen = window ? window->screen() : nullptr;
+    // Qt 记录的窗口尺寸可能与原生窗口不同步，两者都等于屏幕才算铺满
+    return screen && window->geometry() == screen->geometry() && geometry() == screen->geometry();
+#else
+    return true;
+#endif
+}
+
+void SecureBrowser::watchScreen(QScreen* screen)
+{
+    if (m_watchedScreen == screen) {
+        return;
+    }
+    if (m_watchedScreen) {
+        disconnect(m_watchedScreen, nullptr, this, nullptr);
+    }
+    m_watchedScreen = screen;
+    if (screen) {
+        connect(screen, &QScreen::geometryChanged, this, &SecureBrowser::handleScreenGeometryChanged);
+    }
+    handleScreenGeometryChanged();
+}
+
+void SecureBrowser::handleScreenGeometryChanged()
+{
+    // 屏幕分辨率或缩放变化后按新屏幕重新锁定视口，网页缩放与正常启动保持一致
+    m_viewportLocked = false;
+#ifdef Q_OS_WIN
+    fitWindowToScreen();
+    logFullscreenGeometry();
+#endif
+    resizeCEFBrowser();
 }
 
 double SecureBrowser::calculateZoomLevelForSize(const QSize& currentSize) const
