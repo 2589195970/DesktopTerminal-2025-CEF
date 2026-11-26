@@ -67,7 +67,15 @@ ToolboxDialog::ToolboxDialog(const terminal::SeatDisplayStore &store, QWidget *p
     m_edit->setObjectName(QStringLiteral("toolEntry"));
     toolsLayout->addWidget(m_edit, 0, 0);
     toolsLayout->setColumnStretch(0, 1);
-    for (int column = 1; column < 3; ++column) {
+    auto *reload = new QPushButton(QStringLiteral("刷新页面"), tools);
+    reload->setObjectName(QStringLiteral("toolEntry"));
+    toolsLayout->addWidget(reload, 0, 1);
+    toolsLayout->setColumnStretch(1, 1);
+    connect(reload, &QPushButton::clicked, this, [this] {
+        emit reloadRequested();
+        accept();
+    });
+    for (int column = 2; column < 3; ++column) {
         auto *cell = new QFrame(tools);
         cell->setObjectName(QStringLiteral("emptyToolCell"));
         toolsLayout->addWidget(cell, 0, column);

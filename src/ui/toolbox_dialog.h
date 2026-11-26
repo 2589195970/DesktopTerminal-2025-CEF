@@ -18,6 +18,7 @@ public:
 
 signals:
     void seatChanged();
+    void reloadRequested();
 
 protected:
     void reject() override;

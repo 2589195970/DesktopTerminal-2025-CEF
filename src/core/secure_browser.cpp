@@ -284,11 +284,8 @@ void SecureBrowser::load(const QUrl& url)
 
 void SecureBrowser::reload()
 {
-    m_logger->appEvent("重新加载页面");
-    
-    if (m_cefBrowserCreated) {
-        // 通过CEF API重新加载页面
-        m_logger->appEvent("通过CEF重新加载页面");
+    if (m_cefBrowserCreated && m_cefManager) {
+        m_cefManager->reloadPage();
     } else {
         m_logger->appEvent("CEF浏览器未创建，无法重新加载");
     }
@@ -569,7 +566,15 @@ void SecureBrowser::openToolbox()
         m_logger->appEvent(QStringLiteral("管理员已更新本机手动座号"));
         refreshSeatDisplay();
     });
+    bool reloadRequested = false;
+    connect(&dialog, &ToolboxDialog::reloadRequested, this, [&reloadRequested] {
+        reloadRequested = true;
+    });
     dialog.exec();
+    if (reloadRequested) {
+        m_logger->appEvent(QStringLiteral("管理员通过工具箱刷新页面"));
+        reload();
+    }
 }
 
 void SecureBrowser::refreshSeatDisplay()

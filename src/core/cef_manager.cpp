@@ -843,6 +843,17 @@ bool CEFManager::showDevTools(int browserId)
     return true;
 }
 
+bool CEFManager::reloadPage()
+{
+    if (!m_initialized || !m_cefClient) {
+        m_logger->errorEvent("刷新页面失败：CEF未初始化");
+        return false;
+    }
+
+    m_cefClient->reloadPage();
+    return true;
+}
+
 bool CEFManager::closeDevTools(int browserId)
 {
     if (!m_initialized) {

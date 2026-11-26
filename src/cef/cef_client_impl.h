@@ -115,6 +115,9 @@ private:
     void logKeyboardEvent(const CefKeyEvent& event, bool allowed);
 
 public:
+    // 重新加载当前页面（任意线程可调用）
+    void reloadPage();
+
     // 开发者工具管理
     void showDevTools();
     void closeDevTools();
@@ -122,6 +125,8 @@ public:
     void setBrowserZoomLevel(double zoomLevel);
 
 private:
+    bool handleReloadHotkeyEvent(const CefKeyEvent& event);
+    void reloadPageOnUIThread();
     void showDevToolsOnUIThread();
     void closeDevToolsOnUIThread();
     void resizeBrowserOnUIThread(int width, int height);

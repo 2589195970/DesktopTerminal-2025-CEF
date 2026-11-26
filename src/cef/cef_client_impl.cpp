@@ -271,6 +271,10 @@ bool CEFClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& 
         return true;
     }
 
+    if (!browser->IsPopup() && handleReloadHotkeyEvent(event)) {
+        return true;
+    }
+
     if (!m_keyboardFilterEnabled) {
         return false;
     }
@@ -479,6 +483,32 @@ bool CEFClient::handleExitHotkeyEvent(const CefKeyEvent& event)
     return true;
 }
 
+bool CEFClient::handleReloadHotkeyEvent(const CefKeyEvent& event)
+{
+    // 只用 Ctrl+R 刷新；F5 紧挨 F4/F6，考试中容易误按导致未保存的作答丢失，不作为刷新键
+    const uint32 modifiersWithoutLocks = event.modifiers & ~(
+        EVENTFLAG_NUM_LOCK_ON |
+        EVENTFLAG_CAPS_LOCK_ON |
+        EVENTFLAG_IS_KEY_PAD |
+        EVENTFLAG_IS_LEFT |
+        EVENTFLAG_IS_RIGHT
+    );
+    if (event.windows_key_code != 'R' || modifiersWithoutLocks != EVENTFLAG_CONTROL_DOWN) {
+        return false;
+    }
+
+    // 按下、抬起和字符事件都吞掉，只在首次按下时刷新，长按不重复刷新
+    if (event.type == KEYEVENT_RAWKEYDOWN
+#ifdef Q_OS_WIN
+        && !(event.native_key_code & (1 << 30))
+#endif
+    ) {
+        m_logger->hotkeyEvent("Ctrl+R刷新热键被触发");
+        reloadPageOnUIThread();
+    }
+    return true;
+}
+
 bool CEFClient::isKeyEventAllowed(const CefKeyEvent& event)
 {
     // 允许的快捷键：Ctrl+R（刷新）
@@ -588,6 +618,27 @@ void CEFClient::applyWindows7Optimizations()
     m_disableAnimations = true;
     
     // 可以在这里添加更多Windows 7特定的优化
+}
+
+void CEFClient::reloadPage()
+{
+    if (!CefCurrentlyOn(TID_UI)) {
+        CefPostTask(TID_UI, base::Bind(&CEFClient::reloadPageOnUIThread, this));
+        return;
+    }
+
+    reloadPageOnUIThread();
+}
+
+void CEFClient::reloadPageOnUIThread()
+{
+    if (!m_browser) {
+        m_logger->errorEvent("刷新页面失败：浏览器实例未初始化");
+        return;
+    }
+
+    m_logger->appEvent("重新加载页面（忽略缓存）");
+    m_browser->ReloadIgnoreCache();
 }
 
 void CEFClient::showDevTools()

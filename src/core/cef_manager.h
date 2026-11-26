@@ -132,6 +132,12 @@ public:
      */
     bool closeDevTools(int browserId);
 
+    /**
+     * @brief 忽略缓存重新加载当前页面
+     * @return 已提交刷新返回true
+     */
+    bool reloadPage();
+
     // 静态配置方法
     static ProcessMode selectOptimalProcessMode();
     static MemoryProfile selectOptimalMemoryProfile();
