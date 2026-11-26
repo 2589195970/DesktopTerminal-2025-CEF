@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 REM CEF自动下载脚本 - Windows版本
 REM 支持32位Windows 7 SP1和现代64位系统
 

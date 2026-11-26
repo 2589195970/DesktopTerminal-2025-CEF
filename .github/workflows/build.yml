@@ -1525,7 +1525,7 @@ jobs:
           exit 1
         }
 
-        "NSIS_EXE=$nsis" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+        "NSIS_EXE=$nsis" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8NoBOM
         Write-Host "[OK] NSIS_EXE已写入环境: $nsis"
 
     - name: Create Windows Installer

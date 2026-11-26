@@ -42,4 +42,4 @@ $buildInfo = @(
 # Write to output file
 $buildInfo | Set-Content -Encoding UTF8 -Path $OutputPath
 
-Write-Host "✅ 构建信息文件已生成: $OutputPath" 
+Write-Host "Build information written to: $OutputPath"
