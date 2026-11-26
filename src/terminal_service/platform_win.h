@@ -14,7 +14,7 @@ inline QString windowsFailure(const QString &message, unsigned long error)
 }
 
 bool appIsRunning();
-void publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitForStop);
+bool publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitForStop);
 NetworkIdentity findNetworkIdentity(const QList<QHostAddress> &serverAddresses);
 CommandResult executeAppOrWake(const Command &command, const Config &config, const NetworkIdentity &network,
                                const WaitForStop &waitForStop);

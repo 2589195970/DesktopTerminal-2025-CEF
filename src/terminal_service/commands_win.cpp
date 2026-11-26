@@ -336,10 +336,10 @@ bool appIsRunning()
     return static_cast<bool>(mutex);
 }
 
-void publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitForStop)
+bool publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitForStop)
 {
     if (!appIsRunning()) {
-        return;
+        return false;
     }
     QByteArray request = QByteArray(ExamSeatPrefix) + QJsonDocument(display).toJson(QJsonDocument::Compact) + '\n';
     if (request.size() > MaxControlMessageBytes && display.contains(QStringLiteral("sessionName"))) {
@@ -348,9 +348,11 @@ void publishExamSeatDisplay(const QJsonObject &display, const WaitForStop &waitF
         displayWithoutName.remove(QStringLiteral("sessionName"));
         request = QByteArray(ExamSeatPrefix) + QJsonDocument(displayWithoutName).toJson(QJsonDocument::Compact) + '\n';
     }
-    if (request.size() <= MaxControlMessageBytes) {
-        sendControlRequest(request, waitForStop, false);
+    if (request.size() > MaxControlMessageBytes) {
+        // 超出管道容量的状态无法送达，不再重试。
+        return true;
     }
+    return sendControlRequest(request, waitForStop, false).isEmpty();
 }
 
 CommandResult executeAppOrWake(const Command &command, const Config &config, const NetworkIdentity &network,

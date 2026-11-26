@@ -26,6 +26,7 @@ constexpr int ActiveHeartbeatIntervalMs = 5 * 1000;
 constexpr int RequestTimeoutMs = 10 * 1000;
 constexpr int StatusRefreshMs = 15 * 1000;
 constexpr int ServiceLogCleanupMs = 60 * 60 * 1000;
+constexpr int AppWatchMs = 1000;
 
 RegistrationProblem networkProblem(QNetworkReply::NetworkError error, int status)
 {
@@ -68,6 +69,7 @@ ServiceRuntime::ServiceRuntime(const QString &directory, const Config &config, c
     connect(&m_requestTimeout, &QTimer::timeout, this, &ServiceRuntime::requestTimedOut);
     connect(&m_statusRefresh, &QTimer::timeout, this, [this] { m_monitor.publish(); });
     connect(&m_logCleanup, &QTimer::timeout, this, [this] { RegistrationMonitor::pruneServiceLog(m_directory); });
+    connect(&m_appWatch, &QTimer::timeout, this, &ServiceRuntime::watchApp);
 }
 
 ServiceRuntime::~ServiceRuntime()
@@ -99,6 +101,8 @@ void ServiceRuntime::start()
     }
     m_statusRefresh.start(StatusRefreshMs);
     m_logCleanup.start(ServiceLogCleanupMs);
+    m_appRunning = appIsRunning();
+    m_appWatch.start(AppWatchMs);
     m_tick.start(0);
 }
 
@@ -236,7 +240,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
         reportRequestFailure(false, problem, status, networkError);
         schedule(appIsRunning() ? ActiveHeartbeatIntervalMs : HeartbeatIntervalMs);
     } else if (!response.codeValid) {
-        publishExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}}, m_waitForStop);
+        setExamSeatDisplay({{QStringLiteral("state"), QStringLiteral("SYNC")}});
         m_commands.clear();
         QString error;
         if (!SeatDisplayStore(m_directory).clearAssignment(error)) {
@@ -263,7 +267,7 @@ void ServiceRuntime::finishRequest(int status, const QByteArray &body, Registrat
             seat = QString();
         }
         m_monitor.heartbeatReceived(seat);
-        publishExamSeatDisplay(response.examSeatDisplay, m_waitForStop);
+        setExamSeatDisplay(response.examSeatDisplay);
         for (const Command &command : response.commands) {
             m_commands.enqueue(command);
         }
@@ -405,6 +409,51 @@ void ServiceRuntime::scheduleRegisterRetry()
 {
     m_registerRetryMs = std::clamp(m_registerRetryMs * 2, RegisterRetryMinMs, RegisterRetryMaxMs);
     schedule(m_registerRetryMs - QRandomGenerator::global()->bounded(RegisterJitterMs + 1));
+}
+
+void ServiceRuntime::watchApp()
+{
+    const bool running = appIsRunning();
+    const bool started = running && !m_appRunning;
+    m_appRunning = running;
+    if (!running) {
+        m_examSeatDisplayPending = false;
+        return;
+    }
+    if (m_powerCommand || m_powerInitiated || m_waitForStop(0)) {
+        return;
+    }
+    if (started && !m_state.terminalCode.isEmpty() && m_request == Request::None) {
+        // 考试端刚启动时立即心跳，不等常规间隔，尽快拿到考场状态。
+        log(QStringLiteral("考试端已启动，立即获取考场状态"));
+        m_tick.start(0);
+    }
+    // 考试端启动早期管道尚未就绪，按缓存的状态补发直到送达。
+    if (m_examSeatDisplayPending) {
+        deliverExamSeatDisplay();
+    }
+}
+
+void ServiceRuntime::setExamSeatDisplay(const QJsonObject &display)
+{
+    m_examSeatDisplay = display;
+    m_examSeatDisplayAge.start();
+    m_examSeatDisplayPending = appIsRunning() && !publishExamSeatDisplay(display, m_waitForStop);
+}
+
+void ServiceRuntime::deliverExamSeatDisplay()
+{
+    QJsonObject display = m_examSeatDisplay;
+    const int seconds = display.value(QStringLiteral("validForSeconds")).toInt();
+    if (seconds > 0) {
+        const qint64 remainingMs = seconds * 1000LL - m_examSeatDisplayAge.elapsed();
+        if (remainingMs < 1000) {
+            m_examSeatDisplayPending = false;
+            return;
+        }
+        display.insert(QStringLiteral("validForSeconds"), static_cast<int>(remainingMs / 1000));
+    }
+    m_examSeatDisplayPending = !publishExamSeatDisplay(display, m_waitForStop);
 }
 
 void ServiceRuntime::logResult(const CommandResult &result) const

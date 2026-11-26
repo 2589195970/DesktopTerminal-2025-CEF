@@ -42,6 +42,9 @@ private:
     bool saveState();
     void schedule(int intervalMs);
     void scheduleRegisterRetry();
+    void watchApp();
+    void setExamSeatDisplay(const QJsonObject &display);
+    void deliverExamSeatDisplay();
     void logResult(const CommandResult &result) const;
     void log(const QString &message) const;
 
@@ -58,6 +61,7 @@ private:
     QTimer m_requestTimeout;
     QTimer m_statusRefresh;
     QTimer m_logCleanup;
+    QTimer m_appWatch;
     QElapsedTimer m_requestElapsed;
     int m_registerRetryMs = 0;
     Request m_request = Request::None;
@@ -71,6 +75,10 @@ private:
     QThread *m_worker = nullptr;
     QString m_activeCommandId;
     CommandResult m_activeResult;
+    bool m_appRunning = false;
+    QJsonObject m_examSeatDisplay;
+    QElapsedTimer m_examSeatDisplayAge;
+    bool m_examSeatDisplayPending = false;
 };
 
 } // namespace terminal
