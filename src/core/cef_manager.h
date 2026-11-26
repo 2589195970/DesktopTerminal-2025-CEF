@@ -92,6 +92,10 @@ public:
     bool resizeBrowser(int browserId, int width, int height);
     bool prepareManagedStudentLogin(const QString& url, std::function<void(bool)> completion);
     void cancelManagedStudentLoginPreparation();
+    /**
+     * @brief 把本机考试座号交给登录页显示，座号为空时撤回
+     */
+    void publishExamSeat(const QString& seatNumber, const QString& sessionName);
 
     /**
      * @brief 设置浏览器页面缩放级别
@@ -224,11 +228,13 @@ private:
     enum class ManagedLoginPhase { Idle, Blanking, ClearingCookies, Loading };
     void clearManagedStudentLoginCookies();
     void finishManagedStudentLoginPreparation(bool success);
+    void runExamSeatScript();
 
     ManagedLoginPhase m_managedLoginPhase = ManagedLoginPhase::Idle;
     quint64 m_managedLoginAttempt = 0;
     QString m_managedLoginUrl;
     std::function<void(bool)> m_managedLoginCompletion;
+    QString m_examSeatScript;
 
     Application* m_application;
     Logger* m_logger;

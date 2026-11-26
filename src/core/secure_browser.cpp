@@ -222,6 +222,10 @@ void SecureBrowser::updateExamSeatPage()
     const bool wantsLogin = state == QStringLiteral("LOGIN_OPEN");
     const bool loginOpen = wantsLogin && !releaseId.isEmpty() && m_examSeatPreparedId == releaseId;
     DesktopAuthManager::instance().setExamSeatReleaseId(loginOpen ? releaseId : QString());
+    if (m_cefManager) {
+        m_cefManager->publishExamSeat(loginOpen ? seat : QString(),
+                                      m_examSeatDisplay.value(QStringLiteral("sessionName")).toString());
+    }
     const bool showSeatPage = !state.isEmpty() && !loginOpen;
     if (showSeatPage) {
         auto pageState = ExamSeatPage::State::Synchronizing;

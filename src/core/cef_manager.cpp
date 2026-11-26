@@ -8,6 +8,8 @@
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPointer>
 #include <QTimer>
@@ -52,6 +54,18 @@ bool isWebPage(const QString& url)
 {
     const QString scheme = QUrl(url).scheme();
     return scheme == QStringLiteral("https") || scheme == QStringLiteral("http");
+}
+
+bool isSameWebOrigin(const QUrl& page, const QUrl& configuredPage)
+{
+    const QString scheme = configuredPage.scheme();
+    if ((scheme != QStringLiteral("https") && scheme != QStringLiteral("http"))
+            || !configuredPage.isValid() || configuredPage.host().isEmpty()) {
+        return false;
+    }
+    const int defaultPort = scheme == QStringLiteral("https") ? 443 : 80;
+    return page.isValid() && page.scheme() == scheme && page.host() == configuredPage.host()
+            && page.port(defaultPort) == configuredPage.port(defaultPort);
 }
 
 } // namespace
@@ -476,6 +490,42 @@ void CEFManager::finishManagedStudentLoginPreparation(bool success)
     if (completion) {
         completion(success);
     }
+}
+
+void CEFManager::publishExamSeat(const QString& seatNumber, const QString& sessionName)
+{
+    QByteArray payload("null");
+    if (!seatNumber.isEmpty()) {
+        QJsonObject seat;
+        seat.insert(QStringLiteral("seatNumber"), seatNumber);
+        seat.insert(QStringLiteral("sessionName"), sessionName);
+        payload = QJsonDocument(seat).toJson(QJsonDocument::Compact);
+    }
+    const QString script = QStringLiteral(
+            "(function(s){window.__UM_EXAM_SEAT__=s;"
+            "window.dispatchEvent(new CustomEvent('um-exam-seat',{detail:s}));})(%1);")
+            .arg(QString::fromUtf8(payload));
+    if (script == m_examSeatScript) {
+        return;
+    }
+    m_examSeatScript = script;
+    runExamSeatScript();
+}
+
+void CEFManager::runExamSeatScript()
+{
+    const auto browser = m_cefClient ? m_cefClient->getBrowser() : CefRefPtr<CefBrowser>();
+    const auto frame = browser ? browser->GetMainFrame() : CefRefPtr<CefFrame>();
+    if (!frame || m_examSeatScript.isEmpty()) {
+        return;
+    }
+    // 座号推送使用学生端网页的来源，兼容前后端分域部署。
+    const CefString frameUrl = frame->GetURL();
+    const QUrl url(QString::fromStdString(frameUrl.ToString()));
+    if (!isSameWebOrigin(url, QUrl(m_configManager->getUrl()))) {
+        return;
+    }
+    frame->ExecuteJavaScript(m_examSeatScript.toStdString(), frameUrl, 0);
 }
 
 bool CEFManager::setBrowserZoomLevel(int browserId, double zoomLevel)
@@ -905,6 +955,8 @@ void CEFManager::notifyMainFrameLoadEnd(const QString& url, int httpStatusCode)
 {
     m_logger->appEvent(QString("主框架页面加载完成，HTTP状态码: %1").arg(httpStatusCode));
     emit mainFrameLoadEnd(httpStatusCode);
+    // 整页刷新会丢掉已推送的座号，加载完成后重新交给页面。
+    runExamSeatScript();
     if (m_managedLoginPhase == ManagedLoginPhase::Blanking && url == QStringLiteral("about:blank")) {
         clearManagedStudentLoginCookies();
     } else if (m_managedLoginPhase == ManagedLoginPhase::Loading && isWebPage(url)) {
