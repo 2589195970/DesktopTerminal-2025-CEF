@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <QApplication>
+#include <QDateTime>
 #include <QMetaObject>
 #include <QUrl>
 #include "include/base/cef_bind.h"
@@ -29,6 +30,7 @@ CEFClient::CEFClient(CEFManager* cefManager)
     , m_lowMemoryMode(false)
     , m_browser(nullptr)
     , m_browserCount(0)
+    , m_lastCrashReloadAt(0)
     , m_reduceLogging(false)
     , m_disableAnimations(false)
 {
@@ -220,6 +222,22 @@ CefRefPtr<CefResourceRequestHandler> CEFClient::GetResourceRequestHandler(CefRef
     Q_UNUSED(request_initiator)
     Q_UNUSED(disable_default_handling)
     return new CEFResourceRequestHandlerImpl();
+}
+
+void CEFClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status)
+{
+    // 渲染进程异常退出后页面停在空白页且无法操作，自动重新加载一次恢复考试页面；
+    // 30秒内再次退出说明页面一加载就崩溃，不再自动重载，避免死循环，由人工按Ctrl+R或工具箱刷新。
+    constexpr qint64 crashReloadIntervalMs = 30000;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const bool reload = now - m_lastCrashReloadAt > crashReloadIntervalMs;
+    m_logger->errorEvent(QString("渲染进程异常退出，状态: %1，%2")
+        .arg(static_cast<int>(status))
+        .arg(reload ? "自动重新加载页面" : "短时间内重复退出，等待手动刷新"));
+    if (reload && browser) {
+        m_lastCrashReloadAt = now;
+        browser->Reload();
+    }
 }
 
 // ==================== CefKeyboardHandler接口实现（安全控制）====================
